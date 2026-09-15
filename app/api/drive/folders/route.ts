@@ -1,3 +1,4 @@
+import "server-only";
 import {
   assertAllowedDriveResource,
   assertDriveFolder,
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const documentsRootFolderId = getDocumentsRootFolderId();
     const parentDriveFolderId = String(body.parentDriveFolderId || documentsRootFolderId).trim();
-    const parentFolder = await assertAllowedDriveResource(parentDriveFolderId, { fetchDrive });
+    const parentFolder = await assertAllowedDriveResource(parentDriveFolderId, { fetchDrive, allowedRootIds: [documentsRootFolderId] });
     assertDriveFolder(parentFolder);
     const name = sanitizeDriveName(body.name, "Nouveau dossier");
 

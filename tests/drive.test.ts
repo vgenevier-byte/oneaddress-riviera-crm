@@ -87,7 +87,7 @@ test("le code Drive ne contient ni clé privée ni anciens secrets OAuth", () =>
 test("refuse une variable serveur manquante", () => {
   assert.throws(
     () => requireServerEnv("GCP_SERVICE_ACCOUNT_EMAIL", {}),
-    (error) => error instanceof DriveRouteError && error.status === 500
+    (error) => error instanceof DriveRouteError && error.status === 500 && error.message === "Configuration serveur indisponible."
   );
 });
 

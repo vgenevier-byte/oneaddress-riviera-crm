@@ -1,3 +1,4 @@
+import "server-only";
 import {
   assertAllowedDriveResource,
   createGoogleDriveFetch,
@@ -70,7 +71,7 @@ export async function GET(request: Request) {
 
     const headers = new Headers();
     headers.set("content-type", metadata.mimeType || mediaResponse.headers.get("content-type") || "application/octet-stream");
-    headers.set("cache-control", "private, max-age=60");
+    headers.set("cache-control", "private, no-store");
     headers.set("content-disposition", contentDispositionHeader(download ? "attachment" : "inline", metadata.name || "document"));
 
     return new Response(mediaResponse.body, { status: 200, headers });

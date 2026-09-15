@@ -24,7 +24,34 @@ export type ActionAuditFields = {
   updatedAt?: string;
 };
 
+export type VendorBankAccount = {
+  id: string;
+  label?: string;
+  accountHolder: string;
+  iban: string;
+  bic: string;
+  bankName?: string;
+  status: "À vérifier" | "Vérifié" | "Archivé";
+  isPrimary: boolean;
+  verifiedAt?: string;
+  verifiedBy?: string;
+  documentProvider?: "google-drive";
+  driveFileId?: string;
+  driveFolderId?: string;
+  driveFileName?: string;
+  driveOriginalFileName?: string;
+  driveWebViewLink?: string;
+  driveMimeType?: string;
+  driveSize?: number;
+  driveUploadedAt?: string;
+  createdAt: string;
+  createdBy?: string;
+  updatedAt?: string;
+  updatedBy?: string;
+};
+
 export type Contact = {
+  supplierBankAccounts?: VendorBankAccount[];
   id: string;
   name: string;
   firstName?: string;
@@ -270,6 +297,8 @@ export type VendorQuote = {
 };
 
 export type VendorInvoice = {
+  invoiceReference?: string;
+  paymentBankAccountId?: string;
   id: string;
   contactId: string;
   contactName: string;

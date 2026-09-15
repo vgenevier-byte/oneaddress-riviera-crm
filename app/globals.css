@@ -9571,3 +9571,28 @@ html {
     width: 100%;
   }
 }
+
+/* Supplier bank records and payment preparation */
+.vendor-banking { min-width: 0; margin-top: 20px; padding: 18px; border: 1px solid #d8c9ae; border-radius: 16px; background: #fbfaf7; color: #26332e; overflow-wrap: anywhere; }
+.banking-heading, .banking-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.banking-heading { justify-content: space-between; }
+.banking-heading h3 { margin: 0; }
+.banking-account { border-top: 1px solid #ddd5c7; margin-top: 18px; padding-top: 18px; }
+.banking-actions { margin: 12px 0; }
+.vendor-banking button, .banking-dialog button { min-height: 48px; white-space: normal; }
+.banking-status { display: inline-block; border-radius: 8px; padding: 8px 10px; background: #fff0c9; font-weight: 600; font-size: 13px; }
+.banking-status.verified { background: #e1efe5; color: #245d3b; }
+.banking-warning { background: #fff0d1; border-left: 4px solid #a95d08; color: #703d06; padding: 14px; line-height: 1.6; }
+.banking-iban { font-family: monospace; font-size: 17px; line-height: 1.7; overflow-wrap: anywhere; }
+.banking-dialog { width: min(620px, calc(100vw - 32px)); max-height: 88dvh; overflow-y: auto; border: 1px solid #d8c9ae; border-radius: 20px; padding: 24px; background: #fbfaf7; color: #26332e; box-sizing: border-box; }
+.banking-dialog::backdrop { background: #12241bb3; }
+.banking-form { display: grid; gap: 14px; min-width: 0; margin-top: 20px; overflow-wrap: anywhere; }
+.banking-form label { display: grid; gap: 7px; min-width: 0; }
+.banking-form input, .banking-form select { min-width: 0; width: 100%; min-height: 48px; box-sizing: border-box; }
+.banking-amount { font-size: 28px; font-weight: 600; margin: 0; }
+.banking-preview { width: 100%; height: 65dvh; border: 0; }
+@media (max-width: 600px) {
+  .banking-dialog { width: 100%; max-width: 100%; margin: auto 0 0; border-radius: 20px 20px 0 0; padding: 20px 16px max(20px, env(safe-area-inset-bottom)); max-height: 92dvh; }
+  .vendor-banking { padding: 14px; }
+  .banking-actions > button { flex: 1 1 130px; }
+}

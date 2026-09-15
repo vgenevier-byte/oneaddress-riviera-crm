@@ -1,3 +1,4 @@
+import "server-only";
 import {
   assertAllowedDriveResource,
   assertDriveFolder,
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
 
     const documentsRootFolderId = getDocumentsRootFolderId();
     const parentDriveFolderId = String(form.get("parentDriveFolderId") || documentsRootFolderId).trim();
-    const parentFolder = await assertAllowedDriveResource(parentDriveFolderId, { fetchDrive });
+    const parentFolder = await assertAllowedDriveResource(parentDriveFolderId, { fetchDrive, allowedRootIds: [documentsRootFolderId] });
     assertDriveFolder(parentFolder);
     const requestedName = sanitizeDriveName(form.get("title") || file.name, file.name || "Document CRM");
 

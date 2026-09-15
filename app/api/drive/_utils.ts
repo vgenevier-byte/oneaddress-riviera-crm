@@ -1,3 +1,4 @@
+import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import { getVercelOidcToken } from "@vercel/oidc";
 import { ExternalAccountClient } from "google-auth-library";
@@ -61,7 +62,7 @@ export function requireServerEnv(name: string, environment: ServerEnvironment = 
   const value = environment[name];
 
   if (!value || !value.trim()) {
-    throw new DriveRouteError(`Variable Vercel manquante : ${name}`, 500);
+    throw new DriveRouteError("Configuration serveur indisponible.", 500);
   }
 
   return value.trim();
@@ -321,7 +322,7 @@ export async function assertAllowedDriveResource(
   const fetchDrive = options.fetchDrive || googleDriveFetch;
   const sharedDriveId = getSharedDriveId();
   const allowedRootIds = new Set(
-    (options.allowedRootIds || [getDocumentsRootFolderId()])
+    (options.allowedRootIds || [getDocumentsRootFolderId(), process.env.GOOGLE_DRIVE_VENDOR_DOCUMENTS_FOLDER_ID || ""])
       .map((id) => String(id || "").trim())
       .filter(Boolean)
   );

@@ -6,6 +6,7 @@ import VendorQuotesView from "./VendorQuotesView";
 import MobileCRMHeader from "./MobileCRMHeader";
 import MobileCRMNavigation from "./MobileCRMNavigation";
 import MobileMoreMenu, { type MobileSecondaryAction } from "./MobileMoreMenu";
+import { VendorBankAccounts, VendorInvoicePayment, VendorBankContactDialog } from "./VendorBanking";
 import {
   crmNavigationItems,
   getCRMTabSearchPlaceholder,
@@ -411,6 +412,8 @@ function normalizeVendorInvoice(value: unknown): VendorInvoice | null {
     contactPersonName: String(raw.contactPersonName || ""),
     category: String(raw.category || "Prestataire"),
     title: String(raw.title || "Facture prestataire"),
+    ...(raw.invoiceReference !== undefined ? { invoiceReference: String(raw.invoiceReference) } : {}),
+    ...(raw.paymentBankAccountId !== undefined ? { paymentBankAccountId: String(raw.paymentBankAccountId) } : {}),
     invoiceDate: String(raw.invoiceDate || ""),
     dueDate: String(raw.dueDate || ""),
     amount: Number.isFinite(amount) ? amount : 0,
@@ -4458,6 +4461,8 @@ function HouseTrackingView({
 }
 
 function VendorInvoicesView({
+  actor,
+  onUpdateContact,
   contacts,
   documents,
   invoices,
@@ -4466,6 +4471,8 @@ function VendorInvoicesView({
   onDelete,
   onOpenQuote
 }: {
+  actor: string;
+  onUpdateContact: (contact: Contact) => void;
   contacts: Contact[];
   documents: CRMDocument[];
   invoices: VendorInvoice[];
@@ -4474,6 +4481,8 @@ function VendorInvoicesView({
   onDelete: (id: string) => void;
   onOpenQuote: (quoteId: string) => void;
 }) {
+  const [bankContactId, setBankContactId] = useState("");
+  const bankContact = contacts.find(c => c.id === bankContactId);
   const [statusFilter, setStatusFilter] = useState<VendorInvoice["status"] | "Tous">("Tous");
   const [editingInvoice, setEditingInvoice] = useState<VendorInvoice | null>(null);
   const [uploadingInvoiceDocument, setUploadingInvoiceDocument] = useState(false);
@@ -4811,6 +4820,8 @@ function VendorInvoicesView({
           ? String(editingInvoice?.contactPersonName || "").trim()
           : "",
       category: automaticCategory,
+      invoiceReference: String(form.get("invoiceReference") || "").trim(),
+      paymentBankAccountId: editingInvoice?.paymentBankAccountId,
       title: String(form.get("title") ?? "").trim() || "Facture prestataire",
       invoiceDate: String(form.get("invoiceDate") ?? ""),
       dueDate,
@@ -4833,6 +4844,9 @@ function VendorInvoicesView({
       createdAt: editingInvoice?.createdAt || new Date().toISOString()
     };
 
+    if (editingInvoice?.paymentBankAccountId && editingInvoice.contactId !== contactId) {
+      window.alert("Le prestataire ne peut pas changer après sélection d’un compte bancaire."); return;
+    }
     if (!invoice.contactName) return window.alert("Choisissez un contact prestataire.");
     if (!invoice.amount || invoice.amount <= 0) return window.alert("Ajoutez un montant de facture.");
 
@@ -4848,6 +4862,7 @@ function VendorInvoicesView({
 
   return (
     <div className="two-columns wide-left vendor-invoices-view">
+      {bankContact && <VendorBankContactDialog contact={bankContact} actor={actor} onUpdate={onUpdateContact} onClose={() => setBankContactId("")} />}
       <section className="card vendor-invoices-list-card">
         <div className="section-heading">
           <div>
@@ -4898,6 +4913,7 @@ function VendorInvoicesView({
                     <p className="muted-line">Référent : {contactPersonName}</p>
                   ) : null}
                   <p>{invoice.title}</p>
+                  {invoice.invoiceReference && <p className="muted-line">Référence : {invoice.invoiceReference}</p>}
                   <p className="muted-line">
                     {invoice.status === "En attente de facture"
                       ? "Facture réelle attendue avant mise en paiement"
@@ -4907,6 +4923,7 @@ function VendorInvoicesView({
                     <p className="muted-line">Devis d’origine : {invoice.sourceQuoteReference}</p>
                   )}
 
+                  <VendorInvoicePayment invoice={invoice} contact={contacts.find(c => c.id === invoice.contactId)} onUpdate={onUpdate} onOpenContact={() => setBankContactId(invoice.contactId)} />
                   <div className="stats-grid vendor-invoice-stats">
                     <div className="mini-stat">
                       <span>Montant</span>
@@ -4996,6 +5013,8 @@ function VendorInvoicesView({
             <input name="title" defaultValue={editingInvoice?.title || ""} placeholder="Ex : Entretien jardin juin" />
           </label>
 
+          <label>Référence facture<input name="invoiceReference" defaultValue={editingInvoice?.invoiceReference || ""} placeholder="Ex : 001 (facultatif)" /></label>
+
           <label>Date facture
             <input name="invoiceDate" type="date" defaultValue={editingInvoice?.invoiceDate || ""} />
           </label>
@@ -5038,7 +5057,7 @@ function VendorInvoicesView({
           </label>
 
           <label className="planning-entry-notes">Notes
-            <textarea name="notes" defaultValue={editingInvoice?.notes || ""} placeholder="Détails, facture reçue, IBAN, remarque..." />
+            <textarea name="notes" defaultValue={editingInvoice?.notes || ""} placeholder="Détails, facture reçue, remarque..." />
           </label>
 
           <div className="mobile-form-actions">
@@ -7764,7 +7783,16 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   }
 
   function updateVendorInvoice(updatedInvoice: VendorInvoice) {
-    const normalizedInvoice = normalizeVendorInvoiceFinancials(updatedInvoice);
+    const existing = (data.vendorInvoices || []).find(invoice => invoice.id === updatedInvoice.id);
+    if (existing?.paymentBankAccountId && existing.contactId !== updatedInvoice.contactId) {
+      notify("Le prestataire ne peut pas changer après sélection d’un compte bancaire."); return;
+    }
+    const normalizedInvoice = normalizeVendorInvoiceFinancials({
+      ...updatedInvoice,
+      paymentBankAccountId: existing?.paidAmount && existing.paymentBankAccountId
+        ? existing.paymentBankAccountId
+        : updatedInvoice.paymentBankAccountId || existing?.paymentBankAccountId
+    });
 
     setData((current) => ({
       ...current,
@@ -8391,6 +8419,9 @@ function createQuoteDraftFromLead(lead: Lead) {
   }
 
   function deleteContact(id: string) {
+    if (data.contacts.find(c => c.id === id)?.supplierBankAccounts?.length) {
+      notify("Ce contact possède des RIB : archivez le prestataire pour conserver l’historique."); return;
+    }
     setData((current) => ({ ...current, contacts: current.contacts.filter((contact) => contact.id !== id) }));
     // Ancienne suppression contact désactivée : crm_workspace_state sauvegarde tout le CRM.
 
@@ -8768,7 +8799,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "contacts" && (
-          <ContactsView contacts={filteredContacts} leads={data.leads} tasks={data.tasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
+          <ContactsView actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={data.tasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
 
@@ -8842,6 +8873,8 @@ function createQuoteDraftFromLead(lead: Lead) {
 
         {activeTab === "vendorInvoices" && (
           <VendorInvoicesView
+            actor={activeActor}
+            onUpdateContact={updateContact}
             contacts={data.contacts}
             documents={(((data as any).documents ?? []) as CRMDocument[])}
             invoices={(((data as any).vendorInvoices ?? []) as VendorInvoice[])}
@@ -11667,6 +11700,7 @@ function StatCard({ label, value, caption }: { label: string; value: string; cap
 }
 
 function ContactsView({
+  actor,
   contacts,
   leads,
   tasks,
@@ -11676,6 +11710,7 @@ function ContactsView({
   onCreateLead,
   onCreateTask
 }: {
+  actor: string;
   contacts: Contact[];
   leads: Lead[];
   tasks: Task[];
@@ -11801,9 +11836,10 @@ function ContactsView({
   }
 
   function openEdit(contact: Contact) {
+    const latestContact = contacts.find(item => item.id === contact.id) || contact;
     setSelectedContact(null);
-    setEditingContactKind(normalizeKind((contact as any).kind));
-    setEditingContact(contact);
+    setEditingContactKind(normalizeKind((latestContact as any).kind));
+    setEditingContact(latestContact);
   }
 
   function typeLabel(contact: Contact) {
@@ -12067,6 +12103,8 @@ function ContactsView({
 
               <div className="full"><span>Notes</span><p>{selectedContact.notes || "Aucune note."}</p></div>
             </div>
+
+            {isSupplierContact(selectedContact) && <VendorBankAccounts contact={contacts.find(c => c.id === selectedContact.id) || selectedContact} actor={actor} onUpdate={onUpdate} />}
 
             {!isSupplierContact(selectedContact) && (
               <div className="contact-related-section">

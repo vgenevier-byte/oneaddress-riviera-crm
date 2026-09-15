@@ -1342,3 +1342,11 @@
     transform: scale(0.82);
   }
 }
+
+/* Bank actions remain usable inside existing contact/invoice layouts. */
+.crm-readable-redesign .vendor-banking button,
+.crm-readable-redesign .banking-dialog button,
+.banking-dialog button { min-height: 48px !important; height: auto !important; white-space: normal !important; }
+#contact-detail-panel .vendor-banking button,
+main.crm-shell.crm-readable-redesign .vendor-banking button,
+main.crm-shell.crm-readable-redesign .banking-dialog button { min-height: 48px !important; height: auto !important; }

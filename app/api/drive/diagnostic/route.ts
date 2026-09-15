@@ -1,3 +1,4 @@
+import "server-only";
 import { createDriveDiagnosticHandler } from "./handler";
 
 export const runtime = "nodejs";

@@ -1,3 +1,4 @@
+import "server-only";
 import {
   DriveRouteError,
   createGoogleDriveFetch,
@@ -82,7 +83,7 @@ export function createDriveDiagnosticHandler(dependencies: DiagnosticRouteDepend
 
       if (!crmDocuments || crmDocuments.driveId !== sharedDriveId) {
         throw new DriveRouteError(
-          "GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID n’est pas une racine autorisée de ce Drive partagé.",
+          "Configuration du dossier Google Drive indisponible.",
           403
         );
       }

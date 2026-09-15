@@ -1,3 +1,4 @@
+import "server-only";
 import { createDeleteDriveHandler } from "./handler";
 
 export const runtime = "nodejs";
