@@ -2,6 +2,8 @@
 
 import QuickRepliesView from "./QuickRepliesView";
 import SearchableBusinessContactPicker from "./SearchableBusinessContactPicker";
+import vendorFinanceStyles from "./VendorFinanceDialogs.module.css";
+import { VendorInvoiceDuplicateDialog } from "./VendorFinanceDialogs";
 import VendorQuotesView from "./VendorQuotesView";
 import MobileCRMHeader from "./MobileCRMHeader";
 import MobileCRMNavigation from "./MobileCRMNavigation";
@@ -72,7 +74,17 @@ import {
   sumEuroAmounts
 } from "@/lib/currency";
 import {
-  createPendingVendorInvoiceFromQuote,
+  deleteVendorQuoteWithDecision,
+  deleteOrphanAutomaticVendorInvoice,
+  isAutomaticVendorInvoice,
+  isEmptyAutomaticVendorInvoice,
+  isOrphanAutomaticVendorInvoice,
+  validateVendorQuoteIdempotently,
+  preserveVendorQuoteIdentity,
+  findVendorInvoiceDuplicates,
+  canSaveVendorInvoice,
+  type VendorQuoteDeletionChoice,
+  type VendorInvoiceDuplicate,
   getVendorInvoiceRemaining,
   getVendorInvoiceStatus,
   getVendorInvoiceTotalRemaining,
@@ -406,6 +418,7 @@ function normalizeVendorInvoice(value: unknown): VendorInvoice | null {
   const status = String(raw.status || getVendorInvoiceStatus(amount, paidAmount, String(raw.dueDate || ""))) as VendorInvoice["status"];
 
   return {
+    ...raw,
     id: String(raw.id || makeId("invoice")),
     contactId: String(raw.contactId || ""),
     contactName: String(raw.contactName || ""),
@@ -4466,6 +4479,8 @@ function VendorInvoicesView({
   contacts,
   documents,
   invoices,
+  quotes,
+  onDeleteOrphan,
   onAdd,
   onUpdate,
   onDelete,
@@ -4476,6 +4491,8 @@ function VendorInvoicesView({
   contacts: Contact[];
   documents: CRMDocument[];
   invoices: VendorInvoice[];
+  quotes: VendorQuote[];
+  onDeleteOrphan: (id: string) => void;
   onAdd: (invoice: VendorInvoice) => void;
   onUpdate: (invoice: VendorInvoice) => void;
   onDelete: (id: string) => void;
@@ -4486,6 +4503,9 @@ function VendorInvoicesView({
   const [statusFilter, setStatusFilter] = useState<VendorInvoice["status"] | "Tous">("Tous");
   const [editingInvoice, setEditingInvoice] = useState<VendorInvoice | null>(null);
   const [uploadingInvoiceDocument, setUploadingInvoiceDocument] = useState(false);
+  const [duplicateDecision, setDuplicateDecision] = useState<{
+    duplicates: VendorInvoiceDuplicate[]; reference?: string; form: HTMLFormElement;
+  } | null>(null);
   const [previewingInvoiceDocument, setPreviewingInvoiceDocument] = useState(false);
   const [invoicePreview, setInvoicePreview] = useState<{
     invoice: VendorInvoice;
@@ -4763,7 +4783,10 @@ function VendorInvoicesView({
   async function submitInvoice(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const formElement = event.currentTarget;
+    await submitInvoiceForm(event.currentTarget);
+  }
+
+  async function submitInvoiceForm(formElement: HTMLFormElement, overrideDuplicate = false) {
     const form = new FormData(formElement);
     const contactId = String(form.get("contactId") ?? "");
     const contact = contacts.find((item) => item.id === contactId);
@@ -4779,6 +4802,16 @@ function VendorInvoicesView({
       editingInvoice?.invoiceDocumentUrl ||
       editingInvoice?.linkedDocumentId
     );
+
+    const candidate = {
+      ...editingInvoice, id: invoiceId, contactId,
+      invoiceReference: String(form.get("invoiceReference") || "").trim()
+    } as VendorInvoice;
+    const duplicates = findVendorInvoiceDuplicates(candidate, invoices);
+    if (!canSaveVendorInvoice(candidate, invoices, overrideDuplicate)) {
+      setDuplicateDecision({ duplicates, reference: candidate.invoiceReference, form: formElement });
+      return;
+    }
 
     let uploadedInvoiceDocument: Partial<VendorInvoice> = {};
 
@@ -4807,6 +4840,7 @@ function VendorInvoicesView({
     }
 
     const invoice: VendorInvoice = {
+      ...editingInvoice,
       id: invoiceId,
       contactId,
       contactName: contact
@@ -4862,6 +4896,18 @@ function VendorInvoicesView({
 
   return (
     <div className="two-columns wide-left vendor-invoices-view">
+      {duplicateDecision && <VendorInvoiceDuplicateDialog duplicates={duplicateDecision.duplicates}
+        reference={duplicateDecision.reference} editing={Boolean(editingInvoice)}
+        onCancel={() => setDuplicateDecision(null)}
+        onOpen={id => {
+          const existing = invoices.find(invoice => invoice.id === id);
+          setDuplicateDecision(null);
+          if (existing) { setStatusFilter("Tous"); startEditInvoice(existing); }
+        }} onConfirm={() => {
+          const form = duplicateDecision.form;
+          setDuplicateDecision(null);
+          void submitInvoiceForm(form, true);
+        }} />}
       {bankContact && <VendorBankContactDialog contact={bankContact} actor={actor} onUpdate={onUpdateContact} onClose={() => setBankContactId("")} />}
       <section className="card vendor-invoices-list-card">
         <div className="section-heading">
@@ -4893,6 +4939,7 @@ function VendorInvoicesView({
         ) : (
           <div className="list-stack oar-contact-list-stack">
             {visibleInvoices.map((invoice) => {
+              const orphan = isOrphanAutomaticVendorInvoice(invoice, quotes);
               const linkedContact = findContactForVendorInvoice(invoice);
               const businessName = linkedContact
                 ? getVendorBusinessName(linkedContact)
@@ -4913,15 +4960,15 @@ function VendorInvoicesView({
                     <p className="muted-line">Référent : {contactPersonName}</p>
                   ) : null}
                   <p>{invoice.title}</p>
-                  {invoice.invoiceReference && <p className="muted-line">Référence : {invoice.invoiceReference}</p>}
+                  {orphan && <p className={`status-pill semantic-danger ${vendorFinanceStyles.orphanNotice}`}>Facture automatique orpheline · Devis d’origine introuvable</p>}
+                  <p className="muted-line">Référence : {invoice.invoiceReference || "Non renseignée"}</p>
+                  <p className="muted-line">Date facture : {invoice.invoiceDate || "À compléter"} · Créée le : {invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("fr-FR") : "Non renseignée"}</p>
                   <p className="muted-line">
                     {invoice.status === "En attente de facture"
                       ? "Facture réelle attendue avant mise en paiement"
-                      : `Facture : ${invoice.invoiceDate || "À compléter"} · Date : ${invoice.dueDate || "À compléter"}`}
+                      : `Date de paiement prévue : ${invoice.dueDate || "À compléter"}`}
                   </p>
-                  {invoice.sourceQuoteReference && (
-                    <p className="muted-line">Devis d’origine : {invoice.sourceQuoteReference}</p>
-                  )}
+                  <p className="muted-line">Devis d’origine : {invoice.sourceQuoteReference || invoice.sourceQuoteId || "Non renseigné"}</p>
 
                   <VendorInvoicePayment invoice={invoice} contact={contacts.find(c => c.id === invoice.contactId)} onUpdate={onUpdate} onOpenContact={() => setBankContactId(invoice.contactId)} />
                   <div className="stats-grid vendor-invoice-stats">
@@ -4969,17 +5016,12 @@ function VendorInvoicesView({
                   <button className="secondary-button" type="button" onClick={() => startEditInvoice(invoice)}>
                     Modifier
                   </button>
-                  <button
-                    className="danger-link"
-                    type="button"
-                    onClick={() => {
-                      if (window.confirm("Supprimer cette facture prestataire ?")) {
-                        onDelete(invoice.id);
-                      }
-                    }}
-                  >
-                    Supprimer
-                  </button>
+                  {orphan ? <button className="danger-link" type="button" onClick={() => {
+                    if (window.confirm("Supprimer la facture automatique orpheline ? Les liens, documents et paiements seront vérifiés à nouveau.")) onDeleteOrphan(invoice.id);
+                  }}>Supprimer la facture orpheline</button> : !isAutomaticVendorInvoice(invoice) && <button
+                    className="danger-link" type="button" onClick={() => {
+                      if (window.confirm("Supprimer cette facture prestataire ?")) onDelete(invoice.id);
+                    }}>Supprimer</button>}
                 </div>
               </article>
               );
@@ -7637,17 +7679,16 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     setData((current) => {
       const quotes = (((current as any).vendorQuotes ?? []) as VendorQuote[]);
       const invoices = (((current as any).vendorInvoices ?? []) as VendorInvoice[]);
+      const originalQuote = quotes.find(quote => quote.id === updatedQuote.id);
+      if (!originalQuote) return current;
       const savedQuote = normalizeVendorQuoteFinancials(
-        stampUpdated(updatedQuote, activeActor) as VendorQuote
+        stampUpdated(preserveVendorQuoteIdentity(originalQuote, updatedQuote), activeActor) as VendorQuote
       );
 
       const nextInvoices = invoices.map((invoice) => {
         const isLinked = invoice.id === savedQuote.linkedInvoiceId || invoice.sourceQuoteId === savedQuote.id;
         const canStillFollowQuote =
-          invoice.status === "En attente de facture" &&
-          !invoice.invoiceDocumentStoragePath &&
-          !invoice.invoiceDocumentUrl &&
-          Number(invoice.paidAmount || 0) === 0;
+          invoice.status === "En attente de facture" && isEmptyAutomaticVendorInvoice(invoice);
 
         if (!isLinked || !canStillFollowQuote) return invoice;
 
@@ -7675,41 +7716,17 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   }
 
   function validateVendorQuote(id: string) {
-    setData((current) => {
-      const quotes = (((current as any).vendorQuotes ?? []) as VendorQuote[]);
-      const invoices = (((current as any).vendorInvoices ?? []) as VendorInvoice[]);
-      const quote = quotes.find((item) => item.id === id);
-
-      if (!quote) return current;
-
-      const existingInvoice = invoices.find(
-        (invoice) => invoice.id === quote.linkedInvoiceId || invoice.sourceQuoteId === quote.id
-      );
-
-      const invoiceId = existingInvoice?.id || makeId("invoice");
-      const validatedQuote = stampUpdated({
-        ...quote,
-        status: "Validé",
-        validatedAt: quote.validatedAt || new Date().toISOString(),
-        linkedInvoiceId: invoiceId
-      }, activeActor) as VendorQuote;
-
-      const pendingInvoice = createPendingVendorInvoiceFromQuote(
-        normalizeVendorQuoteFinancials(quote),
-        invoiceId,
-        existingInvoice
-      );
-
-      return {
-        ...current,
-        vendorQuotes: quotes.map((item) => item.id === id ? validatedQuote : item),
-        vendorInvoices: existingInvoice
-          ? invoices.map((invoice) => invoice.id === existingInvoice.id ? pendingInvoice : invoice)
-          : [pendingInvoice, ...invoices]
-      };
+    const invoiceId = makeId("invoice");
+    try { validateVendorQuoteIdempotently(data, id, invoiceId); }
+    catch (error) { notify((error as Error).message); return; }
+    setData(current => {
+      try {
+        const next = validateVendorQuoteIdempotently(current, id, invoiceId);
+        return { ...next, vendorQuotes: next.vendorQuotes?.map(quote => quote.id === id
+          ? stampUpdated(quote, activeActor) as VendorQuote : quote) };
+      } catch { return current; }
     });
-
-    notify("Devis validé. Facture en attente créée automatiquement.");
+    notify("Devis validé. Facture liée réutilisée ou créée si nécessaire.");
   }
 
   function rejectVendorQuote(id: string) {
@@ -7728,10 +7745,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       const nextInvoices = invoices.map((invoice) => {
         const isLinked = invoice.id === quote.linkedInvoiceId || invoice.sourceQuoteId === quote.id;
         const isUntouchedPending =
-          invoice.status === "En attente de facture" &&
-          !invoice.invoiceDocumentStoragePath &&
-          !invoice.invoiceDocumentUrl &&
-          Number(invoice.paidAmount || 0) === 0;
+          invoice.status === "En attente de facture" && isEmptyAutomaticVendorInvoice(invoice);
 
         return isLinked && isUntouchedPending
           ? { ...invoice, status: "Annulé" as VendorInvoice["status"] }
@@ -7748,27 +7762,24 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     notify("Devis prestataire refusé.");
   }
 
-  function deleteVendorQuote(id: string) {
-    setData((current) => {
-      const quotes = (((current as any).vendorQuotes ?? []) as VendorQuote[]);
-      const invoices = (((current as any).vendorInvoices ?? []) as VendorInvoice[]);
-
-      return {
-        ...current,
-        vendorQuotes: quotes.filter((quote) => quote.id !== id),
-        vendorInvoices: invoices.map((invoice) =>
-          invoice.sourceQuoteId === id &&
-          invoice.status === "En attente de facture" &&
-          !invoice.invoiceDocumentStoragePath &&
-          !invoice.invoiceDocumentUrl &&
-          Number(invoice.paidAmount || 0) === 0
-            ? { ...invoice, status: "Annulé" as VendorInvoice["status"] }
-            : invoice
-        )
-      };
+  function deleteVendorQuote(id: string, choice?: VendorQuoteDeletionChoice) {
+    try { deleteVendorQuoteWithDecision(data, id, choice); }
+    catch (error) { window.alert((error as Error).message); return; }
+    setData(current => {
+      try { return deleteVendorQuoteWithDecision(current, id, choice); }
+      catch { return current; }
     });
+    notify(choice === "delete-both" ? "Devis et facture automatique supprimés." : "Devis prestataire supprimé.");
+  }
 
-    notify("Devis prestataire supprimé.");
+  function deleteOrphanVendorInvoice(id: string) {
+    try { deleteOrphanAutomaticVendorInvoice(data, id); }
+    catch (error) { window.alert((error as Error).message); return; }
+    setData(current => {
+      try { return deleteOrphanAutomaticVendorInvoice(current, id); }
+      catch { return current; }
+    });
+    notify("Facture automatique orpheline supprimée.");
   }
 
   function addVendorInvoice(invoice: VendorInvoice) {
@@ -8873,6 +8884,8 @@ function createQuoteDraftFromLead(lead: Lead) {
 
         {activeTab === "vendorInvoices" && (
           <VendorInvoicesView
+            quotes={data.vendorQuotes || []}
+            onDeleteOrphan={deleteOrphanVendorInvoice}
             actor={activeActor}
             onUpdateContact={updateContact}
             contacts={data.contacts}

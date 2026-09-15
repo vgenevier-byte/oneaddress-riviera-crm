@@ -1,0 +1,20 @@
+/* Scope overrides to these decisions; the CRM's global buttons use nowrap. */
+dialog.dialog button[class] {
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  min-height: 44px;
+  height: auto !important;
+  line-height: 1.5;
+}
+
+dialog.dialog::backdrop {
+  background: rgb(0 20 52 / 35%);
+}
+
+p.orphanNotice[class] {
+  display: block !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere;
+  width: fit-content !important;
+  max-width: 100% !important;
+}

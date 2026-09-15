@@ -22,6 +22,9 @@ import {
   sumEuroAmounts
 } from "@/lib/currency";
 
+import { getVendorQuoteDeletionPlan, type VendorQuoteDeletionChoice } from "@/lib/vendorFinance";
+import { VendorQuoteDeletionDialog } from "./VendorFinanceDialogs";
+
 const SHARED_WORKSPACE_ID = "oneaddress-riviera";
 const CRM_DOCUMENTS_BUCKET = "crm-documents";
 
@@ -66,7 +69,7 @@ type Props = {
   invoices: VendorInvoice[];
   onAdd: (quote: VendorQuote) => void;
   onUpdate: (quote: VendorQuote) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, choice?: VendorQuoteDeletionChoice) => void;
   onValidate: (id: string) => void;
   onReject: (id: string) => void;
   onOpenInvoice: (invoiceId: string) => void;
@@ -85,6 +88,8 @@ export default function VendorQuotesView({
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<VendorQuoteStatus | "Tous">("Tous");
   const [editingQuote, setEditingQuote] = useState<VendorQuote | null>(null);
+  const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
+  const deletionPlan = deletingQuoteId ? getVendorQuoteDeletionPlan({ vendorQuotes: quotes, vendorInvoices: invoices }, deletingQuoteId) : null;
   const [uploading, setUploading] = useState(false);
 
   const selectableContacts = useMemo(
@@ -293,7 +298,7 @@ export default function VendorQuotesView({
 
     if (
       window.confirm(
-        `Valider le devis ${quote.quoteReference || quote.title} pour ${formatEuroAmount(quote.amount)} ?\n\nUne facture en attente sera créée automatiquement.`
+        `Valider le devis ${quote.quoteReference || quote.title} pour ${formatEuroAmount(quote.amount)} ?\n\nLa facture liée sera réutilisée ; une facture en attente sera créée uniquement si nécessaire.`
       )
     ) {
       onValidate(quote.id);
@@ -312,6 +317,12 @@ export default function VendorQuotesView({
 
   return (
     <div className="two-columns wide-left vendor-quotes-view">
+      {deletionPlan && <VendorQuoteDeletionDialog plan={deletionPlan}
+        onCancel={() => setDeletingQuoteId(null)} onDecide={choice => {
+          onDelete(deletingQuoteId!, choice);
+          if (editingQuote?.id === deletingQuoteId) setEditingQuote(null);
+          setDeletingQuoteId(null);
+        }} />}
       <section className="card vendor-quotes-list-card">
         <div className="section-heading">
           <div>
@@ -342,9 +353,8 @@ export default function VendorQuotesView({
         ) : (
           <div className="list-stack oar-contact-list-stack">
             {visibleQuotes.map((quote) => {
-              const linkedInvoice = invoices.find(
-                (invoice) => invoice.id === quote.linkedInvoiceId || invoice.sourceQuoteId === quote.id
-              );
+              const linkedInvoice = invoices.find(invoice => invoice.id === quote.linkedInvoiceId)
+                || invoices.find(invoice => invoice.sourceQuoteId === quote.id);
               const linkedContact = contacts.find((contact) => contact.id === quote.contactId);
               const businessName = linkedContact
                 ? getVendorBusinessName(linkedContact)
@@ -434,8 +444,11 @@ export default function VendorQuotesView({
                       className="danger-link"
                       type="button"
                       onClick={() => {
-                        if (window.confirm("Supprimer ce devis prestataire ?")) {
+                        const plan = getVendorQuoteDeletionPlan({ vendorQuotes: quotes, vendorInvoices: invoices }, quote.id);
+                        if (plan.invoices.length || plan.missingLink) setDeletingQuoteId(quote.id);
+                        else if (window.confirm("Supprimer ce devis prestataire ?")) {
                           onDelete(quote.id);
+                          if (editingQuote?.id === quote.id) setEditingQuote(null);
                         }
                       }}
                     >
