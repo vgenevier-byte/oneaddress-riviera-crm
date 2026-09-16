@@ -1,0 +1,20 @@
+.field,
+.details {
+  min-width: 0;
+}
+
+.field textarea,
+.fallback {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-wrap: anywhere;
+}
+
+/* Override the legacy contact-wide !important text rules only for this address. */
+:global(#contact-detail-panel) .address {
+  white-space: pre-wrap !important;
+  overflow-wrap: anywhere !important;
+  user-select: text;
+}

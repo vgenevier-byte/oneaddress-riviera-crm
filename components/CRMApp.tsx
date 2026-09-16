@@ -1,6 +1,8 @@
 "use client";
 
 import QuickRepliesView from "./QuickRepliesView";
+import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
+import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
 import SearchableBusinessContactPicker from "./SearchableBusinessContactPicker";
 import vendorFinanceStyles from "./VendorFinanceDialogs.module.css";
 import { VendorInvoiceDuplicateDialog } from "./VendorFinanceDialogs";
@@ -17,7 +19,7 @@ import {
   type CRMTab
 } from "./crmNavigation";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { fetchDriveAPI } from "@/lib/driveClient";
@@ -7865,7 +7867,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       email: String(form.get("email") ?? "").trim(),
       phone: String(form.get("phone") ?? "").trim(),
       city: String(form.get("city") ?? "").trim(),
-      postalAddress: String(form.get("postalAddress") ?? "").trim(),
+      postalAddress: readPostalAddress(form),
       budget: safeNumber(form.get("budget")),
       source: String(form.get("source") ?? "").trim() || "Direct",
       notes: String(form.get("notes") ?? "").trim(),
@@ -8416,11 +8418,11 @@ function createQuoteDraftFromLead(lead: Lead) {
     }));
   }
 
-  function updateContact(updatedContact: Contact) {
+  function updateContact(updatedContact: Pick<Contact, "id"> & Partial<Contact>) {
     setData((current) => ({
       ...current,
       contacts: current.contacts.map((contact) =>
-        contact.id === updatedContact.id ? stampUpdated(updatedContact, activeActor) as Contact : contact
+        contact.id === updatedContact.id ? stampUpdated(mergeContactUpdate(contact, updatedContact), activeActor) as Contact : contact
       )
     }));
 
@@ -11728,11 +11730,12 @@ function ContactsView({
   leads: Lead[];
   tasks: Task[];
   onAdd: (event: React.FormEvent<HTMLFormElement>) => void;
-  onUpdate: (contact: Contact) => void;
+  onUpdate: (contact: Pick<Contact, "id"> & Partial<Contact>) => void;
   onDelete: (id: string) => void;
   onCreateLead: (contactName: string) => void;
   onCreateTask: (contactName: string) => void;
 }) {
+  const changedContactFields = useRef(new Set<string>());
   const [contactFilter, setContactFilter] = useState("Tous");
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("Toutes");
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
@@ -11824,7 +11827,7 @@ function ContactsView({
       email: String(form.get("email") ?? "").trim(),
       phone: String(form.get("phone") ?? "").trim(),
       city: String(form.get("city") ?? "").trim(),
-      postalAddress: String(form.get("postalAddress") ?? "").trim(),
+      postalAddress: readPostalAddress(form, editingContact.postalAddress),
       budget: safeNumber(form.get("budget")),
       source: String(form.get("source") ?? "").trim(),
       notes: String(form.get("notes") ?? "").trim(),
@@ -11843,14 +11846,16 @@ function ContactsView({
       supplierStatus: (isPrestataire ? String(form.get("supplierStatus") ?? "Actif") : "") as Contact["supplierStatus"]
     };
 
-    onUpdate(updatedContact);
+    const update = getContactFormUpdate(updatedContact, changedContactFields.current);
+    onUpdate({ id: editingContact.id, ...update });
     setEditingContact(null);
-    setSelectedContact(updatedContact);
+    setSelectedContact(mergeContactUpdate(contacts.find(contact => contact.id === editingContact.id) || editingContact, update));
   }
 
   function openEdit(contact: Contact) {
     const latestContact = contacts.find(item => item.id === contact.id) || contact;
     setSelectedContact(null);
+    changedContactFields.current.clear();
     setEditingContactKind(normalizeKind((latestContact as any).kind));
     setEditingContact(latestContact);
   }
@@ -11993,6 +11998,7 @@ function ContactsView({
             </label>
             <label>Email<input name="email" type="email" placeholder="email@example.com" /></label>
             <label>Téléphone<input name="phone" placeholder="+33..." /></label>
+            <ContactPostalAddressField />
             <label>Ville / zone<input name="city" placeholder="Cannes, Monaco..." /></label>
             <label>Source<input name="source" placeholder="Site, recommandation, réseau..." /></label>
 
@@ -12093,6 +12099,7 @@ function ContactsView({
               <div><span>Société</span><strong>{selectedContact.companyName || "Non renseignée"}</strong></div>
               <div><span>Email</span><strong>{selectedContact.email || "Non renseigné"}</strong></div>
               <div><span>Téléphone</span><strong>{selectedContact.phone || "Non renseigné"}</strong></div>
+              <ContactPostalAddressDetails key={`${selectedContact.id}:${selectedContact.postalAddress ?? ""}`} address={selectedContact.postalAddress} />
               <div><span>Ville / zone</span><strong>{selectedContact.city || getContactSupplierZone(selectedContact) || "Non renseignée"}</strong></div>
               <div><span>Action</span><strong>{getActionMetaLabel(selectedContact)}</strong></div>
 
@@ -12151,7 +12158,12 @@ function ContactsView({
             <p className="eyebrow">Modification</p>
             <h3>Modifier le contact</h3>
 
-            <form className="form-grid contact-edit-form" onSubmit={submitEdit}>
+            <form className="form-grid contact-edit-form" onSubmit={submitEdit} onChange={(event) => {
+              const target = event.target;
+              if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
+                changedContactFields.current.add(target.name);
+              }
+            }}>
               <label>Civilité
                 <select name="civility" defaultValue={editingContact.civility ?? ""}>
                   <option value="">—</option>
@@ -12170,6 +12182,7 @@ function ContactsView({
               </label>
               <label>Email<input name="email" type="email" defaultValue={editingContact.email} /></label>
               <label>Téléphone<input name="phone" defaultValue={editingContact.phone} /></label>
+              <ContactPostalAddressField value={editingContact.postalAddress} />
               <label>Ville / zone<input name="city" defaultValue={editingContact.city} /></label>
               <label>Source<input name="source" defaultValue={editingContact.source} /></label>
 
