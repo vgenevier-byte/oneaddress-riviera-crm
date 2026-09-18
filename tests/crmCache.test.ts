@@ -1,0 +1,25 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { bindCRMCache, clearCRMCache, crmCache, createCRMCacheRecovery, inspectPersistentCRMCache, purgeRecoveredCRMCache, isPersistentCRMCacheKey } from "../lib/access/crmCache";
+const legacy="oneaddress-riviera-crm-v1",scoped=`oar:previous:${legacy}`;
+function fixture(t: any, seed: Record<string,string> = {}) {
+ const values: Record<string,string> = { "unrelated-preference":"KEEP", ...seed };
+ const storage = {getItem:(k:string)=>values[k]??null,setItem:(k:string,v:string)=>{values[k]=v;},removeItem:(k:string)=>{delete values[k];}};
+ const proxy=new Proxy(storage,{ownKeys:()=>Object.keys(values),getOwnPropertyDescriptor:()=>({enumerable:true,configurable:true})});
+ const previous=Object.getOwnPropertyDescriptor(globalThis,"window");
+ Object.defineProperty(globalThis,"window",{value:{localStorage:proxy,sessionStorage:proxy},configurable:true});
+ t.after(()=>{clearCRMCache();if(previous)Object.defineProperty(globalThis,"window",previous);else delete (globalThis as any).window;});
+ clearCRMCache();return values;
+}
+test("cache: unbound reads and writes expose no memory",t=>{const raw=fixture(t);crmCache.setItem("payload","IGNORED");assert.equal(crmCache.getItem("payload"),null);assert.deepEqual(raw,{"unrelated-preference":"KEEP"});});
+test("cache: real payloads are memory-only; no localStorage or sessionStorage write",t=>{const raw=fixture(t);bindCRMCache("a");crmCache.setItem(legacy,"FICTIONAL CRM");assert.equal(crmCache.getItem(legacy),"FICTIONAL CRM");assert.deepEqual(raw,{"unrelated-preference":"KEEP"});});
+test("cache: same identity refresh preserves memory and another identity cannot bind",t=>{fixture(t);bindCRMCache("a");crmCache.setItem("payload","A");bindCRMCache("a");assert.equal(crmCache.getItem("payload"),"A");assert.throws(()=>bindCRMCache("b"));});
+test("cache: logout drops memory and excludes late writes",t=>{fixture(t);bindCRMCache("a");crmCache.setItem("payload","A");clearCRMCache();crmCache.setItem("payload","LATE");assert.equal(crmCache.getItem("payload"),null);bindCRMCache("b");assert.equal(crmCache.getItem("payload"),null);});
+test("cache: legacy global and other-owner scope prevent binding even with owner null",t=>{fixture(t,{[legacy]:"OLD GLOBAL",[scoped]:"OLD SCOPED"});assert.deepEqual(inspectPersistentCRMCache(),{available:true,count:2});assert.throws(()=>bindCRMCache("new"));assert.equal(crmCache.getItem(legacy),null);});
+test("cache: clearing memory never blindly deletes historical data",t=>{const raw=fixture(t,{[legacy]:"UNSYNCED",[scoped]:"OLD"});clearCRMCache();assert.equal(raw[legacy],"UNSYNCED");assert.equal(raw[scoped],"OLD");});
+test("cache recovery: exact raw values retained, Auth and unrelated keys excluded",t=>{fixture(t,{[legacy]:"NOT EVEN JSON",[scoped]:'{"pending":true}',"sb-local-auth-token":"NEVER EXPORT"});const recovery=createCRMCacheRecovery();assert.deepEqual(recovery.entries,{[legacy]:"NOT EVEN JSON",[scoped]:'{"pending":true}'});assert.ok(!JSON.stringify(recovery).includes("NEVER EXPORT"));});
+test("cache recovery: explicit purge of the saved snapshot preserves unrelated keys",t=>{const raw=fixture(t,{[legacy]:"GLOBAL",[scoped]:"SCOPED","oar:old:unrelated-preference":"KEEP TOO"});const recovery=createCRMCacheRecovery();purgeRecoveredCRMCache(recovery);assert.deepEqual(raw,{"unrelated-preference":"KEEP","oar:old:unrelated-preference":"KEEP TOO"});assert.deepEqual(inspectPersistentCRMCache(),{available:true,count:0});bindCRMCache("new");});
+test("cache recovery: a late old-tab write invalidates export and aborts purge",t=>{const raw=fixture(t,{[legacy]:"OLD",[scoped]:"SCOPED"});const recovery=createCRMCacheRecovery();raw[legacy]="NEW UNSAVED";assert.throws(()=>purgeRecoveredCRMCache(recovery));assert.equal(raw[legacy],"NEW UNSAVED");assert.equal(raw[scoped],"SCOPED");});
+test("cache recovery: newly created old-tab keys prevent partial deletion",t=>{const raw=fixture(t,{[legacy]:"OLD"});const recovery=createCRMCacheRecovery();raw[scoped]="NEW";assert.throws(()=>purgeRecoveredCRMCache(recovery));assert.equal(raw[legacy],"OLD");assert.equal(raw[scoped],"NEW");});
+test("cache recovery: storage failure is closed and still clears memory",t=>{fixture(t);bindCRMCache("a");crmCache.setItem("payload","A");Object.defineProperty(globalThis,"window",{value:{get localStorage(){throw Error("disabled");}},configurable:true});assert.deepEqual(inspectPersistentCRMCache(),{available:false,count:0});assert.throws(createCRMCacheRecovery);assert.doesNotThrow(clearCRMCache);assert.equal(crmCache.getItem("payload"),null);assert.throws(()=>bindCRMCache("a"));});
+test("cache recovery: only historical CRM key families trigger transition",()=>{assert.equal(isPersistentCRMCacheKey(legacy),true);assert.equal(isPersistentCRMCacheKey(scoped),true);assert.equal(isPersistentCRMCacheKey("oar-access-reset-v1"),false);assert.equal(isPersistentCRMCacheKey("sb-local-auth-token"),false);assert.equal(isPersistentCRMCacheKey("unrelated-preference"),false);assert.equal(isPersistentCRMCacheKey("oar:old:unrelated-preference"),false);});

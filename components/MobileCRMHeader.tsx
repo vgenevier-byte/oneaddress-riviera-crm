@@ -32,15 +32,17 @@ export default function MobileCRMHeader({
   onQueryChange
 }: Props) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [previousTab, setPreviousTab] = useState(activeTab);
   const [actionsOpen, setActionsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const actionsCloseRef = useRef<HTMLButtonElement>(null);
   const searchable = isCRMTabSearchable(activeTab);
   const searchPlaceholder = getCRMTabSearchPlaceholder(activeTab);
 
-  useEffect(() => {
+  if (previousTab !== activeTab) {
+    setPreviousTab(activeTab);
     setSearchOpen(false);
-  }, [activeTab]);
+  }
 
   useEffect(() => {
     if (!searchOpen && !actionsOpen) return;

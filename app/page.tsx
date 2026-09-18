@@ -1,5 +1,5 @@
-import CRMApp from "@/components/CRMApp";
+import AccessPortal from "@/components/AccessPortal";
 
 export default function Home() {
-  return <CRMApp />;
+  return <AccessPortal space="oar" />;
 }

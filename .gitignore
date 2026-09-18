@@ -11,3 +11,6 @@ pnpm-debug.log*
 .env.local
 backups/
 .env*
+
+# Private local WIF setup must never be committed.
+GOOGLE_DRIVE_WIF_SETUP.local.md

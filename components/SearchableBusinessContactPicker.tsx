@@ -40,9 +40,22 @@ export default function SearchableBusinessContactPicker({
   const listboxId = `${inputId}-listbox`;
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const hasDefaultContact = useMemo(
+    () =>
+      contacts.some((contact) => contact.id === defaultContactId) ||
+      defaultContact?.id === defaultContactId,
+    [contacts, defaultContact?.id, defaultContactId]
+  );
+  const [previousDefaults, setPreviousDefaults] = useState({
+    defaultContactId,
+    fallbackContactName,
+    hasDefaultContact
+  });
   const [query, setQuery] = useState("");
   const [selectedContactId, setSelectedContactId] = useState(defaultContactId);
-  const [preserveFallback, setPreserveFallback] = useState(false);
+  const [preserveFallback, setPreserveFallback] = useState(
+    Boolean(fallbackContactName && !hasDefaultContact)
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
@@ -57,20 +70,20 @@ export default function SearchableBusinessContactPicker({
     () => searchVendorContacts(contacts, normalizedQuery, 10),
     [contacts, normalizedQuery]
   );
-  const hasDefaultContact = useMemo(
-    () =>
-      contacts.some((contact) => contact.id === defaultContactId) ||
-      defaultContact?.id === defaultContactId,
-    [contacts, defaultContact?.id, defaultContactId]
-  );
-
-  useEffect(() => {
+  if (
+    previousDefaults.defaultContactId !== defaultContactId ||
+    previousDefaults.fallbackContactName !== fallbackContactName ||
+    previousDefaults.hasDefaultContact !== hasDefaultContact
+  ) {
+    setPreviousDefaults({ defaultContactId, fallbackContactName, hasDefaultContact });
     setSelectedContactId(defaultContactId);
     setPreserveFallback(Boolean(fallbackContactName && !hasDefaultContact));
     setQuery("");
     setIsOpen(false);
     setActiveIndex(-1);
-  }, [defaultContactId, fallbackContactName, hasDefaultContact]);
+  }
+
+  if (activeIndex >= results.length) setActiveIndex(-1);
 
   useEffect(() => {
     const form = containerRef.current?.closest("form");
@@ -98,10 +111,6 @@ export default function SearchableBusinessContactPicker({
     document.addEventListener("mousedown", closeOnOutsideClick);
     return () => document.removeEventListener("mousedown", closeOnOutsideClick);
   }, []);
-
-  useEffect(() => {
-    if (activeIndex >= results.length) setActiveIndex(-1);
-  }, [activeIndex, results.length]);
 
   function focusSearch() {
     window.requestAnimationFrame(() => inputRef.current?.focus());

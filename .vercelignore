@@ -1,0 +1,8 @@
+GOOGLE_DRIVE_WIF_SETUP.local.md
+.env*
+.git
+node_modules
+.next
+backups
+tests
+docs/izord

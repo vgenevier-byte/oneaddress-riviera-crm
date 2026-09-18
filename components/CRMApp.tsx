@@ -19,8 +19,13 @@ import {
   type CRMTab
 } from "./crmNavigation";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
+import Image from "next/image";
+import crmLogo from "../public/oar-logo-paysage-crm.png";
+import { isCompletedTaskStatus, maintainCompletedTasks } from "@/lib/taskMaintenance";
+import { crmCache } from "@/lib/access/crmCache";
+import { useCommittedValue } from "@/lib/access/useCommittedValue";
+import { WorkspaceSyncGuard, workspaceFingerprint } from "@/lib/access/workspaceSync";
 import { supabase } from "@/lib/supabase";
 import { fetchDriveAPI } from "@/lib/driveClient";
 import type {
@@ -104,25 +109,6 @@ const propertyStatuses: PropertyStatus[] = ["Disponible", "Mandat en cours", "Lo
 const vehicleStatuses: VehicleStatus[] = ["Disponible", "En location", "En maintenance", "Vendu"];
 const boatStatuses: BoatStatus[] = ["Disponible", "En charter", "En maintenance", "Vendu"];
 const taskStatuses: TaskStatus[] = ["À faire", "En cours", "Terminé"];
-
-function isCompletedTaskStatus(status: unknown) {
-  return String(status || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim() === "termine";
-}
-
-function isCompletedTaskExpired(task: Task) {
-  if (!isCompletedTaskStatus(task.status)) return false;
-  if (!task.completedAt) return false;
-
-  const completedTime = new Date(task.completedAt).getTime();
-  if (Number.isNaN(completedTime)) return false;
-
-  const threeDays = 3 * 24 * 60 * 60 * 1000;
-  return Date.now() - completedTime > threeDays;
-}
 
 const contactKinds: ContactKind[] = ["Client", "Propriétaire", "Prestataire"];
 const contactLevels = ["Standard", "VIP", "Ultra VIP"] as const;
@@ -376,7 +362,7 @@ function readLocalCRMDataSafely() {
   if (typeof window === "undefined") return emptyData;
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = crmCache.getItem(STORAGE_KEY);
     return normalizeSharedCRMData(raw ? JSON.parse(raw) : null);
   } catch {
     return emptyData;
@@ -1671,7 +1657,7 @@ function loadSavedQuotes() {
   if (typeof window === "undefined") return [] as QuoteRequest[];
 
   try {
-    const raw = window.localStorage.getItem(QUOTES_STORAGE_KEY);
+    const raw = crmCache.getItem(QUOTES_STORAGE_KEY);
     if (!raw) return [] as QuoteRequest[];
 
     const parsed = JSON.parse(raw);
@@ -1688,7 +1674,7 @@ function loadSavedQuotes() {
 function saveQuotesToBrowser(quotes: QuoteRequest[]) {
   if (typeof window === "undefined") return;
 
-  window.localStorage.setItem(QUOTES_STORAGE_KEY, JSON.stringify(quotes));
+  crmCache.setItem(QUOTES_STORAGE_KEY, JSON.stringify(quotes));
 }
 
 
@@ -1807,6 +1793,69 @@ function addQuoteDownloadToolbar(html: string) {
   return toolbar + html;
 }
 
+const quoteCategories = ["Villa", "Bateau", "Voiture", "Conciergerie"];
+
+function writeQuoteFormFields(quote: QuoteRequest) {
+  const foundForm = document.querySelector<HTMLFormElement>('form[data-quote-form="true"]');
+
+  if (foundForm === null) {
+    return false;
+  }
+
+  const quoteForm: HTMLFormElement = foundForm;
+
+  quoteForm.reset();
+
+  function setField(name: string, value: string | number | undefined) {
+    const field = quoteForm.elements.namedItem(name);
+
+    if (
+      field instanceof HTMLInputElement ||
+      field instanceof HTMLSelectElement ||
+      field instanceof HTMLTextAreaElement
+    ) {
+      field.value = String(value ?? "");
+    }
+  }
+
+  setField("leadId", quote.leadId || "");
+  setField("clientName", quote.clientName);
+  setField("title", quote.title);
+  setField("location", quote.location);
+  setField("guestCount", quote.guestCount);
+  setField("startDate", quote.startDate);
+  setField("endDate", quote.endDate);
+  setField("validityDate", quote.validityDate);
+  setField("included", quote.included);
+  setField("excluded", quote.excluded);
+  setField("paymentTerms", quote.paymentTerms);
+  setField("cancellationTerms", quote.cancellationTerms);
+  setField("notes", quote.notes);
+  setField("status", getQuoteStatus(quote.status));
+
+  const quoteItems = getQuoteItems(quote);
+
+  quoteForm.querySelectorAll<HTMLInputElement>('input[name="categories"]').forEach((checkbox) => {
+    const item = quoteItems.find((quoteItem) => quoteItem.category === checkbox.value);
+    checkbox.checked = Boolean(item);
+
+    if (item) {
+      setField(`description${item.category}`, item.description);
+      setField(`price${item.category}`, item.unitPrice);
+      setField(`unit${item.category}`, item.billingUnit);
+      setField(`deposit${item.category}`, item.deposit);
+    }
+  });
+
+  window.setTimeout(() => {
+    quoteForm.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }, 80);
+  return true;
+}
+
 function QuotesView({
   contacts,
   prefilledLead,
@@ -1850,12 +1899,21 @@ function QuotesView({
     }
   }
 
-  const quoteCategories = ["Villa", "Bateau", "Voiture", "Conciergerie"];
-  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState(() => ({
+    lead: prefilledLead,
+    quote: quotes.find(quote => quote.id === prefilledLead?.quoteId)
+  }));
+  const [editingQuoteId, setEditingQuoteId] = useState<string | null>(prefill.quote?.id || null);
+  if (prefill.lead !== prefilledLead) {
+    const quote = quotes.find(item => item.id === prefilledLead?.quoteId);
+    setPrefill({ lead: prefilledLead, quote });
+    if (prefilledLead) setEditingQuoteId(quote?.id || null);
+  }
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | "Tous">("Tous");
 
-  // PREFILL_QUOTE_FROM_LEAD
+  // Synchronize the form only for a new, snapshotted prefill request.
   useEffect(() => {
+    const prefilledLead = prefill.lead;
     if (!prefilledLead) return;
 
     const foundForm = document.querySelector<HTMLFormElement>('form[data-quote-form="true"]');
@@ -1866,17 +1924,12 @@ function QuotesView({
 
     const quoteForm: HTMLFormElement = foundForm;
 
-    if (prefilledLead.quoteId) {
-      const existingQuote = quotes.find((quote) => quote.id === prefilledLead.quoteId);
-
-      if (existingQuote) {
-        fillQuoteForm(existingQuote);
-        return;
-      }
+    if (prefill.quote) {
+      writeQuoteFormFields(prefill.quote);
+      return;
     }
 
     quoteForm.reset();
-    setEditingQuoteId(null);
 
     function setField(name: string, value: string | number | undefined) {
       const field = quoteForm.elements.namedItem(name);
@@ -1917,68 +1970,10 @@ function QuotesView({
         block: "start"
       });
     }, 80);
-  }, [prefilledLead]);
+  }, [prefill]);
 
   function fillQuoteForm(quote: QuoteRequest) {
-    const foundForm = document.querySelector<HTMLFormElement>('form[data-quote-form="true"]');
-
-    if (foundForm === null) {
-      return;
-    }
-
-    const quoteForm: HTMLFormElement = foundForm;
-
-    quoteForm.reset();
-
-    function setField(name: string, value: string | number | undefined) {
-      const field = quoteForm.elements.namedItem(name);
-
-      if (
-        field instanceof HTMLInputElement ||
-        field instanceof HTMLSelectElement ||
-        field instanceof HTMLTextAreaElement
-      ) {
-        field.value = String(value ?? "");
-      }
-    }
-
-    setEditingQuoteId(quote.id);
-
-    setField("leadId", quote.leadId || "");
-    setField("clientName", quote.clientName);
-    setField("title", quote.title);
-    setField("location", quote.location);
-    setField("guestCount", quote.guestCount);
-    setField("startDate", quote.startDate);
-    setField("endDate", quote.endDate);
-    setField("validityDate", quote.validityDate);
-    setField("included", quote.included);
-    setField("excluded", quote.excluded);
-    setField("paymentTerms", quote.paymentTerms);
-    setField("cancellationTerms", quote.cancellationTerms);
-    setField("notes", quote.notes);
-    setField("status", getQuoteStatus(quote.status));
-
-    const quoteItems = getQuoteItems(quote);
-
-    quoteForm.querySelectorAll<HTMLInputElement>('input[name="categories"]').forEach((checkbox) => {
-      const item = quoteItems.find((quoteItem) => quoteItem.category === checkbox.value);
-      checkbox.checked = Boolean(item);
-
-      if (item) {
-        setField(`description${item.category}`, item.description);
-        setField(`price${item.category}`, item.unitPrice);
-        setField(`unit${item.category}`, item.billingUnit);
-        setField(`deposit${item.category}`, item.deposit);
-      }
-    });
-
-    window.setTimeout(() => {
-      quoteForm.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-    }, 80);
+    if (writeQuoteFormFields(quote)) setEditingQuoteId(quote.id);
   }
 
   function addQuote(event: React.FormEvent<HTMLFormElement>) {
@@ -2885,7 +2880,7 @@ function DocumentsView({
   const currentFolder = currentFolderId ? folders.find((folder) => folder.id === currentFolderId) || null : null;
   const currentDriveFolderId = currentFolder?.driveFolderId || "";
 
-  const folderPath = useMemo(() => {
+  const folderPath = (() => {
     const path: CRMDocument[] = [];
     let cursor = currentFolder;
     let guard = 0;
@@ -2898,7 +2893,7 @@ function DocumentsView({
     }
 
     return path;
-  }, [currentFolder, folders]);
+  })();
 
   const visibleFolders = folders
     .filter((folder) => (folder.folderId || folder.parentFolderId || "") === currentFolderId)
@@ -3460,26 +3455,20 @@ function HouseTrackingView({
   const [showArchivedWorkerPicker, setShowArchivedWorkerPicker] = useState(false);
   const [archivedWorkerSearch, setArchivedWorkerSearch] = useState("");
 
-  useEffect(() => {
-    if (activeWorkers.some((worker) => worker.id === hourDraft.workerId)) return;
-
+  if (!activeWorkers.some(worker => worker.id === hourDraft.workerId)) {
     const firstActiveWorker = activeWorkers[0];
-    setHourDraft((current) => ({
-      ...current,
-      workerId: firstActiveWorker?.id || "",
-      hourlyRate: firstActiveWorker?.hourlyRate ? String(firstActiveWorker.hourlyRate) : ""
-    }));
-  }, [activeWorkers, hourDraft.workerId]);
-
-  useEffect(() => {
-    if (workerFilter === "Tous") return;
-
-    const selectedFilterWorker = workers.find((worker) => worker.id === workerFilter);
-
+    const workerId = firstActiveWorker?.id || "";
+    const hourlyRate = firstActiveWorker?.hourlyRate ? String(firstActiveWorker.hourlyRate) : "";
+    if (hourDraft.workerId !== workerId || hourDraft.hourlyRate !== hourlyRate) {
+      setHourDraft({ ...hourDraft, workerId, hourlyRate });
+    }
+  }
+  if (workerFilter !== "Tous") {
+    const selectedFilterWorker = workers.find(worker => worker.id === workerFilter);
     if (!selectedFilterWorker || (houseSection === "today" && !isHouseTrackingWorkerActive(selectedFilterWorker))) {
       setWorkerFilter("Tous");
     }
-  }, [houseSection, workerFilter, workers]);
+  }
 
   useEffect(() => {
     if (!showArchivedWorkerPicker) return;
@@ -5236,7 +5225,67 @@ function getSemanticToneFromText(text: string) {
   return "";
 }
 
-function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLogout: () => void }) {
+function DashboardCommandCard({
+  eyebrow,
+  title,
+  summary,
+  children,
+  tone = "neutral"
+}: {
+  eyebrow: string;
+  title: string;
+  summary?: string;
+  children: any;
+  tone?: "neutral" | "warning" | "danger" | "success";
+}) {
+  return (
+    <section className={`card dashboard-command-card tone-${tone}`}>
+      <div className="dashboard-command-card-heading">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h3>{title}</h3>
+        </div>
+        {summary ? <span>{summary}</span> : null}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function DashboardQuickTile({
+  label,
+  value,
+  caption,
+  onClick
+}: {
+  label: string;
+  value: string;
+  caption: string;
+  onClick: () => void;
+}) {
+  return (
+    <button className="stat-card dashboard-command-kpi-tile" type="button" onClick={onClick} title="Ouvrir le module concerné">
+      <p>{label}</p>
+      <strong>{value}</strong>
+      <span>{caption}</span>
+    </button>
+  );
+}
+
+export default function CRMApp({ sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+  const currentAccessToken = useCommittedValue(sessionAccessToken);
+  const identityLifetime = useRef(new AbortController());
+  useEffect(() => {
+    const controller = new AbortController();
+    identityLifetime.current = controller;
+    return () => controller.abort();
+  }, []);
+
+  const [activeActor, setActiveActor] = useState<CRMActor>(() => {
+    const savedActor = crmCache.getItem(ACTOR_STORAGE_KEY);
+    return isCRMActor(savedActor) ? savedActor : "Matteo";
+  });
+
   const [activeTab, setActiveTabState] = useState<Tab>("dashboard");
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
 
@@ -5312,12 +5361,114 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
   const [taskDraftTitle, setTaskDraftTitle] = useState("");
   const [quoteDraftFromLead, setQuoteDraftFromLead] = useState<QuoteLeadDraft | null>(null);
   const [query, setQuery] = useState("");
-  const [data, setData] = useState<CRMData>(emptyData);
+  const [initialLocalState] = useState(() => {
+    try {
+      const raw = crmCache.getItem(STORAGE_KEY);
+      const payload = raw ? normalizeSharedCRMData(JSON.parse(raw)) : emptyData;
+      return { data: { ...payload, tasks: maintainCompletedTasks(payload.tasks, Date.now()) }, unreadable: false };
+    } catch {
+      return { data: emptyData, unreadable: true };
+    }
+  });
+  const [data, setDataState] = useState<CRMData>(initialLocalState.data);
+  const setData = useCallback((update: SetStateAction<CRMData>) => {
+    const now = Date.now();
+    setDataState(current => {
+      const next = typeof update === "function" ? update(current) : update;
+      if (next.tasks === current.tasks) return next;
+      const tasks = maintainCompletedTasks(next.tasks, now);
+      return tasks === next.tasks ? next : { ...next, tasks };
+    });
+  }, []);
+  const currentBusinessData = useCommittedValue(data);
   const [sharedWorkspaceReady, setSharedWorkspaceReady] = useState(false);
   const [sharedWorkspaceStatus, setSharedWorkspaceStatus] = useState<"loading" | "connected" | "local" | "error">("loading");
   const [sharedWorkspaceMessage, setSharedWorkspaceMessage] = useState("Chargement de la base partagée...");
   const [sharedWorkspaceUpdatedAt, setSharedWorkspaceUpdatedAt] = useState("");
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [toast, setToast] = useState<Toast | null>(() => initialLocalState.unreadable
+    ? { message: "Impossible de lire la sauvegarde locale.", tone: "warning" } : null);
+  const workspaceSync = useRef(new WorkspaceSyncGuard());
+  const workspaceBusy = useRef(false);
+  const failedSaveFingerprint = useRef<string | null>(null);
+  const [workspaceSyncEpoch, setWorkspaceSyncEpoch] = useState(0);
+  const [acceptedWorkspaceFingerprint, setAcceptedWorkspaceFingerprint] = useState<string | null>(null);
+  const hasUnsavedChanges = sharedWorkspaceReady && acceptedWorkspaceFingerprint !== null
+    && workspaceFingerprint(data) !== acceptedWorkspaceFingerprint;
+
+  useEffect(() => { onUnsavedChange?.(hasUnsavedChanges); }, [hasUnsavedChanges, onUnsavedChange]);
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [hasUnsavedChanges]);
+
+  const acceptSharedWorkspace = useCallback((payload: CRMData, revision: string) => {
+    workspaceSync.current.load(payload, revision);
+    setAcceptedWorkspaceFingerprint(workspaceFingerprint(payload));
+    failedSaveFingerprint.current = null;
+    saveQuotesToBrowser(payload.quotes as QuoteRequest[]);
+    setData(payload);
+    setSharedWorkspaceUpdatedAt(revision);
+    setWorkspaceSyncEpoch(value => value + 1);
+  }, [setData]);
+
+  const showWorkspaceConflict = useCallback(() => {
+    workspaceSync.current.conflict();
+    setSharedWorkspaceStatus("error");
+    setSharedWorkspaceMessage("Base partagée modifiée ailleurs. Vos modifications restent en mémoire : exportez-les, puis rechargez le cloud.");
+  }, []);
+
+  // Every caller uses the same atomic revision check, including manual sync,
+  // backups and the explicitly confirmed seed of an empty shared workspace.
+  const writeSharedWorkspace = useCallback(async (payload: CRMData, signal: AbortSignal, token: string) => {
+    if (signal.aborted || workspaceBusy.current) return false;
+    const write = workspaceSync.current.prepare(payload);
+    if (!write) { showWorkspaceConflict(); return false; }
+    workspaceBusy.current = true;
+    let saved = false;
+    try {
+      const { data: verified, error: authError } = await supabase.auth.getUser(token);
+      if (signal.aborted) return false;
+      if (authError || !verified.user || verified.user.id !== sessionUserId) {
+        setSharedWorkspaceStatus("error");
+        setSharedWorkspaceMessage("Sauvegarde impossible : utilisateur Supabase non connecté.");
+        return false;
+      }
+      const { data: row, error } = await supabase.from("crm_workspace_state")
+        .update({ payload, updated_by: verified.user.id })
+        .eq("workspace_id", SHARED_WORKSPACE_ID)
+        .eq("updated_at", write.revision)
+        .select("updated_at")
+        .abortSignal(signal)
+        .maybeSingle()
+        .setHeader("Authorization", `Bearer ${token}`);
+      if (signal.aborted) return false;
+      if (error) {
+        setSharedWorkspaceStatus("error");
+        setSharedWorkspaceMessage(`Base partagée non sauvegardée : ${error.message}`);
+        return false;
+      }
+      if (!row?.updated_at || !workspaceSync.current.saved(write, String(row.updated_at))) {
+        showWorkspaceConflict();
+        return false;
+      }
+      saved = true;
+      // Acknowledge exactly the payload sent; newer edits must remain dirty.
+      setAcceptedWorkspaceFingerprint(write.fingerprint);
+      failedSaveFingerprint.current = null;
+      setSharedWorkspaceStatus("connected");
+      setSharedWorkspaceMessage("Base partagée synchronisée.");
+      setSharedWorkspaceUpdatedAt(String(row.updated_at));
+      return true;
+    } finally {
+      workspaceBusy.current = false;
+      if (!saved && !signal.aborted) failedSaveFingerprint.current = write.fingerprint;
+      if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
+    }
+  }, [sessionUserId, showWorkspaceConflict]);
+
 
   function setActiveTab(tab: Tab) {
     setQuery("");
@@ -5365,35 +5516,6 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
     };
   }, []);
 
-  // TASK_COMPLETED_COMPACT_THEN_PURGE_20260614
-  useEffect(() => {
-    const nowIso = new Date().toISOString();
-    const needsCleanup = ((data.tasks ?? []) as Task[]).some((task) =>
-      (isCompletedTaskStatus(task.status) && !task.completedAt) || isCompletedTaskExpired(task)
-    );
-
-    if (!needsCleanup) return;
-
-    setData((current) => ({
-      ...current,
-      tasks: ((current.tasks ?? []) as Task[])
-        .map((task) => {
-          if (!isCompletedTaskStatus(task.status)) return task;
-          if (task.completedAt) return task;
-
-          return {
-            ...task,
-            completedAt: nowIso
-          } as Task;
-        })
-        .filter((task) => !isCompletedTaskExpired(task))
-    }));
-  }, [data.tasks]);
-
-
-
-
-
   useEffect(() => {
     let cleanupInterval: number | null = null;
 
@@ -5411,7 +5533,7 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
       if (!lockedActor) return;
 
       setActiveActor(lockedActor as "Matteo" | "Vincent");
-      window.localStorage.setItem(ACTOR_STORAGE_KEY, lockedActor);
+      crmCache.setItem(ACTOR_STORAGE_KEY, lockedActor);
 
       const enforce = () => {
         const selects = Array.from(document.querySelectorAll("select")) as HTMLSelectElement[];
@@ -5583,18 +5705,9 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
     };
   }, []);
 
-  const [activeActor, setActiveActor] = useState<CRMActor>("Matteo");
 
   useEffect(() => {
-    const savedActor = window.localStorage.getItem(ACTOR_STORAGE_KEY);
-
-    if (isCRMActor(savedActor)) {
-      setActiveActor(savedActor);
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(ACTOR_STORAGE_KEY, activeActor);
+    crmCache.setItem(ACTOR_STORAGE_KEY, activeActor);
   }, [activeActor]);
 
   useEffect(() => {
@@ -5602,30 +5715,8 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
   }, [activeTab]);
 
 
-  // MIGRATION_VISITE_TO_DEVIS
   useEffect(() => {
-    setData((current) => ({
-      ...current,
-      leads: current.leads.map((lead) =>
-        lead.status === ("Visite" as LeadStatus) ? { ...lead, status: "Devis" as LeadStatus } : lead
-      )
-    }));
-  }, []);
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as Partial<CRMData>;
-        setData(normalizeSharedCRMData(parsed));
-      }
-    } catch {
-      setToast({ message: "Impossible de lire la sauvegarde locale.", tone: "warning" });
-    }
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    crmCache.setItem(STORAGE_KEY, JSON.stringify(data));
   }, [data]);
   useEffect(() => {
     if (!toast) return;
@@ -5635,15 +5726,18 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
   }, [toast]);
 
 
+  // Load once per mounted identity; refreshing a token must preserve unsaved edits.
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
 
     async function loadSharedWorkspaceState() {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
+      const token = currentAccessToken.current;
+      const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
       if (cancelled) return;
 
-      if (userError || !userData.user) {
+      if (userError || !userData.user || userData.user.id !== sessionUserId) {
         window.alert("Base CRM partagée non chargée : utilisateur Supabase non connecté.");
         setSharedWorkspaceReady(false);
         setSharedWorkspaceStatus("error");
@@ -5655,7 +5749,9 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
         .from("crm_workspace_state")
         .select("payload, updated_at")
         .eq("workspace_id", SHARED_WORKSPACE_ID)
-        .single();
+        .abortSignal(controller.signal)
+        .single()
+        .setHeader("Authorization", `Bearer ${token}`);
 
       if (cancelled) return;
 
@@ -5671,7 +5767,7 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
       const sharedUpdatedAt = String(row?.updated_at || "");
 
       if (crmDataHasContent(sharedData)) {
-        setData(sharedData);
+        acceptSharedWorkspace(sharedData, sharedUpdatedAt);
         setSharedWorkspaceReady(true);
         setSharedWorkspaceStatus("connected");
         setSharedWorkspaceMessage("Base partagée chargée depuis Supabase.");
@@ -5682,7 +5778,7 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
       const localData = readLocalCRMDataSafely();
 
       if (!crmDataHasContent(localData)) {
-        setData(emptyData);
+        acceptSharedWorkspace(emptyData, sharedUpdatedAt);
         setSharedWorkspaceReady(true);
         setSharedWorkspaceStatus("connected");
         setSharedWorkspaceMessage("Base partagée connectée, mais encore vide.");
@@ -5695,7 +5791,7 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
       );
 
       if (!shouldSeedSharedWorkspace) {
-        setData(emptyData);
+        acceptSharedWorkspace(emptyData, sharedUpdatedAt);
         setSharedWorkspaceReady(true);
         setSharedWorkspaceStatus("local");
         setSharedWorkspaceMessage("Base partagée vide. Données locales non copiées.");
@@ -5703,28 +5799,24 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
         return;
       }
 
-      const { error: seedError } = await supabase
-        .from("crm_workspace_state")
-        .upsert({
-          workspace_id: SHARED_WORKSPACE_ID,
-          payload: localData,
-          updated_at: new Date().toISOString(),
-          updated_by: userData.user.id
-        }, { onConflict: "workspace_id" });
+      if (cancelled) return;
 
-      if (seedError) {
-        window.alert(`Base CRM partagée non initialisée : ${seedError.message}`);
-        setSharedWorkspaceReady(false);
-        setSharedWorkspaceStatus("error");
-        setSharedWorkspaceMessage(`Base partagée non initialisée : ${seedError.message}`);
+      workspaceSync.current.load(sharedData, sharedUpdatedAt);
+      setAcceptedWorkspaceFingerprint(workspaceFingerprint(sharedData));
+      const seeded = await writeSharedWorkspace(localData, controller.signal, token);
+      if (cancelled) return;
+      if (!seeded) {
+        // Keep the recoverable local version; a competing initializer wins safely.
+        setData(localData);
+        setSharedWorkspaceReady(true);
         return;
       }
-
       setData(localData);
+      saveQuotesToBrowser(localData.quotes as QuoteRequest[]);
       setSharedWorkspaceReady(true);
       setSharedWorkspaceStatus("connected");
       setSharedWorkspaceMessage("Base partagée initialisée depuis les données locales.");
-      setSharedWorkspaceUpdatedAt(new Date().toISOString());
+
     }
 
     const timer = window.setTimeout(() => {
@@ -5733,53 +5825,23 @@ function CRMAppContent({ sessionEmail, onLogout }: { sessionEmail: string; onLog
 
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearTimeout(timer);
     };
-  }, []);
+  }, [sessionUserId, acceptSharedWorkspace, writeSharedWorkspace, currentAccessToken, setData]);
 
   useEffect(() => {
-    if (!sharedWorkspaceReady) return;
-
+    if (!sharedWorkspaceReady || !workspaceSync.current.dirty(data) || workspaceSync.current.conflicted) return;
+    if (failedSaveFingerprint.current === workspaceFingerprint(data)) return;
+    const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      async function saveSharedWorkspaceState() {
-        const { data: userData, error: userError } = await supabase.auth.getUser();
-
-        if (userError || !userData.user) return;
-
-        const visibleQuotes = mergeQuoteRequests((((data as any).quotes ?? []) as QuoteRequest[]), loadSavedQuotes());
-        const dataWithVisibleQuotes: CRMData = {
-          ...data,
-          quotes: visibleQuotes
-        };
-
-        const { error } = await supabase
-          .from("crm_workspace_state")
-          .upsert({
-            workspace_id: SHARED_WORKSPACE_ID,
-            payload: dataWithVisibleQuotes,
-            updated_at: new Date().toISOString(),
-            updated_by: userData.user.id
-          }, { onConflict: "workspace_id" });
-
-        if (error) {
-          console.warn(`Base CRM partagée non sauvegardée : ${error.message}`);
-          setSharedWorkspaceStatus("error");
-          setSharedWorkspaceMessage(`Base partagée non sauvegardée : ${error.message}`);
-          return;
-        }
-
-        setSharedWorkspaceStatus("connected");
-        setSharedWorkspaceMessage("Base partagée synchronisée.");
-        setSharedWorkspaceUpdatedAt(new Date().toISOString());
-      }
-
-      void saveSharedWorkspaceState();
+      // Token rotation updates this ref without scheduling a save or reloading data.
+      // Once started, verification and the request keep the same captured token.
+      const token = currentAccessToken.current;
+      void writeSharedWorkspace(data, controller.signal, token);
     }, 900);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [data, sharedWorkspaceReady]);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [data, sharedWorkspaceReady, sessionUserId, workspaceSyncEpoch, writeSharedWorkspace, currentAccessToken]);
 
   const stats = useMemo(() => {
     const pipeline = data.leads
@@ -7288,7 +7350,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       return;
     }
 
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = crmCache.getItem(STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
     const localContacts = Array.isArray(parsed?.contacts) ? parsed.contacts as Contact[] : [];
 
@@ -7333,85 +7395,70 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
 
   async function reloadSharedWorkspaceFromCloud() {
-    setSharedWorkspaceStatus("loading");
-    setSharedWorkspaceMessage("Rechargement depuis Supabase...");
+    if (workspaceBusy.current) return;
+    if (hasUnsavedChanges && !window.confirm("Des modifications ne sont pas sauvegardées. Exportez-les avant de recharger. Remplacer la version en mémoire par la version cloud ?")) return;
+    const requestedFingerprint = workspaceFingerprint(data);
+    const signal = identityLifetime.current.signal;
+    const token = currentAccessToken.current;
+    workspaceBusy.current = true;
+    try {
+      setSharedWorkspaceStatus("loading");
+      setSharedWorkspaceMessage("Rechargement depuis Supabase...");
 
-    const { data: userData, error: userError } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
-    if (userError || !userData.user) {
-      setSharedWorkspaceStatus("error");
-      setSharedWorkspaceMessage("Rechargement impossible : utilisateur Supabase non connecté.");
-      notify("Rechargement cloud impossible : non connecté.", "warning");
-      return;
+      if (signal.aborted) return;
+      if (userError || !userData.user || userData.user.id !== sessionUserId) {
+        setSharedWorkspaceStatus("error");
+        setSharedWorkspaceMessage("Rechargement impossible : utilisateur Supabase non connecté.");
+        notify("Rechargement cloud impossible : non connecté.", "warning");
+        return;
+      }
+
+      const { data: row, error } = await supabase
+        .from("crm_workspace_state")
+        .select("payload, updated_at")
+        .eq("workspace_id", SHARED_WORKSPACE_ID)
+        .abortSignal(signal)
+        .single()
+        .setHeader("Authorization", `Bearer ${token}`);
+
+      if (signal.aborted) return;
+      if (error) {
+        setSharedWorkspaceStatus("error");
+        setSharedWorkspaceMessage(`Rechargement cloud impossible : ${error.message}`);
+        notify("Rechargement cloud impossible.", "warning");
+        return;
+      }
+
+      if (workspaceFingerprint(currentBusinessData.current) !== requestedFingerprint) {
+        setSharedWorkspaceStatus("local");
+        setSharedWorkspaceMessage("Rechargement annulé : des modifications ont été faites pendant la lecture du cloud.");
+        return;
+      }
+      const sharedData = normalizeSharedCRMData(row?.payload);
+
+      acceptSharedWorkspace(sharedData, String(row?.updated_at || ""));
+      setSharedWorkspaceReady(true);
+      setSharedWorkspaceStatus("connected");
+      setSharedWorkspaceMessage("Données rechargées depuis la base partagée.");
+
+      notify("CRM rechargé depuis Supabase.");
+    } finally {
+      workspaceBusy.current = false;
+      if (!signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
     }
-
-    const { data: row, error } = await supabase
-      .from("crm_workspace_state")
-      .select("payload, updated_at")
-      .eq("workspace_id", SHARED_WORKSPACE_ID)
-      .single();
-
-    if (error) {
-      setSharedWorkspaceStatus("error");
-      setSharedWorkspaceMessage(`Rechargement cloud impossible : ${error.message}`);
-      notify("Rechargement cloud impossible.", "warning");
-      return;
-    }
-
-    const sharedData = normalizeSharedCRMData(row?.payload);
-
-    setData(sharedData);
-    setSharedWorkspaceReady(true);
-    setSharedWorkspaceStatus("connected");
-    setSharedWorkspaceMessage("Données rechargées depuis la base partagée.");
-    setSharedWorkspaceUpdatedAt(String(row?.updated_at || new Date().toISOString()));
-    notify("CRM rechargé depuis Supabase.");
   }
 
   async function forceSaveSharedWorkspaceNow() {
-    setSharedWorkspaceStatus("loading");
-    setSharedWorkspaceMessage("Synchronisation forcée en cours...");
-
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !userData.user) {
-      setSharedWorkspaceStatus("error");
-      setSharedWorkspaceMessage("Synchronisation impossible : utilisateur Supabase non connecté.");
-      notify("Synchronisation cloud impossible : non connecté.", "warning");
-      return;
-    }
-
-    const visibleQuotes = mergeQuoteRequests((((data as any).quotes ?? []) as QuoteRequest[]), loadSavedQuotes());
-    const dataWithVisibleQuotes: CRMData = {
-      ...data,
-      quotes: visibleQuotes
-    };
-
-    const { error } = await supabase
-      .from("crm_workspace_state")
-      .upsert({
-        workspace_id: SHARED_WORKSPACE_ID,
-        payload: dataWithVisibleQuotes,
-        updated_at: new Date().toISOString(),
-        updated_by: userData.user.id
-      }, { onConflict: "workspace_id" });
-
-    if (error) {
-      setSharedWorkspaceStatus("error");
-      setSharedWorkspaceMessage(`Synchronisation impossible : ${error.message}`);
-      notify("Synchronisation cloud impossible.", "warning");
-      return;
-    }
-
-    setData(dataWithVisibleQuotes);
-    setSharedWorkspaceReady(true);
-    setSharedWorkspaceStatus("connected");
-    setSharedWorkspaceMessage("Synchronisation cloud forcée effectuée.");
-    setSharedWorkspaceUpdatedAt(new Date().toISOString());
-    notify("Base partagée synchronisée.");
+    const signal = identityLifetime.current.signal;
+    const token = currentAccessToken.current;
+    if (await writeSharedWorkspace(data, signal, token)) notify("Base partagée synchronisée.");
   }
 
   async function saveCrmBackupToSupabase() {
+    const signal = identityLifetime.current.signal;
+    const token = currentAccessToken.current;
     const currentData = data as any;
 
     const contactsCount = Array.isArray(currentData.contacts) ? currentData.contacts.length : 0;
@@ -7420,7 +7467,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     const vehiclesCount = Array.isArray(currentData.vehicles) ? currentData.vehicles.length : 0;
     const boatsCount = Array.isArray(currentData.boats) ? currentData.boats.length : 0;
     const tasksCount = Array.isArray(currentData.tasks) ? currentData.tasks.length : 0;
-    const visibleQuotes = mergeQuoteRequests((currentData as any).quotes ?? [], loadSavedQuotes());
+    const visibleQuotes = (currentData.quotes ?? []) as QuoteRequest[];
     const currentDataWithVisibleQuotes: CRMData = {
       ...currentData,
       quotes: visibleQuotes
@@ -7445,31 +7492,17 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       `Créer une sauvegarde Supabase ?\n\nContacts: ${contactsCount}\nLeads: ${leadsCount}\nBiens: ${propertiesCount}\nVoitures: ${vehiclesCount}\nBateaux: ${boatsCount}\nTâches: ${tasksCount}\nDevis: ${quotesCount}`
     );
 
-    if (!confirmed) return;
+    if (!confirmed || signal.aborted) return;
 
-    const { error: sharedQuotesError } = await supabase
-      .from("crm_workspace_state")
-      .upsert({
-        workspace_id: SHARED_WORKSPACE_ID,
-        payload: currentDataWithVisibleQuotes,
-        updated_at: new Date().toISOString()
-      });
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
-    if (sharedQuotesError) {
-      window.alert(`Sauvegarde devis impossible : ${sharedQuotesError.message}`);
-      return;
-    }
-
-    setData(currentDataWithVisibleQuotes);
-    saveQuotesToBrowser(visibleQuotes);
-
-
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !userData.user) {
+    if (signal.aborted) return;
+    if (userError || !userData.user || userData.user.id !== sessionUserId) {
       window.alert("Sauvegarde impossible : utilisateur Supabase non connecté.");
       return;
     }
+
+    if (!await writeSharedWorkspace(currentDataWithVisibleQuotes, signal, token) || signal.aborted) return;
 
     const payload = {
       version: "oneaddress-riviera-crm-v1",
@@ -7487,8 +7520,11 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       boats_count: boatsCount,
       tasks_count: tasksCount,
       quotes_count: quotesCount
-    });
+    })
+      .setHeader("Authorization", `Bearer ${token}`)
+      .abortSignal(signal);
 
+    if (signal.aborted) return;
     if (error) {
       window.alert(`Erreur sauvegarde Supabase : ${error.message}`);
       return;
@@ -8628,7 +8664,7 @@ function createQuoteDraftFromLead(lead: Lead) {
     <main className="crm-shell crm-readable-redesign">
       <aside className="sidebar">
         <div className="brand-block brand-block-logo">
-          <img src="/oar-logo-paysage-crm.png" alt="One Address Riviera" className="crm-sidebar-logo" />
+          <Image src={crmLogo} alt="One Address Riviera" className="crm-sidebar-logo" />
         </div>
 
         <nav className="nav-list" aria-label="Navigation principale">
@@ -9989,7 +10025,7 @@ function PlanningView({
   const calendarWeeks = useMemo(() => getPlanningCalendarWeeks(calendarMonth), [calendarMonth]);
   const calendarWeekDays = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
-  const calendarEvents = useMemo(() => {
+  const calendarEvents = (() => {
     const leadEvents = [
       ...visibleConfirmedBookings.map((booking) => ({
         ...booking,
@@ -10044,7 +10080,7 @@ function PlanningView({
         if (dateDiff !== 0) return dateDiff;
         return String(a.startTime || "").localeCompare(String(b.startTime || ""));
       });
-  }, [confirmedBookings, pendingBookings, planningEntries, assets, categoryFilter, planningClockTick]);
+  })();
 
   const planningConflicts = useMemo(() => {
     const usableLeads = leads
@@ -10129,7 +10165,7 @@ function PlanningView({
     );
   }
 
-  const planningWeekDays = useMemo(() => {
+  const planningWeekDays = (() => {
     const baseDate = isValidPlanningDate(planningWeekStart) ? new Date(`${planningWeekStart}T00:00:00`) : new Date();
     const mondayOffset = (baseDate.getDay() + 6) % 7;
     const monday = addPlanningDays(baseDate, -mondayOffset);
@@ -10145,24 +10181,24 @@ function PlanningView({
         events: getEventsForCalendarDay(iso)
       };
     });
-  }, [planningWeekStart, calendarEvents]);
+  })();
 
   function movePlanningWeek(offset: number) {
     const baseDate = isValidPlanningDate(planningWeekStart) ? new Date(`${planningWeekStart}T00:00:00`) : new Date();
     setPlanningWeekStart(formatPlanningDateValue(addPlanningDays(baseDate, offset * 7)));
   }
 
-  const todayPlanningAgendaItems = useMemo(() => {
+  const todayPlanningAgendaItems = (() => {
     return calendarEvents
       .filter((event) => planningRangesOverlap(todayIso, todayIso, event.startDate, event.endDate))
       .slice(0, 6);
-  }, [calendarEvents, todayIso]);
+  })();
 
-  const nextPlanningAgendaItems = useMemo(() => {
+  const nextPlanningAgendaItems = (() => {
     return calendarEvents
       .filter((event) => planningRangesOverlap(tomorrowIso, nextSevenDaysIso, event.startDate, event.endDate))
       .slice(0, 10);
-  }, [calendarEvents, tomorrowIso, nextSevenDaysIso]);
+  })();
 
   function getPlanningAgendaPrimary(event: any) {
     return String(event.contactName || event.assetLabel || event.title || "Intervention").trim();
@@ -11270,52 +11306,6 @@ function Dashboard({
     );
   }
 
-  function DashboardCommandCard({
-    eyebrow,
-    title,
-    summary,
-    children,
-    tone = "neutral"
-  }: {
-    eyebrow: string;
-    title: string;
-    summary?: string;
-    children: any;
-    tone?: "neutral" | "warning" | "danger" | "success";
-  }) {
-    return (
-      <section className={`card dashboard-command-card tone-${tone}`}>
-        <div className="dashboard-command-card-heading">
-          <div>
-            <p className="eyebrow">{eyebrow}</p>
-            <h3>{title}</h3>
-          </div>
-          {summary ? <span>{summary}</span> : null}
-        </div>
-        {children}
-      </section>
-    );
-  }
-
-  function DashboardQuickTile({
-    label,
-    value,
-    caption,
-    onClick
-  }: {
-    label: string;
-    value: string;
-    caption: string;
-    onClick: () => void;
-  }) {
-    return (
-      <button className="stat-card dashboard-command-kpi-tile" type="button" onClick={onClick} title="Ouvrir le module concerné">
-        <p>{label}</p>
-        <strong>{value}</strong>
-        <span>{caption}</span>
-      </button>
-    );
-  }
 
 
   const quotes = mergeQuoteRequests((((data as any).quotes ?? []) as QuoteRequest[]), loadSavedQuotes());
@@ -13835,158 +13825,4 @@ function TasksView({
 
 function Badge({ children }: { children: React.ReactNode }) {
   return <span className="badge">{children}</span>;
-}
-
-function LoginView() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [message, setMessage] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const cleanEmail = email.trim();
-
-    if (!cleanEmail) {
-      setMessage("Renseigne ton email.");
-      return;
-    }
-
-    if (!password) {
-      setMessage("Renseigne ton mot de passe.");
-      return;
-    }
-
-    setIsSubmitting(true);
-    setMessage("");
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password
-    });
-
-    setIsSubmitting(false);
-
-    if (error) {
-      setMessage(`Erreur connexion : ${error.message}`);
-      return;
-    }
-
-    setMessage("Connexion réussie.");
-  }
-
-  return (
-    <main className="crm-shell">
-      <section className="card form-card">
-        <p className="eyebrow">Accès sécurisé</p>
-        <h1>Connexion CRM</h1>
-        <p className="muted-line">
-          Entre ton email et ton mot de passe autorisés pour accéder au CRM.
-        </p>
-
-        <form className="form-grid" onSubmit={handleLogin}>
-          <label className="full">Email
-            <input
-              type="email"
-              value={email}
-              placeholder="ton@email.com"
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-          </label>
-
-          <label className="full">Mot de passe
-            <input
-              type="password"
-              value={password}
-              placeholder="Mot de passe"
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </label>
-
-          <button className="primary-button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Envoi..." : "Se connecter"}
-          </button>
-        </form>
-
-        {message && <p className="muted-line">{message}</p>}
-      </section>
-    </main>
-  );
-}
-
-export default function CRMApp() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (!isMounted) return;
-
-      setSession(data.session);
-      setAuthLoading(false);
-    });
-
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
-      setSession(nextSession);
-      setAuthLoading(false);
-
-      if (event === "PASSWORD_RECOVERY") {
-        window.setTimeout(async () => {
-          const newPassword = window.prompt("Choisis ton nouveau mot de passe CRM :");
-
-          if (!newPassword) {
-            window.alert("Mot de passe non modifié.");
-            return;
-          }
-
-          if (newPassword.length < 8) {
-            window.alert("Le mot de passe doit contenir au moins 8 caractères.");
-            return;
-          }
-
-          const { error } = await supabase.auth.updateUser({
-            password: newPassword
-          });
-
-          if (error) {
-            window.alert(`Mot de passe non modifié : ${error.message}`);
-            return;
-          }
-
-          window.alert("Mot de passe CRM enregistré. Tu peux maintenant te connecter avec email + mot de passe.");
-        }, 300);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
-  async function logout() {
-    await supabase.auth.signOut();
-  }
-
-  if (authLoading) {
-    return (
-      <main className="crm-shell">
-        <section className="card">
-          <p className="eyebrow">Connexion</p>
-          <h1>Chargement...</h1>
-        </section>
-      </main>
-    );
-  }
-
-  if (!session) {
-    return <LoginView />;
-  }
-
-  return <CRMAppContent sessionEmail={session.user.email ?? "utilisateur"} onLogout={logout} />;
 }

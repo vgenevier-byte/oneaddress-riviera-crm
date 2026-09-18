@@ -1,0 +1,361 @@
+[
+  {
+    "key": "acq",
+    "label": "ACQUISITION ESPÉRÉE",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "works",
+    "label": "BUDGET DE RÉNOVATION",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "resale",
+    "label": "REVENTE ESPÉRÉE",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "rentalMode",
+    "label": "Scénario à présenter dans le PowerPoint",
+    "kind": "select",
+    "options": [
+      {
+        "value": "seasonal",
+        "label": "Location saisonnière"
+      },
+      {
+        "value": "annual",
+        "label": "Location annuelle"
+      },
+      {
+        "value": "compare",
+        "label": "Comparer les deux options"
+      }
+    ]
+  },
+  {
+    "key": "rentalPeriod",
+    "label": "Période de comparaison (mois)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "weekly",
+    "label": "LOCATION SAISONNIÈRE",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "weeks",
+    "label": "Semaines réellement louées sur la période",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "management",
+    "label": "Gestion / plateforme (% des loyers)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "rentalCosts",
+    "label": "Autres frais locatifs sur la période (€)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "seasonalCostsReviewed",
+    "label": "Frais vérifiés ; les zéros et champs vides sont intentionnels.",
+    "kind": "checkbox"
+  },
+  {
+    "key": "monthly",
+    "label": "LOYER MENSUEL ESPÉRÉ",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "rentedMonths",
+    "label": "Mois réellement loués sur la période",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "annualManagement",
+    "label": "Gestion locative (% des loyers)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "annualRentalCosts",
+    "label": "Autres frais locatifs sur la période (€)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "annualCostsReviewed",
+    "label": "Frais vérifiés ; les zéros et champs vides sont intentionnels.",
+    "kind": "checkbox"
+  },
+  {
+    "key": "regime",
+    "label": "Régime d’acquisition retenu",
+    "kind": "select",
+    "options": [
+      {
+        "value": "mdb",
+        "label": "Marchand de biens · engagement de revendre"
+      },
+      {
+        "value": "other",
+        "label": "Foncière / sans engagement · devis requis"
+      }
+    ]
+  },
+  {
+    "key": "notaryRate",
+    "label": "Provision globale de frais d’acquisition (%)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "notaryQuote",
+    "label": "Devis notarial total (€) — facultatif",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "resaleBasis",
+    "label": "Base du prix de revente",
+    "kind": "select",
+    "options": [
+      {
+        "value": "net",
+        "label": "Net vendeur — honoraires déjà déduits"
+      },
+      {
+        "value": "fai",
+        "label": "FAI / prix acquéreur — honoraires à déduire"
+      }
+    ]
+  },
+  {
+    "key": "saleRate",
+    "label": "Honoraires de revente (% du prix FAI)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "contingency",
+    "label": "Aléas supplémentaires (% des travaux)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "finance",
+    "label": "Financement total (€)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "carrying",
+    "label": "Charges de portage totales (€)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "furniture",
+    "label": "Mobilier et équipement (€)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "otherCosts",
+    "label": "Autres frais du projet (€)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "holding",
+    "label": "Durée de portage (mois)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "costsReviewed",
+    "label": "Frais vérifiés ; les zéros et champs vides sont intentionnels.",
+    "kind": "checkbox"
+  },
+  {
+    "key": "project",
+    "label": "Nom du projet",
+    "kind": "input",
+    "maxLength": 58
+  },
+  {
+    "key": "ref",
+    "label": "Référence / date du comité",
+    "kind": "input",
+    "maxLength": 75
+  },
+  {
+    "key": "address",
+    "label": "Adresse complète",
+    "kind": "input",
+    "maxLength": 130
+  },
+  {
+    "key": "type",
+    "label": "Typologie",
+    "kind": "input",
+    "maxLength": 30
+  },
+  {
+    "key": "sea",
+    "label": "Vue mer",
+    "kind": "select",
+    "options": [
+      {
+        "value": "À confirmer",
+        "label": "À confirmer"
+      },
+      {
+        "value": "Oui",
+        "label": "Oui"
+      },
+      {
+        "value": "Non",
+        "label": "Non"
+      },
+      {
+        "value": "Partielle",
+        "label": "Partielle"
+      }
+    ]
+  },
+  {
+    "key": "land",
+    "label": "Surface du terrain (m²)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "area",
+    "label": "Surface totale retenue (m²)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "mainLabel",
+    "label": "Bâtiment / logement principal",
+    "kind": "input",
+    "maxLength": 46
+  },
+  {
+    "key": "mainArea",
+    "label": "Sa surface (m²)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "secondLabel",
+    "label": "Second logement / bâtiment",
+    "kind": "input",
+    "maxLength": 46
+  },
+  {
+    "key": "secondArea",
+    "label": "Sa surface (m²)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "annexLabel",
+    "label": "Annexes ou autres surfaces",
+    "kind": "input",
+    "maxLength": 46
+  },
+  {
+    "key": "annexArea",
+    "label": "Surface ou précision",
+    "kind": "input",
+    "maxLength": 22
+  },
+  {
+    "key": "measurement",
+    "label": "Nature / source du mesurage",
+    "kind": "input",
+    "maxLength": 95
+  },
+  {
+    "key": "features",
+    "label": "Équipements / atouts",
+    "kind": "input",
+    "maxLength": 90
+  },
+  {
+    "key": "asking",
+    "label": "Prix affiché par l’agence (€)",
+    "kind": "input",
+    "numeric": true
+  },
+  {
+    "key": "propertyWarnings",
+    "label": "Points à confirmer sur le bien",
+    "kind": "textarea",
+    "maxLength": 175
+  },
+  {
+    "key": "source",
+    "label": "Sources des documents et des photos",
+    "kind": "input",
+    "maxLength": 210
+  },
+  {
+    "key": "includePhotoSlide",
+    "label": "Ajouter la troisième diapositive avec toutes les photos.",
+    "kind": "checkbox"
+  },
+  {
+    "key": "program",
+    "label": "Programme et calendrier (3 lignes maximum)",
+    "kind": "textarea",
+    "maxLength": 220
+  },
+  {
+    "key": "decisionNotes",
+    "label": "Points à lever / prochaine action (3 lignes maximum)",
+    "kind": "textarea",
+    "maxLength": 195
+  },
+  {
+    "key": "decision",
+    "label": "Décision du comité",
+    "kind": "select",
+    "options": [
+      {
+        "value": "À renseigner",
+        "label": "À renseigner"
+      },
+      {
+        "value": "Poursuivre l’étude",
+        "label": "Poursuivre l’étude"
+      },
+      {
+        "value": "Préparer une offre",
+        "label": "Préparer une offre"
+      },
+      {
+        "value": "Offre sous conditions",
+        "label": "Offre sous conditions"
+      },
+      {
+        "value": "Écarter",
+        "label": "Écarter"
+      }
+    ]
+  }
+]

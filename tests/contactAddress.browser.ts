@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { fictionalAccount, fictionalContact, fictionalIban, fictionalInvoice } from "./fixtures/vendorBanking";
 
@@ -16,53 +16,66 @@ async function main() {
   const preview = mkdtempSync(join(tmpdir(), "oar-postal-browser-"));
   const artifacts = resolve(process.env.CONTACT_ADDRESS_ARTIFACTS || join(preview, "artifacts"));
   mkdirSync(artifacts, { recursive: true });
-  for (const directory of ["app", "components", "lib", "public"]) cpSync(join(root, directory), join(preview, directory), { recursive: true });
-  for (const file of ["package.json", "tsconfig.json", "next-env.d.ts", "next.config.js", "next.config.mjs"]) {
+  for (const directory of ["app", "components", "lib", "public"]) cpSync(join(root, directory), join(preview, directory), { recursive: true, filter: source => !basename(source).startsWith(".env") && !basename(source).includes(".before-") });
+  for (const file of ["package.json", "package-lock.json", "tsconfig.json", "next-env.d.ts", "next.config.js", "next.config.mjs", "eslint.config.mjs"]) {
     if (existsSync(join(root, file))) cpSync(join(root, file), join(preview, file));
   }
   symlinkSync(join(root, "node_modules"), join(preview, "node_modules"), "dir");
   writeFileSync(join(preview, "lib/supabase.ts"), `
 import type { supabase as RealClient } from ${JSON.stringify(join(root, "lib/supabase"))};
+import { crmCache } from "@/lib/access/crmCache";
+(globalThis as any).__postalReadCache = () => crmCache.getItem("oneaddress-riviera-crm-v1");
 (globalThis as any).__postalFixture = true;
 const user = { id: "fixture-user", email: "fixture@example.invalid" };
 const adapter = {
  auth: {
   getUser: async () => ({ data: { user }, error: null }),
-  getSession: async () => ({ data: { session: { user } }, error: null }),
+  getSession: async () => ({ data: { session: { user, access_token: "fixture-not-a-jwt" } }, error: null }),
   onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }),
   signOut: async () => ({ error: null })
  },
  from: (table: string) => {
+  if (table === "app_memberships") { const q = { select: () => q, eq: () => q, then: (resolve: any) => Promise.resolve({ data: [{ workspace_id: "oar", role: "member" }], error: null }).then(resolve) }; return q; }
   if (table !== "crm_workspace_state") throw new Error("Unexpected fixture table: " + table);
+  const chain = (result: unknown) => { const p = Object.assign(Promise.resolve(result), { setHeader: () => p, abortSignal: () => p }); return p; };
+  const filters: Record<string, unknown> = {};
+  let updateValue: { payload: unknown } | null = null;
+  const currentRevision = () => localStorage.getItem("fixture-shared-revision") || "2026-09-15T10:00:00.000Z";
+  const save = (value: { payload: unknown }) => { const revision = new Date(Math.max(Date.now(), Date.parse(currentRevision()) + 1)).toISOString(); localStorage.setItem("fixture-shared", JSON.stringify(value.payload)); localStorage.setItem("fixture-shared-revision", revision); return revision; };
   const query = {
-   select: () => query, eq: () => query,
-   single: async () => ({ data: { payload: JSON.parse(localStorage.getItem("fixture-shared") || "{}"), updated_at: "2026-09-15T10:00:00Z" }, error: null }),
-   upsert: async (value: { payload: unknown }) => { localStorage.setItem("fixture-shared", JSON.stringify(value.payload)); return { error: null }; }
+   select: () => query, eq: (key: string, value: unknown) => { filters[key] = value; return query; }, abortSignal: () => query,
+   single: () => chain({ data: { payload: JSON.parse(localStorage.getItem("fixture-shared") || "{}"), updated_at: currentRevision() }, error: null }),
+   update: (value: { payload: unknown }) => { updateValue = value; return query; },
+   maybeSingle: () => { if (!updateValue) throw Error("Fixture requires an explicit update"); if (filters.updated_at !== currentRevision()) return chain({ data: null, error: null }); return chain({ data: { updated_at: save(updateValue) }, error: null }); },
+   upsert: (value: { payload: unknown }) => { save(value); return chain({ error: null }); }
   }; return query;
  }
 };
 export const supabase = adapter as unknown as typeof RealClient;
 `);
-  // Match production routing. Next 14 dev reports duplicate app/public metadata
-  // icons as HTTP 500; keep both files and verify their production responses.
+  // This fixture suite checks production output. A separate exact-source smoke
+  // checks development and production icons without substituting the Auth client.
+  const env = { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, NODE_ENV: "production" as const, NEXT_TELEMETRY_DISABLED: "1", NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:55431", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fictional-local-build-key" };
   const nextBinary = join(root, "node_modules/next/dist/bin/next");
-  const buildLog = execFileSync(process.execPath, [nextBinary, "build"], { cwd: preview, encoding: "utf8", timeout: 180000 });
+  const buildLog = execFileSync(process.execPath, [nextBinary, "build", "--webpack"], { cwd: preview, env, encoding: "utf8", timeout: 180000 });
   writeFileSync(join(artifacts, "fixture-build.log"), buildLog);
   const port = Number(process.env.CONTACT_ADDRESS_PORT || 3148);
-  const server = spawn(process.execPath, [nextBinary, "start", "--hostname", "127.0.0.1", "--port", String(port)], { cwd: preview, stdio: ["ignore", "pipe", "pipe"] });
+  const server = spawn(process.execPath, [nextBinary, "start", "--hostname", "127.0.0.1", "--port", String(port)], { cwd: preview, env, stdio: ["ignore", "pipe", "pipe"] });
   let serverLog = "";
   server.stdout.on("data", chunk => { serverLog += chunk; });
   server.stderr.on("data", chunk => { serverLog += chunk; });
   const binary = process.env.AGENT_BROWSER_BIN || "agent-browser";
   const session = `postal-test-${process.pid}`;
-  const ab = (...args: string[]) => execFileSync(binary, ["--session", session, ...args], { encoding: "utf8", timeout: 45000 }).trim();
+  const browserConfig = join(preview, "browser-config.json");
+  writeFileSync(browserConfig, "{}");
+  const ab = (...args: string[]) => execFileSync(binary, ["--config", browserConfig, "--session", session, ...args], { encoding: "utf8", timeout: 45000, env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, NODE_ENV: "production" } }).trim();
   const evaluate = (code: string) => JSON.parse(ab("eval", code));
   const waitUntil = async (code: string) => {
     for (let i = 0; i < 100; i++) { if (evaluate(code)) return; await new Promise(r => setTimeout(r, 100)); }
     throw new Error(`Timed out: ${code}`);
   };
   const capture = (name: string) => ab("screenshot", join(artifacts, `${name}.png`));
-  const state = () => evaluate('JSON.parse(localStorage.getItem("oneaddress-riviera-crm-v1"))');
+  const state = () => evaluate('JSON.parse(window.__postalReadCache())');
   const report: string[] = [];
   const pass = (message: string) => { report.push(message); console.log(`PASS ${message}`); };
   const checkOverflow = (scope = "body") => {
@@ -93,14 +106,16 @@ export const supabase = adapter as unknown as typeof RealClient;
       if (i > 150 || server.exitCode !== null) throw new Error(serverLog);
       await new Promise(r => setTimeout(r, 100));
     }
-    ab("open", `http://127.0.0.1:${port}`);
+    ab("--allowed-domains", "127.0.0.1", "open", `http://127.0.0.1:${port}`);
     ab("network", "route", "https://*", "--abort");
     ab("network", "route", "**/api/**", "--abort");
     assert.equal(evaluate("globalThis.__postalFixture === true"), true);
     ab("snapshot", "-i");
     assert.equal(ab("errors"), "");
     const iconResults = [];
-    for (const path of ["/favicon.ico", "/icon.png", "/icon.png?9fd7c2bf72f2e08d"]) {
+    const linkedIcons: string[] = evaluate("Array.from(document.querySelectorAll('link[rel~=icon],link[rel=apple-touch-icon]'), link => new URL(link.href).pathname + new URL(link.href).search)");
+    assert.ok(linkedIcons.length > 0, "Metadata must expose at least one icon");
+    for (const path of new Set(["/favicon.ico", "/icon.png", ...linkedIcons])) {
       const response = await fetch(`http://127.0.0.1:${port}${path}`);
       const bytes = (await response.arrayBuffer()).byteLength;
       assert.equal(response.status, 200, path);
@@ -111,7 +126,7 @@ export const supabase = adapter as unknown as typeof RealClient;
     writeFileSync(join(artifacts, "fixture-icons.json"), JSON.stringify(iconResults, null, 2));
     capture("initial-check");
     pass("aperçu isolé de production : page chargée, icônes HTTP 200, aucune erreur JavaScript, aucun service externe");
-    evaluate(`localStorage.setItem('fixture-shared', ${JSON.stringify(JSON.stringify(fixture))}); localStorage.setItem('oneaddress-riviera-crm-v1', ${JSON.stringify(JSON.stringify(fixture))}); true`);
+    evaluate(`localStorage.setItem('fixture-shared', ${JSON.stringify(JSON.stringify(fixture))}); true`);
     ab("reload");
     await waitUntil('document.body.textContent.includes("Base partagée chargée") || document.body.textContent.includes("Base partagée synchronisée")');
     ab("set", "viewport", "1440", "1000");
@@ -201,13 +216,13 @@ export const supabase = adapter as unknown as typeof RealClient;
       ab("fill", '.contact-create-form [name="postalAddress"]', address);
       ab("focus", '.contact-create-form button[type="submit"]');
       ab("press", "Enter");
-      await waitUntil(`JSON.parse(localStorage.getItem("oneaddress-riviera-crm-v1")).contacts.some(c => c.name === ${JSON.stringify(`Création fictive ${kind}`)})`);
+      await waitUntil(`JSON.parse(window.__postalReadCache()).contacts.some(c => c.name === ${JSON.stringify(`Création fictive ${kind}`)})`);
       assert.equal(state().contacts.find((c: { name: string }) => c.name === `Création fictive ${kind}`).postalAddress, address);
     }
     ab("fill", '.contact-create-form [name="name"]', "Sans Adresse Fictif");
     ab("focus", '.contact-create-form button[type="submit"]');
     ab("press", "Enter");
-    await waitUntil('JSON.parse(localStorage.getItem("oneaddress-riviera-crm-v1")).contacts.some(c => c.name === "Sans Adresse Fictif")');
+    await waitUntil('JSON.parse(window.__postalReadCache()).contacts.some(c => c.name === "Sans Adresse Fictif")');
     assert.equal(state().contacts.find((c: { name: string }) => c.name === "Sans Adresse Fictif").postalAddress, "");
     pass("créations via les formulaires : les trois types avec adresse, création sans adresse");
     selectContact("Contact Démonstration", "edit");
@@ -250,7 +265,7 @@ export const supabase = adapter as unknown as typeof RealClient;
     assert.equal(ab("errors"), "");
     pass("rechargement complet : sauvegarde fictive habituelle conservée, aucune erreur navigateur");
     // Each conversion starts from a categorized supplier and uses the real saved
-    // form flow. All state stays inside the isolated localStorage adapter above.
+    // form flow. The test-only shared-server adapter persists fixtures; CRM working data stays in memory.
     const conversionContact = {
       ...fixture.contacts[0], companyName: fictionalContact.companyName,
       civility: "MME", firstName: "Élodie", name: "Conversion Fictive",
@@ -282,7 +297,7 @@ export const supabase = adapter as unknown as typeof RealClient;
     for (const width of [1440, 390]) {
       for (const kind of ["Client", "Propriétaire"]) {
         const slug = kind === "Client" ? "client" : "proprietaire";
-        evaluate(`localStorage.clear(); localStorage.setItem('fixture-shared', ${JSON.stringify(JSON.stringify(conversionFixture))}); localStorage.setItem('oneaddress-riviera-crm-v1', ${JSON.stringify(JSON.stringify(conversionFixture))}); true`);
+        evaluate(`localStorage.clear(); localStorage.setItem('fixture-shared', ${JSON.stringify(JSON.stringify(conversionFixture))}); true`);
         ab("reload");
         await waitUntil('document.body.textContent.includes("Base partagée chargée") || document.body.textContent.includes("Base partagée synchronisée")');
         ab("set", "viewport", String(width), width === 1440 ? "1000" : "844");
@@ -369,7 +384,7 @@ export const supabase = adapter as unknown as typeof RealClient;
     console.log(`Artifacts: ${artifacts}`);
   } catch (error) {
     capture("failure");
-    writeFileSync(join(artifacts, "failure-state.txt"), ab("snapshot", "-i") + "\n" + ab("eval", '({inputs: Array.from(document.querySelectorAll("input")).map(e=>({name:e.name,value:e.value})), state: localStorage.getItem("oneaddress-riviera-crm-v1")})'));
+    writeFileSync(join(artifacts, "failure-state.txt"), ab("snapshot", "-i") + "\n" + ab("eval", '({inputs: Array.from(document.querySelectorAll("input")).map(e=>({name:e.name,value:e.value})), state: window.__postalReadCache()})'));
     throw error;
   } finally {
     writeFileSync(join(artifacts, "preview-server.log"), serverLog);

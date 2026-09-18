@@ -217,6 +217,7 @@ async function verifySupabaseAccessToken(token: string): Promise<AuthenticatedCR
     requireServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireServerEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
     {
+      global: { headers: { Authorization: `Bearer ${token}` }, fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
       auth: {
         autoRefreshToken: false,
         detectSessionInUrl: false,
@@ -228,6 +229,12 @@ async function verifySupabaseAccessToken(token: string): Promise<AuthenticatedCR
   const { data, error } = await supabase.auth.getUser(token);
 
   if (error || !data.user) return null;
+
+  const { data: membership, error: membershipError } = await supabase
+    .from("app_memberships").select("role")
+    .eq("user_id", data.user.id).eq("workspace_id", "oar").eq("status", "active").maybeSingle();
+  if (membershipError) throw new DriveRouteError("Vérification des accès indisponible.", 503);
+  if (!membership) throw new DriveRouteError("Accès OAR non autorisé.", 403);
 
   return {
     id: data.user.id,

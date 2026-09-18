@@ -19,18 +19,11 @@ describe("coordination distribuée sur PostgreSQL réel, Drive simulé", { skip:
   before(async () => {
     const { Pool } = require("pg"); // Test-only runtime, installed outside the repository.
     pool = new Pool({ connectionString: url, max: 25 });
-    await pool.query(`do $$ begin
-      if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
-      if not exists (select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin; end if;
-    end $$;`);
-    // Test-only simulation of PostgREST's verified JWT subject; never installed remotely.
-    await pool.query(`create schema auth;
-      create function auth.uid() returns uuid language sql stable as
-        'select nullif(current_setting(''request.jwt.claim.sub'', true), '''')::uuid';
-      grant usage on schema auth to anon, authenticated;
-      create table public.crm_workspace_state (payload jsonb not null);
-      insert into public.crm_workspace_state values ('{"fixture":"unchanged"}');`);
+    await pool.query(readFileSync("tests/izord/sql-fixture.sql", "utf8"));
     await pool.query(readFileSync("supabase/migrations/20260914210807_drive_folder_registry.sql", "utf8"));
+    await pool.query(readFileSync("supabase/migrations/20260916170445_module_access_foundation.sql", "utf8"));
+    await pool.query(`insert into auth.users(id,email,email_confirmed_at) values('11111111-1111-4111-8111-111111111111','oar@example.invalid',now());
+      insert into public.app_memberships(user_id,workspace_id,role) values('11111111-1111-4111-8111-111111111111','oar','member');`);
   });
   after(async () => { await pool?.end(); });
   beforeEach(async () => { await pool.query("truncate public.crm_drive_folder_registry"); });
