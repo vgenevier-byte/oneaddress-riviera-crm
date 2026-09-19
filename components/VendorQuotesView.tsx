@@ -1,5 +1,6 @@
 "use client";
 
+import { BusinessForm, BusinessLabel, BusinessButton, useBusinessPermissions } from "./BusinessPermissions";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import SearchableBusinessContactPicker from "./SearchableBusinessContactPicker";
@@ -86,6 +87,7 @@ export default function VendorQuotesView({
   onReject,
   onOpenInvoice
 }: Props) {
+  const business=useBusinessPermissions();
   const [statusFilter, setStatusFilter] = useState<VendorQuoteStatus | "Tous">("Tous");
   const [editingQuote, setEditingQuote] = useState<VendorQuote | null>(null);
   const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
@@ -131,6 +133,7 @@ export default function VendorQuotesView({
   }, [editingQuote]);
 
   async function uploadQuoteDocument(file: File, quoteId: string) {
+    if(business)return {quoteDocumentStoragePath:await business.upload("vendorQuotes",quoteId,file),quoteDocumentName:file.name};
     const { data: userData, error: userError } = await supabase.auth.getUser();
 
     if (userError || !userData.user) {
@@ -156,6 +159,7 @@ export default function VendorQuotesView({
   }
 
   async function downloadQuoteDocument(quote: VendorQuote) {
+    if(business)return business.download(quote.quoteDocumentStoragePath||"",quote.quoteDocumentName||"devis.pdf");
     if (quote.quoteDocumentStoragePath) {
       const { data, error } = await supabase.storage
         .from(CRM_DOCUMENTS_BUCKET)
@@ -184,6 +188,7 @@ export default function VendorQuotesView({
   }
 
   async function previewQuoteDocument(quote: VendorQuote) {
+    if(business)return business.download(quote.quoteDocumentStoragePath||"",quote.quoteDocumentName||"devis.pdf");
     if (quote.quoteDocumentStoragePath) {
       const { data, error } = await supabase.storage
         .from(CRM_DOCUMENTS_BUCKET)
@@ -218,7 +223,7 @@ export default function VendorQuotesView({
     const quoteId = editingQuote?.id || makeId("vendor-quote");
     const quoteFile = form.get("quoteFile");
 
-    if (!contact && !preserveLegacyContact) {
+    if (!contact && !preserveLegacyContact && (!business || business.read("contacts") || !editingQuote)) {
       window.alert("Choisissez le prestataire concerné.");
       return;
     }
@@ -234,6 +239,7 @@ export default function VendorQuotesView({
       try {
         setUploading(true);
         uploadedDocument = await uploadQuoteDocument(quoteFile, quoteId);
+        if(business)await business.check();
       } catch (error) {
         window.alert(`Devis non importé : ${error instanceof Error ? error.message : "erreur inconnue"}`);
         return;
@@ -337,14 +343,14 @@ export default function VendorQuotesView({
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
           {(["Tous", "À valider", "Validé", "Refusé"] as Array<VendorQuoteStatus | "Tous">).map((status) => (
-            <button
+            <BusinessButton
               key={status}
               type="button"
               className={statusFilter === status ? "primary-button" : "secondary-button"}
               onClick={() => setStatusFilter(status)}
             >
               {status}
-            </button>
+            </BusinessButton>
           ))}
         </div>
 
@@ -409,38 +415,38 @@ export default function VendorQuotesView({
 
                     {(quote.quoteDocumentStoragePath || quote.quoteDocumentUrl) && (
                       <>
-                        <button className="secondary-button" type="button" onClick={() => void previewQuoteDocument(quote)}>
+                        <BusinessButton className="secondary-button" type="button" permission="export" onClick={() => void previewQuoteDocument(quote)}>
                           Voir devis
-                        </button>
-                        <button className="secondary-button" type="button" onClick={() => void downloadQuoteDocument(quote)}>
+                        </BusinessButton>
+                        <BusinessButton className="secondary-button" type="button" permission="export" onClick={() => void downloadQuoteDocument(quote)}>
                           Télécharger devis
-                        </button>
+                        </BusinessButton>
                       </>
                     )}
 
                     {quote.status !== "Validé" && (
-                      <button className="primary-button" type="button" onClick={() => validateQuote(quote)}>
+                      <BusinessButton className="primary-button" type="button" permission="write" disabled={Boolean(business&&!business.canWrite("vendorInvoices"))} onClick={() => validateQuote(quote)}>
                         Valider
-                      </button>
+                      </BusinessButton>
                     )}
 
                     {quote.status !== "Refusé" && (
-                      <button className="secondary-button" type="button" onClick={() => rejectQuote(quote)}>
+                      <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => rejectQuote(quote)}>
                         Refuser
-                      </button>
+                      </BusinessButton>
                     )}
 
                     {linkedInvoice && (
-                      <button className="secondary-button" type="button" onClick={() => onOpenInvoice(linkedInvoice.id)}>
+                      <BusinessButton className="secondary-button" type="button" onClick={() => onOpenInvoice(linkedInvoice.id)}>
                         Ouvrir facture
-                      </button>
+                      </BusinessButton>
                     )}
 
-                    <button className="secondary-button" type="button" onClick={() => setEditingQuote(quote)}>
+                    <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => setEditingQuote(quote)}>
                       Modifier
-                    </button>
+                    </BusinessButton>
 
-                    <button
+                    <BusinessButton
                       className="danger-link"
                       type="button"
                       onClick={() => {
@@ -453,7 +459,7 @@ export default function VendorQuotesView({
                       }}
                     >
                       Supprimer
-                    </button>
+                    </BusinessButton>
                   </div>
                 </article>
               );
@@ -469,7 +475,7 @@ export default function VendorQuotesView({
           Le devis doit être validé avant qu’une facture en attente soit créée.
         </p>
 
-        <form key={editingQuote?.id || "new-vendor-quote"} className="form-grid" onSubmit={submitQuote}>
+        <BusinessForm key={editingQuote?.id || "new-vendor-quote"} className="form-grid" onSubmit={submitQuote}>
           <SearchableBusinessContactPicker
             contacts={selectableContacts}
             defaultContact={contacts.find((contact) => contact.id === editingQuote?.contactId)}
@@ -480,23 +486,23 @@ export default function VendorQuotesView({
             required
           />
 
-          <label>Objet du devis
+          <BusinessLabel>Objet du devis
             <input name="title" defaultValue={editingQuote?.title || ""} placeholder="Ex : Entretien jardin juillet" required />
-          </label>
+          </BusinessLabel>
 
-          <label>Référence devis
+          <BusinessLabel>Référence devis
             <input name="quoteReference" defaultValue={editingQuote?.quoteReference || ""} placeholder="Créée automatiquement si vide" />
-          </label>
+          </BusinessLabel>
 
-          <label>Date du devis
+          <BusinessLabel>Date du devis
             <input name="quoteDate" type="date" defaultValue={editingQuote?.quoteDate || new Date().toISOString().slice(0, 10)} />
-          </label>
+          </BusinessLabel>
 
-          <label>Valable jusqu’au
+          <BusinessLabel>Valable jusqu’au
             <input name="validUntil" type="date" defaultValue={editingQuote?.validUntil || ""} />
-          </label>
+          </BusinessLabel>
 
-          <label>Montant du devis
+          <BusinessLabel>Montant du devis
             <input
               name="amount"
               type="text"
@@ -505,32 +511,32 @@ export default function VendorQuotesView({
               placeholder="Ex : 1 023,70"
               required
             />
-          </label>
+          </BusinessLabel>
 
-          <label className="vendor-invoice-file-field">Importer le devis
+          <BusinessLabel className="vendor-invoice-file-field">Importer le devis
             <input name="quoteFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx" />
             <span className="field-help">
               {editingQuote?.quoteDocumentName
                 ? `Fichier actuel : ${editingQuote.quoteDocumentName}`
                 : "Le document sera obligatoire au moment de la validation"}
             </span>
-          </label>
+          </BusinessLabel>
 
-          <label className="planning-entry-notes">Notes
+          <BusinessLabel className="planning-entry-notes">Notes
             <textarea name="notes" defaultValue={editingQuote?.notes || ""} placeholder="Conditions, acompte, réserve, détail technique..." />
-          </label>
+          </BusinessLabel>
 
           <div className="mobile-form-actions">
-            <button className="primary-button planning-entry-submit" type="submit" disabled={uploading}>
+            <BusinessButton className="primary-button planning-entry-submit" type="submit" disabled={uploading}>
               {uploading ? "Import en cours..." : editingQuote ? "Enregistrer" : "Ajouter le devis"}
-            </button>
+            </BusinessButton>
             {editingQuote && (
-              <button className="secondary-button" type="button" onClick={() => setEditingQuote(null)}>
+              <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => setEditingQuote(null)}>
                 Annuler
-              </button>
+              </BusinessButton>
             )}
           </div>
-        </form>
+        </BusinessForm>
       </section>
     </div>
   );

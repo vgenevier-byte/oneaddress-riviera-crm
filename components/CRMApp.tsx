@@ -1,5 +1,7 @@
 "use client";
 
+import { BusinessForm, BusinessLabel, BusinessButton, BusinessSelect, useBusinessPermissions } from "./BusinessPermissions";
+import { useConfirmedForm, type FormSave } from "@/lib/access/useConfirmedForm";
 import QuickRepliesView from "./QuickRepliesView";
 import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
@@ -8,8 +10,9 @@ import vendorFinanceStyles from "./VendorFinanceDialogs.module.css";
 import { VendorInvoiceDuplicateDialog } from "./VendorFinanceDialogs";
 import VendorQuotesView from "./VendorQuotesView";
 import MobileCRMHeader from "./MobileCRMHeader";
-import MobileCRMNavigation from "./MobileCRMNavigation";
-import MobileMoreMenu, { type MobileSecondaryAction } from "./MobileMoreMenu";
+import UnifiedNavigation, { type UnifiedTab } from "./UnifiedNavigation";
+import type { AccessSnapshot } from "@/lib/access/modules";
+import { type MobileSecondaryAction } from "./MobileMoreMenu";
 import { VendorBankAccounts, VendorInvoicePayment, VendorBankContactDialog } from "./VendorBanking";
 import {
   crmNavigationItems,
@@ -21,7 +24,7 @@ import {
 
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import Image from "next/image";
-import crmLogo from "../public/oar-logo-paysage-crm.png";
+
 import { isCompletedTaskStatus, maintainCompletedTasks } from "@/lib/taskMaintenance";
 import { crmCache } from "@/lib/access/crmCache";
 import { useCommittedValue } from "@/lib/access/useCommittedValue";
@@ -1868,14 +1871,17 @@ function QuotesView({
   prefilledLead?: QuoteLeadDraft | null;
   quotes: QuoteRequest[];
   activeActor: string;
-  onChange: (quotes: QuoteRequest[]) => void;
+  onChange: (quotes: QuoteRequest[]) => FormSave;
   onQuoteChange?: (quote: QuoteRequest) => void;
 }) {
+  const business = useBusinessPermissions();
+  const confirmation = useConfirmedForm(business?.markDirty);
   function setQuotes(update: QuoteRequest[] | ((current: QuoteRequest[]) => QuoteRequest[])) {
     const nextQuotes = typeof update === "function" ? update(quotes) : update;
 
-    onChange(nextQuotes);
-    saveQuotesToBrowser(nextQuotes);
+    const result = onChange(nextQuotes);
+    if (!business) saveQuotesToBrowser(nextQuotes);
+    return result;
   }
 
   function updateQuoteStatus(id: string, status: QuoteStatus) {
@@ -1973,6 +1979,7 @@ function QuotesView({
   }, [prefill]);
 
   function fillQuoteForm(quote: QuoteRequest) {
+    confirmation.changed();
     if (writeQuoteFormFields(quote)) setEditingQuoteId(quote.id);
   }
 
@@ -2010,7 +2017,7 @@ function QuotesView({
     const unitPrice = quoteItems.reduce((sum, item) => sum + item.unitPrice, 0);
     const previousQuote = editingQuoteId ? quotes.find((item) => item.id === editingQuoteId) : undefined;
 
-    if (!clientName) {
+    if (!clientName && (!business || business.read("contacts") || !editingQuoteId)) {
       window.alert("Sélectionnez un client.");
       return;
     }
@@ -2062,23 +2069,17 @@ function QuotesView({
       ? stampUpdated(quotePayload, activeActor) as QuoteRequest
       : stampCreated(quotePayload, activeActor) as QuoteRequest;
 
-    if (editingQuoteId) {
-      setQuotes((current) => current.map((item) => (item.id === editingQuoteId ? quote : item)));
+    void confirmation.submit(formElement, () => setQuotes((current) => editingQuoteId
+      ? current.map(item => item.id === editingQuoteId ? quote : item)
+      : [quote, ...current]), newerDraft => {
+      if(newerDraft){setEditingQuoteId(quote.id);return;}
       setEditingQuoteId(null);
-    } else {
-      setQuotes((current) => [quote, ...current]);
-    }
-
-    onQuoteChange?.(quote);
-
-    formElement.reset();
-    window.setTimeout(() => {
-      document.getElementById("quotes-list-panel")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-    }, 80);
-
+      onQuoteChange?.(quote);
+      formElement.reset();
+      window.setTimeout(() => {
+        if(formElement.isConnected)document.getElementById("quotes-list-panel")?.scrollIntoView({behavior:"smooth",block:"start"});
+      }, 80);
+    });
   }
 
   const visibleQuotes =
@@ -2100,14 +2101,14 @@ function QuotesView({
         <div className="list-stack oar-contact-list-stack">
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 22 }}>
           {(["Tous", ...quoteStatuses] as Array<QuoteStatus | "Tous">).map((status) => (
-            <button
+            <BusinessButton
               key={status}
               type="button"
               className={statusFilter === status ? "primary-button" : "secondary-button"}
               onClick={() => setStatusFilter(status)}
             >
               {status === "Tous" ? "Tous" : getQuoteStatusFrenchLabel(status)}
-            </button>
+            </BusinessButton>
           ))}
         </div>
 
@@ -2141,7 +2142,7 @@ function QuotesView({
                 </div>
 
                 <div className="quote-actions">
-                  <select
+                  <BusinessSelect
                     value={getQuoteStatus(quote.status)}
                     onChange={(event) => updateQuoteStatus(quote.id, getQuoteStatus(event.target.value))}
                     aria-label="Devis status"
@@ -2149,17 +2150,17 @@ function QuotesView({
                     {quoteStatuses.map((status) => (
                       <option key={status} value={status}>{getQuoteStatusFrenchLabel(status)}</option>
                     ))}
-                  </select>
+                  </BusinessSelect>
 
-                  <button className="secondary-button" type="button" onClick={() => fillQuoteForm(quote)}>
+                  <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => fillQuoteForm(quote)}>
                     Modifier
-                  </button>
+                  </BusinessButton>
 
-                  <button className="primary-button" type="button" onClick={() => openQuotePdf(quote)}>
+                  <BusinessButton permission="export" className="primary-button" type="button" onClick={async() => { if(business){try{await business.check();}catch{return;}} openQuotePdf(quote); }}>
                     Générer PDF
-                  </button>
+                  </BusinessButton>
 
-                  <button
+                  <BusinessButton permission="remove"
                     className="danger-link"
                     type="button"
                     onClick={() => {
@@ -2169,7 +2170,7 @@ function QuotesView({
                     }}
                   >
                     Supprimer
-                  </button>
+                  </BusinessButton>
                 </div>
               </article>
             ))
@@ -2181,9 +2182,10 @@ function QuotesView({
         <p className="eyebrow">{editingQuoteId ? "Modification" : "Nouveau"}</p>
         <h3>{editingQuoteId ? "Modifier le devis" : "Créer un devis"}</h3>
 
-        <form className="form-grid" data-quote-form="true" onSubmit={addQuote}>
+        <BusinessForm className="form-grid" data-quote-form="true" onSubmit={addQuote} onChangeCapture={confirmation.changed} pending={confirmation.saving}>
+          {confirmation.message&&<p role="alert">{confirmation.message}</p>}
           <input type="hidden" name="leadId" />
-          <label>Client
+          <BusinessLabel>Client
             <input
               name="clientName"
               list="quote-client-options"
@@ -2202,41 +2204,41 @@ function QuotesView({
               ))}
             </datalist>
             <small className="quote-client-helper">Clients uniquement. Les prestataires sont exclus des devis.</small>
-          </label>
+          </BusinessLabel>
 
-          <label>Titre du devis
+          <BusinessLabel>Titre du devis
             <input name="title" placeholder="Séjour villa, location bateau, voiture, conciergerie..." />
-          </label>
+          </BusinessLabel>
 
-          <label>Lieu / destination
+          <BusinessLabel>Lieu / destination
             <input name="location" placeholder="Cannes, Saint-Tropez, Monaco..." />
-          </label>
+          </BusinessLabel>
 
-          <label>Nombre de voyageurs
+          <BusinessLabel>Nombre de voyageurs
             <input name="guestCount" placeholder="Ex : 6 adultes, 2 enfants" />
-          </label>
+          </BusinessLabel>
 
-          <label>Date début demandée
+          <BusinessLabel>Date début demandée
             <input name="startDate" type="date" required />
-          </label>
+          </BusinessLabel>
 
-          <label>Date fin demandée
+          <BusinessLabel>Date fin demandée
             <input name="endDate" type="date" required />
-          </label>
+          </BusinessLabel>
 
-          <label>Validité du devis
+          <BusinessLabel>Validité du devis
             <input name="validityDate" type="date" />
-          </label>
+          </BusinessLabel>
 
           <fieldset className="full quote-category-box quote-lines-box">
             <legend>Prestations, prix et cautions</legend>
 
             {quoteCategories.map((category) => (
               <div className="quote-line-input" key={category}>
-                <label>
+                <BusinessLabel>
                   <input type="checkbox" name="categories" value={category} />
                   {getQuoteCategoryFrenchLabel(category)}
-                </label>
+                </BusinessLabel>
 
                 <input name={`description${category}`} placeholder="Détail prestation" />
 
@@ -2253,44 +2255,45 @@ function QuotesView({
             ))}
           </fieldset>
 
-          <label className="full">Inclus
+          <BusinessLabel className="full">Inclus
             <textarea name="included" placeholder="Ex : accueil, linge, ménage intermédiaire, skipper, livraison..." />
-          </label>
+          </BusinessLabel>
 
-          <label className="full">Non inclus
+          <BusinessLabel className="full">Non inclus
             <textarea name="excluded" placeholder="Ex : carburant, extras, transferts, repas, taxe de séjour..." />
-          </label>
+          </BusinessLabel>
 
-          <label className="full">Conditions de paiement
+          <BusinessLabel className="full">Conditions de paiement
             <textarea name="paymentTerms" placeholder="Ex : 50 % à la réservation, solde 30 jours avant arrivée..." />
-          </label>
+          </BusinessLabel>
 
-          <label className="full">Conditions d’annulation
+          <BusinessLabel className="full">Conditions d’annulation
             <textarea name="cancellationTerms" placeholder="Conditions selon saison, disponibilité et prestataires..." />
-          </label>
+          </BusinessLabel>
 
-          <label className="full">Notes internes / détails client
+          <BusinessLabel className="full">Notes internes / détails client
             <textarea name="notes" placeholder="Informations utiles, préférences client, demandes spéciales..." />
-          </label>
+          </BusinessLabel>
 
-          <button className="primary-button planning-entry-submit" type="submit">
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
             {editingQuoteId ? "Enregistrer les modifications" : "Créer le devis"}
-          </button>
+          </BusinessButton>
 
           {editingQuoteId && (
-            <button
+            <BusinessButton permission="write"
               className="ghost-button"
               type="button"
               onClick={() => {
+                confirmation.changed();
                 setEditingQuoteId(null);
                 const form = document.querySelector<HTMLFormElement>('form[data-quote-form="true"]');
                 form?.reset();
               }}
             >
               Annuler la modification
-            </button>
+            </BusinessButton>
           )}
-        </form>
+        </BusinessForm>
       </section>
     </div>
   );
@@ -2528,6 +2531,7 @@ function BookingsView({
   activeActor: string;
   onChange: (quotes: QuoteRequest[]) => void;
 }) {
+  const business = useBusinessPermissions();
   const confirmedQuotes = quotes.filter((quote) => getQuoteStatus(quote.status) === "Accepted");
   const providerContacts = contacts.filter(isSupplierContact);
 
@@ -2591,8 +2595,8 @@ function BookingsView({
     const nextQuotes = quotes.map((item) => (item.id === quote.id ? updatedQuote : item));
 
     onChange(nextQuotes);
-    saveQuotesToBrowser(nextQuotes);
-    window.alert("Réservation enregistrée.");
+    if (!business) saveQuotesToBrowser(nextQuotes);
+    if (!business) window.alert("Réservation enregistrée.");
   }
 
   return (
@@ -2692,8 +2696,8 @@ function BookingsView({
                     </div>
                   )}
 
-                  <form className="form-grid" onSubmit={(event) => updateBookingFinance(event, quote)} style={{ marginTop: 20 }}>
-                    <label>Statut paiement
+                  <BusinessForm className="form-grid" onSubmit={(event) => updateBookingFinance(event, quote)} style={{ marginTop: 20 }}>
+                    <BusinessLabel>Statut paiement
                       <select name="paymentStatus" defaultValue={quote.paymentStatus || getPaymentStatus(quote)}>
                         <option>Non payé</option>
                         <option>Acompte reçu</option>
@@ -2701,33 +2705,33 @@ function BookingsView({
                         <option>Payé</option>
                         <option>Annulé / remboursé</option>
                       </select>
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Acompte attendu
+                    <BusinessLabel>Acompte attendu
                       <input name="expectedDeposit" type="number" min="0" step="1" defaultValue={quote.expectedDeposit || ""} placeholder="Ex : 1000" />
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Date limite paiement
+                    <BusinessLabel>Date limite paiement
                       <input name="paymentDueDate" type="date" defaultValue={quote.paymentDueDate || ""} />
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Coût prestataire
+                    <BusinessLabel>Coût prestataire
                       <input name="supplierCost" type="number" min="0" step="1" defaultValue={quote.supplierCost || ""} placeholder="Ex : 2500" />
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Acompte reçu
+                    <BusinessLabel>Acompte reçu
                       <input name="depositReceived" type="number" min="0" step="1" defaultValue={quote.depositReceived || ""} placeholder="Ex : 1000" />
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Solde reçu
+                    <BusinessLabel>Solde reçu
                       <input name="balanceReceived" type="number" min="0" step="1" defaultValue={quote.balanceReceived || ""} placeholder="Ex : 3000" />
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Notes paiement
+                    <BusinessLabel>Notes paiement
                       <textarea name="paymentNotes" defaultValue={quote.paymentNotes || ""} placeholder="Ex : acompte reçu par virement, solde attendu avant arrivée" />
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Prestataire affecté
+                    <BusinessLabel>Prestataire affecté
                       <select name="assignedContactId" defaultValue={quote.assignedContactId || ""}>
                         <option value="">Non affecté</option>
                         {providerContacts.map((contact) => (
@@ -2736,9 +2740,9 @@ function BookingsView({
                           </option>
                         ))}
                       </select>
-                    </label>
+                    </BusinessLabel>
 
-                    <label>Statut opérationnel
+                    <BusinessLabel>Statut opérationnel
                       <select name="bookingStatus" defaultValue={quote.bookingStatus || "À préparer"}>
                         <option>À préparer</option>
                         <option>Prestataire à confirmer</option>
@@ -2747,57 +2751,57 @@ function BookingsView({
                         <option>Terminé</option>
                         <option>Annulé</option>
                       </select>
-                    </label>
+                    </BusinessLabel>
 
                     <div className="card" style={{ boxShadow: "none", padding: 16 }}>
                       <p className="eyebrow">Checklist opérationnelle</p>
 
-                      <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <input name="clientConfirmed" type="checkbox" defaultChecked={Boolean(quote.clientConfirmed)} />
                         Client confirmé
-                      </label>
+                      </BusinessLabel>
 
-                      <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <input name="depositConfirmed" type="checkbox" defaultChecked={Boolean(quote.depositConfirmed)} />
                         Acompte reçu
-                      </label>
+                      </BusinessLabel>
 
-                      <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <input name="supplierConfirmed" type="checkbox" defaultChecked={Boolean(quote.supplierConfirmed)} />
                         Prestataire confirmé
-                      </label>
+                      </BusinessLabel>
 
-                      <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <input name="balanceConfirmed" type="checkbox" defaultChecked={Boolean(quote.balanceConfirmed)} />
                         Solde reçu
-                      </label>
+                      </BusinessLabel>
 
-                      <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <input name="detailsSent" type="checkbox" defaultChecked={Boolean(quote.detailsSent)} />
                         Détails envoyés au client
-                      </label>
+                      </BusinessLabel>
 
-                      <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
                         <input name="serviceCompleted" type="checkbox" defaultChecked={Boolean(quote.serviceCompleted)} />
                         Service terminé
-                      </label>
+                      </BusinessLabel>
                     </div>
 
-                    <label>Notes opérationnelles
+                    <BusinessLabel>Notes opérationnelles
                       <textarea name="operationNotes" defaultValue={quote.operationNotes || ""} placeholder="Horaires, adresse, contact sur place, contraintes, préférences client..." />
-                    </label>
+                    </BusinessLabel>
 
-                    <button className="primary-button planning-entry-submit" type="submit">
+                    <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
                       Enregistrer réservation
-                    </button>
-                  </form>
+                    </BusinessButton>
+                  </BusinessForm>
                 </div>
 
                 <div className="item-actions contact-row-actions oar-contact-actions">
                   <span className="status-pill">{quote.bookingStatus || "À préparer"}</span>
-                  <button className="secondary-button" type="button" onClick={() => openQuotePdf(quote)}>
+                  <BusinessButton permission="export" className="secondary-button" type="button" onClick={async() => { if(business){try{await business.check();}catch{return;}} openQuotePdf(quote); }}>
                     Ouvrir devis
-                  </button>
+                  </BusinessButton>
                 </div>
               </article>
             );
@@ -3430,6 +3434,7 @@ function HouseTrackingView({
   onAddPayment: (payment: HousePayment) => void;
   onDeletePayment: (id: string) => void;
 }) {
+  const business = useBusinessPermissions();
   const today = new Date().toISOString().slice(0, 10);
   const activeWorkers = useMemo(() => workers.filter(isHouseTrackingWorkerActive), [workers]);
   const archivedWorkers = useMemo(() => workers.filter((worker) => !isHouseTrackingWorkerActive(worker)), [workers]);
@@ -3738,6 +3743,7 @@ function HouseTrackingView({
   }
 
   async function uploadHouseWorkerDocument(file: File, workerId: string) {
+    if (business) return {documentStoragePath:await business.upload("houseTrackingWorkers",workerId,file),documentFileName:file.name,documentUploadedAt:new Date().toISOString()};
     const { data: userData, error: userError } = await supabase.auth.getUser();
 
     if (userError || !userData.user) {
@@ -3772,6 +3778,7 @@ function HouseTrackingView({
   }
 
   async function downloadHouseWorkerDocument(worker: HouseTrackingWorker) {
+    if (business) return business.download(worker.documentStoragePath || "",worker.documentFileName || "document");
     if (!worker.documentStoragePath) return;
 
     const { data: fileData, error } = await supabase.storage
@@ -3808,6 +3815,7 @@ function HouseTrackingView({
       try {
         setUploadingWorkerDocument(true);
         uploadedDocument = await uploadHouseWorkerDocument(file, workerId);
+        if (business) await business.check();
       } catch (error) {
         window.alert(`Document non chargé dans Supabase Storage : ${error instanceof Error ? error.message : "erreur inconnue"}`);
         setUploadingWorkerDocument(false);
@@ -3894,7 +3902,8 @@ function HouseTrackingView({
     event.currentTarget.reset();
   }
 
-  function exportHouseCsv() {
+  async function exportHouseCsv() {
+    if(business){try{await business.check();}catch{return;}}
     const rows = [
       ["Type", "Date", "Maison", "Intervenant", "Role", "Debut", "Fin", "Pause", "Heures", "Taux", "Du", "Paye", "Moyen", "Note"],
       ...filteredEntries.map((entry) => {
@@ -3955,7 +3964,7 @@ function HouseTrackingView({
             <p className="eyebrow">Suivi maison</p>
             <h3>Gestion simple des heures et paiements</h3>
           </div>
-          <button className="secondary-button" type="button" onClick={exportHouseCsv}>Export CSV</button>
+          <BusinessButton permission="export" className="secondary-button" type="button" onClick={exportHouseCsv}>Export CSV</BusinessButton>
         </div>
 
         <div className="stats-grid house-summary-grid">
@@ -3966,43 +3975,43 @@ function HouseTrackingView({
         </div>
 
         <div className="house-filter-row">
-          <label>Date début
+          <BusinessLabel>Date début
             <input
               type="date"
               value={dateRange.start}
               onChange={(event) => setDateRange((current) => ({ ...current, start: event.target.value }))}
             />
-          </label>
+          </BusinessLabel>
 
-          <label>Date fin
+          <BusinessLabel>Date fin
             <input
               type="date"
               value={dateRange.end}
               onChange={(event) => setDateRange((current) => ({ ...current, end: event.target.value }))}
             />
-          </label>
+          </BusinessLabel>
 
-          <label>Maison
+          <BusinessLabel>Maison
             <select value={houseFilter} onChange={(event) => setHouseFilter(event.target.value)}>
               <option value="Tous">Toutes les maisons</option>
               {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
             </select>
-          </label>
+          </BusinessLabel>
 
           <div className="house-worker-filter">
             <span className="house-worker-filter-label">Intervenant</span>
             <div className="house-worker-filter-controls">
               <div className="house-worker-filter-scroll" role="group" aria-label="Filtrer par intervenant">
-                <button
+                <BusinessButton
                   className={workerFilter === "Tous" ? "house-worker-filter-button active" : "house-worker-filter-button"}
                   type="button"
                   aria-pressed={workerFilter === "Tous"}
                   onClick={() => setWorkerFilter("Tous")}
                 >
                   Tous
-                </button>
+                </BusinessButton>
                 {activeWorkers.map((worker) => (
-                  <button
+                  <BusinessButton
                     className={workerFilter === worker.id ? "house-worker-filter-button active" : "house-worker-filter-button"}
                     key={worker.id}
                     type="button"
@@ -4010,11 +4019,11 @@ function HouseTrackingView({
                     onClick={() => setWorkerFilter(worker.id)}
                   >
                     {worker.contactName}
-                  </button>
+                  </BusinessButton>
                 ))}
               </div>
               {houseSection !== "today" && (
-                <button
+                <BusinessButton
                   className="secondary-button house-archive-trigger"
                   type="button"
                   disabled={archivedWorkers.length === 0}
@@ -4022,7 +4031,7 @@ function HouseTrackingView({
                   onClick={() => setShowArchivedWorkerPicker(true)}
                 >
                   Archives ({archivedWorkers.length})
-                </button>
+                </BusinessButton>
               )}
             </div>
           </div>
@@ -4030,10 +4039,10 @@ function HouseTrackingView({
       </section>
 
       <nav className="house-tabs" aria-label="Navigation suivi maison">
-        <button className={houseSection === "today" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("today")}>Aujourd’hui</button>
-        <button className={houseSection === "hours" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("hours")}>Heures</button>
-        <button className={houseSection === "payments" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("payments")}>Paiements</button>
-        <button className={houseSection === "settings" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("settings")}>Réglages</button>
+        <BusinessButton className={houseSection === "today" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("today")}>Aujourd’hui</BusinessButton>
+        <BusinessButton className={houseSection === "hours" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("hours")}>Heures</BusinessButton>
+        <BusinessButton className={houseSection === "payments" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("payments")}>Paiements</BusinessButton>
+        <BusinessButton className={houseSection === "settings" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("settings")}>Réglages</BusinessButton>
       </nav>
 
       {selectedArchivedWorker && selectedArchivedWorkerHistory && houseSection !== "today" && (
@@ -4050,9 +4059,9 @@ function HouseTrackingView({
           </div>
           <div className="house-archived-filter-actions">
             {houseSection !== "settings" && (
-              <button className="secondary-button" type="button" onClick={() => changeHouseSection("settings")}>Voir dans Réglages</button>
+              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("settings")}>Voir dans Réglages</BusinessButton>
             )}
-            <button className="secondary-button" type="button" onClick={() => setWorkerFilter("Tous")}>Effacer le filtre</button>
+            <BusinessButton className="secondary-button" type="button" onClick={() => setWorkerFilter("Tous")}>Effacer le filtre</BusinessButton>
           </div>
         </section>
       )}
@@ -4065,9 +4074,9 @@ function HouseTrackingView({
               <h3>Aujourd’hui</h3>
             </div>
             <div className="house-quick-actions">
-              <button className="primary-button" type="button" onClick={() => changeHouseSection("hours")}>Ajouter heures</button>
-              <button className="secondary-button" type="button" onClick={() => changeHouseSection("payments")}>Ajouter paiement</button>
-              <button className="secondary-button" type="button" onClick={() => changeHouseSection("settings")}>Réglages</button>
+              <BusinessButton className="primary-button" type="button" onClick={() => changeHouseSection("hours")}>Ajouter heures</BusinessButton>
+              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("payments")}>Ajouter paiement</BusinessButton>
+              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("settings")}>Réglages</BusinessButton>
             </div>
           </div>
 
@@ -4110,17 +4119,17 @@ function HouseTrackingView({
           <section className="card house-tab-panel">
             <p className="eyebrow">Saisie</p>
             <h3>Ajouter des heures</h3>
-            <form className="form-grid house-compact-form" onSubmit={submitTimeEntry}>
-              <label>Date
+            <BusinessForm className="form-grid house-compact-form" onSubmit={submitTimeEntry}>
+              <BusinessLabel>Date
                 <input type="date" value={hourDraft.date} onChange={(event) => setHourDraft((current) => ({ ...current, date: event.target.value }))} />
-              </label>
-              <label>Maison
+              </BusinessLabel>
+              <BusinessLabel>Maison
                 <select value={hourDraft.houseId} onChange={(event) => setHourDraft((current) => ({ ...current, houseId: event.target.value }))}>
                   <option value="">Choisir</option>
                   {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
                 </select>
-              </label>
-              <label>Intervenant
+              </BusinessLabel>
+              <BusinessLabel>Intervenant
                 <select value={hourDraft.workerId} onChange={(event) => {
                   const worker = activeWorkers.find((item) => item.id === event.target.value);
                   setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: worker?.hourlyRate ? String(worker.hourlyRate) : current.hourlyRate }));
@@ -4128,31 +4137,31 @@ function HouseTrackingView({
                   <option value="">Choisir</option>
                   {activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
                 </select>
-              </label>
-              <label>Début
+              </BusinessLabel>
+              <BusinessLabel>Début
                 <select value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))}>
                   {QUARTER_HOUR_TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
                 </select>
-              </label>
-              <label>Fin
+              </BusinessLabel>
+              <BusinessLabel>Fin
                 <select value={hourDraft.endTime} onChange={(event) => setHourDraft((current) => ({ ...current, endTime: event.target.value }))}>
                   {QUARTER_HOUR_TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
                 </select>
-              </label>
-              <label>Pause minutes
+              </BusinessLabel>
+              <BusinessLabel>Pause minutes
                 <input type="number" min="0" value={hourDraft.breakMinutes} onChange={(event) => setHourDraft((current) => ({ ...current, breakMinutes: event.target.value }))} />
-              </label>
-              <label>Taux horaire
+              </BusinessLabel>
+              <BusinessLabel>Taux horaire
                 <input type="number" min="0" step="0.5" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />
-              </label>
-              <label>Note
+              </BusinessLabel>
+              <BusinessLabel>Note
                 <input value={hourDraft.note} onChange={(event) => setHourDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Ex : ménage complet" />
-              </label>
+              </BusinessLabel>
               <div className="full house-calculation-line">
                 Calcul immédiat : <strong>{formatHours(previewHours)}</strong> — <strong>{currency.format(previewAmount)}</strong>
               </div>
-              <button className="primary-button planning-entry-submit" type="submit">Ajouter les heures</button>
-            </form>
+              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter les heures</BusinessButton>
+            </BusinessForm>
           </section>
 
           <section className="card house-tab-panel">
@@ -4166,14 +4175,14 @@ function HouseTrackingView({
                     {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge">Archivé</span>}
                     <span>{entry.date} · {entry.houseName} · {entry.startTime} à {entry.endTime} · {formatHours(getHouseTimeHours(entry))} · {currency.format(getHouseTimeAmount(entry))}</span>
                   </div>
-                  <button className="danger-link" type="button" onClick={() => window.confirm("Supprimer ces heures ?") && onDeleteTimeEntry(entry.id)}>Suppr.</button>
+                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm("Supprimer ces heures ?") && onDeleteTimeEntry(entry.id)}>Suppr.</BusinessButton>
                 </article>
               ))}
             </div>
             {filteredEntries.length > 7 && (
-              <button className="secondary-button" type="button" onClick={() => setShowAllHoursHistory((current) => !current)}>
+              <BusinessButton className="secondary-button" type="button" onClick={() => setShowAllHoursHistory((current) => !current)}>
                 {showAllHoursHistory ? "Réduire à 7 lignes" : `Afficher tout (${filteredEntries.length})`}
-              </button>
+              </BusinessButton>
             )}
           </section>
         </div>
@@ -4184,26 +4193,26 @@ function HouseTrackingView({
           <section className="card house-tab-panel">
             <p className="eyebrow">Paiements</p>
             <h3>Ajouter un paiement</h3>
-            <form className="form-grid house-compact-form" onSubmit={submitPayment}>
-              <label>Date
+            <BusinessForm className="form-grid house-compact-form" onSubmit={submitPayment}>
+              <BusinessLabel>Date
                 <input name="date" type="date" defaultValue={today} />
-              </label>
-              <label>Maison
+              </BusinessLabel>
+              <BusinessLabel>Maison
                 <select name="houseId" defaultValue={houses[0]?.id || ""}>
                   <option value="">Choisir</option>
                   {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
                 </select>
-              </label>
-              <label>Intervenant
+              </BusinessLabel>
+              <BusinessLabel>Intervenant
                 <select name="workerId" defaultValue={initialActiveWorker?.id || ""}>
                   <option value="">Choisir</option>
                   {activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
                 </select>
-              </label>
-              <label>Montant
+              </BusinessLabel>
+              <BusinessLabel>Montant
                 <input name="amount" type="text" inputMode="decimal" min="0" step="1" placeholder="Ex : 150" />
-              </label>
-              <label>Moyen
+              </BusinessLabel>
+              <BusinessLabel>Moyen
                 <select name="method" defaultValue="Virement">
                   <option>Virement</option>
                   <option>Espèces</option>
@@ -4211,12 +4220,12 @@ function HouseTrackingView({
                   <option>Chèque</option>
                   <option>Autre</option>
                 </select>
-              </label>
-              <label>Note
+              </BusinessLabel>
+              <BusinessLabel>Note
                 <input name="note" placeholder="Paiement semaine..." />
-              </label>
-              <button className="primary-button planning-entry-submit" type="submit">Ajouter le paiement</button>
-            </form>
+              </BusinessLabel>
+              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter le paiement</BusinessButton>
+            </BusinessForm>
           </section>
 
           <section className="card house-tab-panel">
@@ -4230,14 +4239,14 @@ function HouseTrackingView({
                     {isArchivedWorker(payment.workerId) && <span className="status-pill house-archived-badge">Archivé</span>}
                     <span>{payment.date} · {payment.houseName} · {currency.format(payment.amount)} · {payment.method}</span>
                   </div>
-                  <button className="danger-link" type="button" onClick={() => window.confirm("Supprimer ce paiement ?") && onDeletePayment(payment.id)}>Suppr.</button>
+                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm("Supprimer ce paiement ?") && onDeletePayment(payment.id)}>Suppr.</BusinessButton>
                 </article>
               ))}
             </div>
             {filteredPayments.length > 7 && (
-              <button className="secondary-button" type="button" onClick={() => setShowAllPaymentsHistory((current) => !current)}>
+              <BusinessButton className="secondary-button" type="button" onClick={() => setShowAllPaymentsHistory((current) => !current)}>
                 {showAllPaymentsHistory ? "Réduire à 7 lignes" : `Afficher tout (${filteredPayments.length})`}
-              </button>
+              </BusinessButton>
             )}
           </section>
         </div>
@@ -4248,18 +4257,18 @@ function HouseTrackingView({
           <section className="card house-tab-panel">
             <p className="eyebrow">Réglages</p>
             <h3>Maisons</h3>
-            <form className="form-grid house-compact-form" onSubmit={submitHouse}>
-              <label>Nom
+            <BusinessForm className="form-grid house-compact-form" onSubmit={submitHouse}>
+              <BusinessLabel>Nom
                 <input name="name" placeholder="Maison principale" />
-              </label>
-              <label>Adresse
+              </BusinessLabel>
+              <BusinessLabel>Adresse
                 <input name="address" placeholder="Adresse" />
-              </label>
-              <label>Notes
+              </BusinessLabel>
+              <BusinessLabel>Notes
                 <textarea name="notes" placeholder="Accès, alarmes, consignes..." />
-              </label>
-              <button className="primary-button planning-entry-submit" type="submit">Ajouter la maison</button>
-            </form>
+              </BusinessLabel>
+              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter la maison</BusinessButton>
+            </BusinessForm>
             <div className="list-stack house-history-list">
               {houses.length === 0 ? <p className="muted-line">Aucune maison.</p> : houses.map((house) => (
                 <article className="mini-row house-compact-row" key={house.id}>
@@ -4267,7 +4276,7 @@ function HouseTrackingView({
                     <strong>{house.name}</strong>
                     <span>{house.address || "Adresse à compléter"}</span>
                   </div>
-                  <button className="danger-link" type="button" onClick={() => window.confirm("Supprimer cette maison ?") && onDeleteHouse(house.id)}>Suppr.</button>
+                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm("Supprimer cette maison ?") && onDeleteHouse(house.id)}>Suppr.</BusinessButton>
                 </article>
               ))}
             </div>
@@ -4276,26 +4285,26 @@ function HouseTrackingView({
           <section className="card house-tab-panel">
             <p className="eyebrow">Réglages</p>
             <h3>Intervenants actifs</h3>
-            <form className="form-grid house-compact-form" onSubmit={submitWorker}>
-              <label>Contact CRM
+            <BusinessForm className="form-grid house-compact-form" onSubmit={submitWorker}>
+              <BusinessLabel>Contact CRM
                 <input name="contactSearch" list="house-contact-options" placeholder="Nom, société, email ou téléphone" autoComplete="off" />
                 <datalist id="house-contact-options">
                   {sortedHouseContacts.map((contact) => <option key={contact.id} value={getHouseContactSearchLabel(contact)} />)}
                 </datalist>
-              </label>
-              <label>Taux horaire
+              </BusinessLabel>
+              <BusinessLabel>Taux horaire
                 <input name="hourlyRate" type="number" min="0" step="0.5" placeholder="Ex : 18" />
-              </label>
-              <label>Document
+              </BusinessLabel>
+              <BusinessLabel>Document
                 <input name="documentFile" type="file" />
-              </label>
-              <label>Notes
+              </BusinessLabel>
+              <BusinessLabel>Notes
                 <textarea name="notes" placeholder="Disponibilités, conditions, préférences..." />
-              </label>
-              <button className="primary-button" type="submit" disabled={uploadingWorkerDocument}>
+              </BusinessLabel>
+              <BusinessButton permission="write" className="primary-button" type="submit" disabled={uploadingWorkerDocument}>
                 {uploadingWorkerDocument ? "Chargement..." : "Ajouter l’intervenant"}
-              </button>
-            </form>
+              </BusinessButton>
+            </BusinessForm>
 
             <div className="list-stack house-history-list">
               {activeWorkers.length === 0 ? <p className="muted-line">Aucun intervenant actif.</p> : activeWorkers.map((worker) => {
@@ -4308,25 +4317,25 @@ function HouseTrackingView({
                       <span>{worker.role} · {currency.format(worker.hourlyRate)}/h</span>
                       {worker.documentFileName && <span>Document : {worker.documentFileName}</span>}
                       {worker.documentStoragePath && (
-                        <button className="secondary-link" type="button" onClick={() => void downloadHouseWorkerDocument(worker)}>Télécharger document</button>
+                        <BusinessButton permission="export" className="secondary-link" type="button" onClick={() => void downloadHouseWorkerDocument(worker)}>Télécharger document</BusinessButton>
                       )}
                     </div>
                     <div className="house-worker-actions">
-                      <button
+                      <BusinessButton permission="write"
                         className="secondary-button"
                         type="button"
                         onClick={() => window.confirm(`Archiver ${worker.contactName} ?\n\nSa fiche, ses documents, ses heures et ses paiements seront intégralement conservés.`) && onArchiveWorker(worker.id)}
                       >
                         Archiver
-                      </button>
+                      </BusinessButton>
                       {!hasHistory && (
-                        <button
+                        <BusinessButton permission="remove"
                           className="danger-link"
                           type="button"
                           onClick={() => window.confirm(`Supprimer définitivement ${worker.contactName} ?\n\nCette action supprimera uniquement sa fiche d’intervenant et ne pourra pas être annulée.`) && onPermanentlyDeleteWorker(worker.id)}
                         >
                           Supprimer définitivement
-                        </button>
+                        </BusinessButton>
                       )}
                     </div>
                   </article>
@@ -4350,19 +4359,19 @@ function HouseTrackingView({
                         <span>Coût {currency.format(history.due)} · Delta {formatHouseBalanceLabel(history.balance)}</span>
                         {worker.documentFileName && <span>Document : {worker.documentFileName}</span>}
                         {worker.documentStoragePath && (
-                          <button className="secondary-link" type="button" onClick={() => void downloadHouseWorkerDocument(worker)}>Télécharger document</button>
+                          <BusinessButton permission="export" className="secondary-link" type="button" onClick={() => void downloadHouseWorkerDocument(worker)}>Télécharger document</BusinessButton>
                         )}
                       </div>
                       <div className="house-worker-actions">
-                        <button className="secondary-button" type="button" onClick={() => onReactivateWorker(worker.id)}>Réactiver</button>
+                        <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => onReactivateWorker(worker.id)}>Réactiver</BusinessButton>
                         {!hasHistory && (
-                          <button
+                          <BusinessButton permission="remove"
                             className="danger-link"
                             type="button"
                             onClick={() => window.confirm(`Supprimer définitivement ${worker.contactName} ?\n\nCette action supprimera uniquement sa fiche d’intervenant et ne pourra pas être annulée.`) && onPermanentlyDeleteWorker(worker.id)}
                           >
                             Supprimer définitivement
-                          </button>
+                          </BusinessButton>
                         )}
                       </div>
                     </article>
@@ -4424,11 +4433,11 @@ function HouseTrackingView({
                 <p className="eyebrow">Archives</p>
                 <h3 id="house-archive-picker-title">Intervenants archivés</h3>
               </div>
-              <button className="secondary-button house-archive-picker-close" type="button" aria-label="Fermer" onClick={closeArchivedWorkerPicker}>×</button>
+              <BusinessButton className="secondary-button house-archive-picker-close" type="button" aria-label="Fermer" onClick={closeArchivedWorkerPicker}>×</BusinessButton>
             </div>
 
             {archivedWorkers.length > 1 && (
-              <label className="house-archive-search">Rechercher
+              <BusinessLabel className="house-archive-search">Rechercher
                 <input
                   autoFocus
                   type="search"
@@ -4436,7 +4445,7 @@ function HouseTrackingView({
                   placeholder="Nom ou rôle"
                   onChange={(event) => setArchivedWorkerSearch(event.target.value)}
                 />
-              </label>
+              </BusinessLabel>
             )}
 
             <div className="house-archive-picker-list">
@@ -4446,14 +4455,14 @@ function HouseTrackingView({
                 const history = getHouseTrackingWorkerHistorySummary(worker.id, timeEntries, payments);
 
                 return (
-                  <button className="house-archive-worker-button" key={worker.id} type="button" onClick={() => selectArchivedWorker(worker.id)}>
+                  <BusinessButton className="house-archive-worker-button" key={worker.id} type="button" onClick={() => selectArchivedWorker(worker.id)}>
                     <span className="house-archive-worker-name">
                       <strong>{worker.contactName}</strong>
                       <span className="status-pill house-archived-badge">Archivé</span>
                     </span>
                     <span>{worker.role} · {formatHours(history.hours)} · {currency.format(history.paid)} payé</span>
                     <small>{history.timeEntries} ligne(s) d’heures · {history.payments} paiement(s) · Delta {formatHouseBalanceLabel(history.balance)}</small>
-                  </button>
+                  </BusinessButton>
                 );
               })}
             </div>
@@ -4489,6 +4498,7 @@ function VendorInvoicesView({
   onDelete: (id: string) => void;
   onOpenQuote: (quoteId: string) => void;
 }) {
+  const business = useBusinessPermissions();
   const [bankContactId, setBankContactId] = useState("");
   const bankContact = contacts.find(c => c.id === bankContactId);
   const [statusFilter, setStatusFilter] = useState<VendorInvoice["status"] | "Tous">("Tous");
@@ -4633,6 +4643,7 @@ function VendorInvoicesView({
   }
 
   async function uploadVendorInvoiceDocument(file: File, invoiceId: string) {
+    if (business) return {invoiceDocumentStoragePath:await business.upload("vendorInvoices",invoiceId,file),invoiceDocumentName:file.name};
     const { data: userData, error: userError } = await supabase.auth.getUser();
 
     if (userError || !userData.user) {
@@ -4680,6 +4691,7 @@ function VendorInvoicesView({
   }
 
   async function openVendorInvoicePreview(invoice: VendorInvoice) {
+    if(business)return business.download(invoice.invoiceDocumentStoragePath||"",invoice.invoiceDocumentName||"facture.pdf");
     const { storagePath, externalUrl, fileName } = getVendorInvoiceDocumentSource(invoice);
 
     if (invoicePreview?.url?.startsWith("blob:")) {
@@ -4730,6 +4742,7 @@ function VendorInvoicesView({
   }
 
   async function downloadVendorInvoiceDocument(invoice: VendorInvoice) {
+    if (business) return business.download(invoice.invoiceDocumentStoragePath || "",invoice.invoiceDocumentName || "facture.pdf");
     const { storagePath, externalUrl, fileName } = getVendorInvoiceDocumentSource(invoice);
 
     if (storagePath) {
@@ -4810,6 +4823,7 @@ function VendorInvoicesView({
       try {
         setUploadingInvoiceDocument(true);
         uploadedInvoiceDocument = await uploadVendorInvoiceDocument(invoiceFile, invoiceId);
+        if (business) await business.check();
       } catch (error) {
         window.alert(`Facture non importée : ${error instanceof Error ? error.message : "erreur inconnue"}`);
         setUploadingInvoiceDocument(false);
@@ -4872,7 +4886,7 @@ function VendorInvoicesView({
     if (editingInvoice?.paymentBankAccountId && editingInvoice.contactId !== contactId) {
       window.alert("Le prestataire ne peut pas changer après sélection d’un compte bancaire."); return;
     }
-    if (!invoice.contactName) return window.alert("Choisissez un contact prestataire.");
+    if (!invoice.contactName && (!business || business.read("contacts") || !editingInvoice)) return window.alert("Choisissez un contact prestataire.");
     if (!invoice.amount || invoice.amount <= 0) return window.alert("Ajoutez un montant de facture.");
 
     if (editingInvoice) {
@@ -4899,7 +4913,7 @@ function VendorInvoicesView({
           setDuplicateDecision(null);
           void submitInvoiceForm(form, true);
         }} />}
-      {bankContact && <VendorBankContactDialog contact={bankContact} actor={actor} onUpdate={onUpdateContact} onClose={() => setBankContactId("")} />}
+      {!business && bankContact && <VendorBankContactDialog contact={bankContact} actor={actor} onUpdate={onUpdateContact} onClose={() => setBankContactId("")} />}
       <section className="card vendor-invoices-list-card">
         <div className="section-heading">
           <div>
@@ -4914,14 +4928,14 @@ function VendorInvoicesView({
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
           {(["Tous", "En attente de facture", "À payer", "Partiellement payé", "En retard", "Payé"] as Array<VendorInvoice["status"] | "Tous">).map((status) => (
-            <button
+            <BusinessButton
               key={status}
               type="button"
               className={`${statusFilter === status ? "primary-button" : "secondary-button"} ${status === "Payé" ? "invoice-filter-paid" : status === "Tous" ? "" : "invoice-filter-danger"}`}
               onClick={() => setStatusFilter(status)}
             >
               {status}
-            </button>
+            </BusinessButton>
           ))}
         </div>
 
@@ -4961,7 +4975,7 @@ function VendorInvoicesView({
                   </p>
                   <p className="muted-line">Devis d’origine : {invoice.sourceQuoteReference || invoice.sourceQuoteId || "Non renseigné"}</p>
 
-                  <VendorInvoicePayment invoice={invoice} contact={contacts.find(c => c.id === invoice.contactId)} onUpdate={onUpdate} onOpenContact={() => setBankContactId(invoice.contactId)} />
+                  {!business && <VendorInvoicePayment invoice={invoice} contact={contacts.find(c => c.id === invoice.contactId)} onUpdate={onUpdate} onOpenContact={() => setBankContactId(invoice.contactId)} />}
                   <div className="stats-grid vendor-invoice-stats">
                     <div className="mini-stat">
                       <span>Montant</span>
@@ -4981,38 +4995,38 @@ function VendorInvoicesView({
                 <div className="item-actions contact-row-actions oar-contact-actions">
                   <span className={`status-pill vendor-invoice-status ${invoice.status === "Payé" ? "semantic-success invoice-status-paid" : invoice.status === "En attente de facture" ? "semantic-pending" : "semantic-danger invoice-status-danger"}`}>{invoice.status}</span>
                   {invoice.sourceQuoteId && (
-                    <button className="secondary-button" type="button" onClick={() => onOpenQuote(invoice.sourceQuoteId || "")}>
+                    <BusinessButton className="secondary-button" type="button" onClick={() => onOpenQuote(invoice.sourceQuoteId || "")}>
                       Voir devis
-                    </button>
+                    </BusinessButton>
                   )}
                   {(invoice.invoiceDocumentStoragePath || invoice.invoiceDocumentUrl || documents.find((crmDocument) => crmDocument.id === invoice.linkedDocumentId)?.storagePath || documents.find((crmDocument) => crmDocument.id === invoice.linkedDocumentId)?.url) && (
                     <>
-                      <button
+                      <BusinessButton
                         className="secondary-button vendor-invoice-document-button"
                         type="button"
                         disabled={previewingInvoiceDocument}
                         onClick={() => void openVendorInvoicePreview(invoice)}
                       >
                         {previewingInvoiceDocument ? "Ouverture..." : "Voir facture"}
-                      </button>
-                      <button
+                      </BusinessButton>
+                      <BusinessButton permission="export"
                         className="secondary-button vendor-invoice-document-button"
                         type="button"
                         onClick={() => void downloadVendorInvoiceDocument(invoice)}
                       >
                         Télécharger facture
-                      </button>
+                      </BusinessButton>
                     </>
                   )}
-                  <button className="secondary-button" type="button" onClick={() => startEditInvoice(invoice)}>
+                  <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => startEditInvoice(invoice)}>
                     Modifier
-                  </button>
-                  {orphan ? <button className="danger-link" type="button" onClick={() => {
+                  </BusinessButton>
+                  {orphan ? <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => {
                     if (window.confirm("Supprimer la facture automatique orpheline ? Les liens, documents et paiements seront vérifiés à nouveau.")) onDeleteOrphan(invoice.id);
-                  }}>Supprimer la facture orpheline</button> : !isAutomaticVendorInvoice(invoice) && <button
+                  }}>Supprimer la facture orpheline</BusinessButton> : !isAutomaticVendorInvoice(invoice) && <BusinessButton permission="remove"
                     className="danger-link" type="button" onClick={() => {
                       if (window.confirm("Supprimer cette facture prestataire ?")) onDelete(invoice.id);
-                    }}>Supprimer</button>}
+                    }}>Supprimer</BusinessButton>}
                 </div>
               </article>
               );
@@ -5032,7 +5046,7 @@ function VendorInvoicesView({
           </div>
         )}
 
-        <form key={editingInvoice?.id || "new-vendor-invoice"} className="form-grid" onSubmit={submitInvoice}>
+        <BusinessForm key={editingInvoice?.id || "new-vendor-invoice"} className="form-grid" onSubmit={submitInvoice}>
           <SearchableBusinessContactPicker
             contacts={selectableContacts}
             defaultContact={findContactForVendorInvoice(editingInvoice)}
@@ -5042,21 +5056,21 @@ function VendorInvoicesView({
             fallbackProfession={editingInvoice?.category || ""}
           />
 
-          <label>Objet facture
+          <BusinessLabel>Objet facture
             <input name="title" defaultValue={editingInvoice?.title || ""} placeholder="Ex : Entretien jardin juin" />
-          </label>
+          </BusinessLabel>
 
-          <label>Référence facture<input name="invoiceReference" defaultValue={editingInvoice?.invoiceReference || ""} placeholder="Ex : 001 (facultatif)" /></label>
+          <BusinessLabel>Référence facture<input name="invoiceReference" defaultValue={editingInvoice?.invoiceReference || ""} placeholder="Ex : 001 (facultatif)" /></BusinessLabel>
 
-          <label>Date facture
+          <BusinessLabel>Date facture
             <input name="invoiceDate" type="date" defaultValue={editingInvoice?.invoiceDate || ""} />
-          </label>
+          </BusinessLabel>
 
-          <label>Date paiement
+          <BusinessLabel>Date paiement
             <input name="dueDate" type="date" defaultValue={editingInvoice?.dueDate || ""} />
-          </label>
+          </BusinessLabel>
 
-          <label>Montant facture
+          <BusinessLabel>Montant facture
             <input
               name="amount"
               type="text"
@@ -5065,9 +5079,9 @@ function VendorInvoicesView({
               placeholder="Ex : 1 023,70"
               required
             />
-          </label>
+          </BusinessLabel>
 
-          <label>Montant payé
+          <BusinessLabel>Montant payé
             <input
               name="paidAmount"
               type="text"
@@ -5076,34 +5090,34 @@ function VendorInvoicesView({
               placeholder="Ex : 0,00"
             />
             <span className="field-help">Paiement impossible sans facture réelle importée.</span>
-          </label>
+          </BusinessLabel>
 
-          <label>Moyen de paiement
+          <BusinessLabel>Moyen de paiement
             <input name="paymentMethod" defaultValue={editingInvoice?.paymentMethod || ""} placeholder="Virement, espèces, CB..." />
-          </label>
+          </BusinessLabel>
 
-          <label className="vendor-invoice-file-field">Importer la facture
+          <BusinessLabel className="vendor-invoice-file-field">Importer la facture
             <input name="invoiceFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx" />
             <span className="field-help">
               {editingInvoice?.invoiceDocumentName ? `Fichier actuel : ${editingInvoice.invoiceDocumentName}` : "PDF, image ou document depuis l’ordinateur"}
             </span>
-          </label>
+          </BusinessLabel>
 
-          <label className="planning-entry-notes">Notes
+          <BusinessLabel className="planning-entry-notes">Notes
             <textarea name="notes" defaultValue={editingInvoice?.notes || ""} placeholder="Détails, facture reçue, remarque..." />
-          </label>
+          </BusinessLabel>
 
           <div className="mobile-form-actions">
-            <button className="primary-button planning-entry-submit" type="submit" disabled={uploadingInvoiceDocument}>
+            <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit" disabled={uploadingInvoiceDocument}>
               {uploadingInvoiceDocument ? "Import en cours..." : editingInvoice ? "Enregistrer" : "Ajouter facture"}
-            </button>
+            </BusinessButton>
             {editingInvoice && (
-              <button className="secondary-button" type="button" onClick={() => setEditingInvoice(null)}>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingInvoice(null)}>
                 Annuler
-              </button>
+              </BusinessButton>
             )}
           </div>
-        </form>
+        </BusinessForm>
       </section>
 
       {invoicePreview && (
@@ -5115,9 +5129,9 @@ function VendorInvoicesView({
                 <h3>{invoicePreview.fileName}</h3>
                 <p className="muted-line">{invoicePreview.invoice.contactName} · {invoicePreview.invoice.title}</p>
               </div>
-              <button className="secondary-button" type="button" onClick={closeVendorInvoicePreview}>
+              <BusinessButton className="secondary-button" type="button" onClick={closeVendorInvoicePreview}>
                 Fermer
-              </button>
+              </BusinessButton>
             </div>
 
             {isVendorInvoicePreviewable(invoicePreview.fileName, invoicePreview.mimeType) ? (
@@ -5140,12 +5154,12 @@ function VendorInvoicesView({
             )}
 
             <div className="form-actions vendor-invoice-preview-actions">
-              <button className="secondary-button" type="button" onClick={() => window.open(invoicePreview.url, "_blank", "noopener,noreferrer")}>
+              <BusinessButton className="secondary-button" type="button" onClick={() => window.open(invoicePreview.url, "_blank", "noopener,noreferrer")}>
                 Ouvrir dans un onglet
-              </button>
-              <button className="primary-button" type="button" onClick={() => void downloadVendorInvoiceDocument(invoicePreview.invoice)}>
+              </BusinessButton>
+              <BusinessButton permission="export" className="primary-button" type="button" onClick={() => void downloadVendorInvoiceDocument(invoicePreview.invoice)}>
                 Télécharger
-              </button>
+              </BusinessButton>
             </div>
           </div>
         </div>
@@ -5238,6 +5252,9 @@ function DashboardCommandCard({
   children: any;
   tone?: "neutral" | "warning" | "danger" | "success";
 }) {
+  const access=useBusinessPermissions();
+  const modules:Record<string,import('@/lib/access/modules').ModuleId[]>={'Factures prestataires':['vendorInvoices'],'Aujourd’hui':['planning'],'Argent':['bookings','vendorInvoices','houseTracking'],'Réservations':['bookings'],'Commercial':['leads','quotes'],'Planning':['planning'],'Disponibilités':['properties','vehicles','boats']};
+  if(access&&modules[eyebrow]&&!modules[eyebrow].some(access.read))return null;
   return (
     <section className={`card dashboard-command-card tone-${tone}`}>
       <div className="dashboard-command-card-heading">
@@ -5263,6 +5280,9 @@ function DashboardQuickTile({
   caption: string;
   onClick: () => void;
 }) {
+  const access=useBusinessPermissions();
+  const moduleByCaption:Record<string,import("@/lib/access/modules").ModuleId>={"Factures prestataires":"vendorInvoices","Interventions du jour":"planning","Suivi maison":"houseTracking","Paiements clients":"bookings"};
+  if(access&&moduleByCaption[caption]&&!access.read(moduleByCaption[caption]))return null;
   return (
     <button className="stat-card dashboard-command-kpi-tile" type="button" onClick={onClick} title="Ouvrir le module concerné">
       <p>{label}</p>
@@ -5272,7 +5292,282 @@ function DashboardQuickTile({
   );
 }
 
-export default function CRMApp({ sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+  function normalizeDuplicateKey(value?: string | number | null) {
+    return String(value ?? "")
+      .trim()
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/\s+/g, " ");
+  }
+
+  function confirmDuplicateContactIn(contacts: Contact[], contact: Contact) {
+    const candidateName = normalizeDuplicateKey(contact.name);
+    const candidateEmail = normalizeDuplicateKey(contact.email);
+
+    const duplicate = contacts.find((existing) => {
+      const sameName = candidateName && normalizeDuplicateKey(existing.name) === candidateName;
+      const sameEmail = candidateEmail && normalizeDuplicateKey(existing.email) === candidateEmail;
+
+      return sameName || sameEmail;
+    });
+
+    if (!duplicate) return true;
+
+    return window.confirm(
+      `Doublon possible détecté.\n\nContact existant : ${duplicate.name}${duplicate.email ? ` (${duplicate.email})` : ""}\nNouveau contact : ${contact.name}${contact.email ? ` (${contact.email})` : ""}\n\nCréer quand même ?`
+    );
+  }
+
+  function confirmDuplicateLeadIn(leads: Lead[], lead: Lead) {
+    const candidateContact = normalizeDuplicateKey(lead.contactName);
+    const candidateCategory = normalizeDuplicateKey(lead.category);
+    const candidateStart = normalizeDuplicateKey(lead.rentalStartDate);
+    const candidateEnd = normalizeDuplicateKey(lead.rentalEndDate);
+
+    const duplicate = leads.find((existing) => {
+      const sameContact = normalizeDuplicateKey(existing.contactName) === candidateContact;
+      const sameCategory = normalizeDuplicateKey(existing.category) === candidateCategory;
+      const sameAsset = Boolean(lead.assetId && existing.assetId && existing.assetId === lead.assetId);
+      const sameDates =
+        Boolean(candidateStart || candidateEnd) &&
+        normalizeDuplicateKey(existing.rentalStartDate) === candidateStart &&
+        normalizeDuplicateKey(existing.rentalEndDate) === candidateEnd;
+
+      return sameContact && sameCategory && (sameAsset || sameDates);
+    });
+
+    if (!duplicate) return true;
+
+    return window.confirm(
+      `Lead similaire déjà existant.\n\nContact : ${duplicate.contactName}\nCatégorie : ${duplicate.category}\nDates : ${duplicate.rentalStartDate || "?"} → ${duplicate.rentalEndDate || "?"}\n\nCréer quand même ?`
+    );
+  }
+
+  function normalizeQuickEntryDate(value: string) {
+    const match = value.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
+    if (!match) return "";
+
+    const day = match[1].padStart(2, "0");
+    const month = match[2].padStart(2, "0");
+    const rawYear = match[3];
+    const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+
+    return `${year}-${month}-${day}`;
+  }
+
+  function parseQuickEntryText(text: string) {
+    const raw = text.trim();
+    const lower = raw.toLowerCase();
+
+    const email = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? "";
+    const phone = raw.match(/(\+?\d[\d\s().-]{7,}\d)/)?.[0]?.trim() ?? "";
+
+    const budgetMatch = raw.match(/(?:budget|prix|valeur|montant)\s*[:\-]?\s*([\d\s.,]+)\s*€?/i)
+      ?? raw.match(/([\d\s]{4,})\s*€/);
+
+    const budget = budgetMatch
+      ? Number(String(budgetMatch[1]).replace(/[^\d]/g, ""))
+      : 0;
+
+    const explicitName = raw.match(/(?:client|nom|contact)\s*[:\-]\s*([^\n]+)/i)?.[1]?.trim();
+
+    const fallbackName = raw
+      .split(/\n/)
+      .map((line) => line.trim())
+      .find((line) =>
+        line.length > 2 &&
+        line.length < 60 &&
+        !line.includes("@") &&
+        !/budget|prix|date|villa|bateau|voiture|conciergerie|message|note/i.test(line)
+      );
+
+    const contactName = explicitName || fallbackName || "Contact à qualifier";
+
+    const destination =
+      raw.match(/(?:ville|lieu|destination|secteur)\s*[:\-]\s*([^\n]+)/i)?.[1]?.trim()
+      || (lower.includes("super cannes") ? "Super Cannes" : "")
+      || (lower.includes("cannes") ? "Cannes" : "");
+
+    const category =
+      lower.includes("bateau") || lower.includes("yacht") ? "Yacht"
+      : lower.includes("voiture") || lower.includes("car") ? "Voiture"
+      : lower.includes("conciergerie") ? "Conciergerie"
+      : "Villa";
+
+    const dateMatches = [...raw.matchAll(/\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/g)].map((m) => m[0]);
+    const rentalStartDate = dateMatches[0] ? normalizeQuickEntryDate(dateMatches[0]) : "";
+    const rentalEndDate = dateMatches[1] ? normalizeQuickEntryDate(dateMatches[1]) : "";
+
+    const bedroomsMatch = raw.match(/(\d+)\s*(?:chambres|chambre|beds|bedrooms)/i);
+    const peopleMatch = raw.match(/(\d+)\s*(?:personnes|pax|guests|adultes|adults)/i);
+
+    const nextAction =
+      category === "Villa"
+        ? "Qualifier dates, destination, nombre de personnes, chambres, budget réel et critères prioritaires."
+        : category === "Yacht"
+          ? "Qualifier dates, port, nombre de personnes, durée, budget et type de bateau."
+          : category === "Voiture"
+            ? "Qualifier dates, lieu de livraison, modèle souhaité, budget et assurance."
+            : "Qualifier besoin conciergerie, dates, lieu, urgence et budget.";
+
+    const notes = [
+      raw,
+      bedroomsMatch ? `Chambres détectées : ${bedroomsMatch[1]}` : "",
+      peopleMatch ? `Personnes détectées : ${peopleMatch[1]}` : ""
+    ].filter(Boolean).join("\\n\\n");
+
+    return {
+      contactName,
+      email,
+      phone,
+      budget,
+      destination,
+      category,
+      rentalStartDate,
+      rentalEndDate,
+      nextAction,
+      notes
+    };
+  }
+  function createQuickEntryRecords(rawText: string, contacts: Contact[], leads: Lead[]) {
+    const cleanedText = rawText.trim();
+
+    if (!cleanedText) {
+      window.alert("Colle d’abord un message client.");
+      return;
+    }
+
+    const forbiddenPatterns = [
+      /git\s+(add|commit|push|checkout|status)/i,
+      /npm\s+(run|install|build)/i,
+      /components\/CRMApp\.tsx/i,
+      /function\s+\w+/i,
+      /const\s+\w+\s*=/i,
+      /<button|<div|<section/i
+    ];
+
+    if (forbiddenPatterns.some((pattern) => pattern.test(cleanedText))) {
+      window.alert("Créer depuis message refusé : ce texte ressemble à du code ou à une commande terminal, pas à une demande client.");
+      return;
+    }
+
+    const draft = parseQuickEntryText(cleanedText);
+
+    const weakNames = [
+      "client",
+      "hello",
+      "bonjour",
+      "one address riviera",
+      "oneaddress riviera",
+      "à compléter",
+      "a completer",
+      "git add",
+      "npm run"
+    ];
+
+    const currentName = String(draft.contactName || "").trim();
+    const nameLooksWeak =
+      !currentName ||
+      currentName.length < 3 ||
+      weakNames.some((weakName) => currentName.toLowerCase().includes(weakName));
+
+    if (nameLooksWeak) {
+      const manualName = window.prompt(
+        "Nom du client non détecté clairement. Indique le nom complet du client avant de créer la fiche :",
+        draft.email ? draft.email.split("@")[0] : ""
+      );
+
+      if (!manualName?.trim()) {
+        window.alert("Création annulée : nom client obligatoire.");
+        return;
+      }
+
+      draft.contactName = manualName.trim();
+    }
+
+    const confirmed = window.confirm(
+      `Créer un contact + lead pour : ${draft.contactName} ?\n\nEmail : ${draft.email || "À compléter"}\nCatégorie : ${draft.category || "À compléter"}\nDestination / actif : ${draft.destination || "À compléter"}\nDates : ${draft.rentalStartDate || "À compléter"} → ${draft.rentalEndDate || "À compléter"}\nBudget : ${draft.budget ? draft.budget.toLocaleString("fr-FR") + " €" : "À compléter"}\n\nProchaine action :\n${draft.nextAction || "À compléter"}`
+    );
+
+    if (!confirmed) return;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const contactId = crypto.randomUUID();
+    const leadId = crypto.randomUUID();
+
+    const newContact = {
+      id: contactId,
+      name: draft.contactName,
+      kind: "Client",
+      email: draft.email,
+      phone: draft.phone,
+      city: draft.destination,
+      postalAddress: "",
+      budget: draft.budget,
+      source: "Saisie rapide",
+      notes: draft.notes,
+      clientLevel: "Standard",
+      preferredLanguage: "Français",
+      relationshipStatus: "Prospect",
+      preferences: "",
+      importantNotes: "",
+      createdAt: today
+    } as any;
+
+    const newLead = {
+      id: leadId,
+      category: draft.category,
+      contactName: draft.contactName,
+      assetType: "",
+      assetId: "",
+      status: "Nouveau",
+      value: draft.budget,
+      priority: "Moyenne",
+      nextAction: draft.nextAction,
+      notes: draft.notes,
+      dueDate: today,
+      rentalStartDate: draft.rentalStartDate,
+      rentalEndDate: draft.rentalEndDate
+    } as any;
+
+    if (!confirmDuplicateContactIn(contacts, newContact as Contact)) return;
+    if (!confirmDuplicateLeadIn(leads, newLead as Lead)) return;
+
+    return {newContact, newLead};
+  }
+  function promptQuickEntryText(savedText = "") {
+    const choice = window.prompt(
+      "Choisis un modèle :\n\n1 = Villa\n2 = Bateau / Yacht\n3 = Voiture\n4 = Conciergerie\n5 = Texte libre",
+      "1"
+    );
+
+    if (!choice) return;
+
+    const templates: Record<string, string> = {
+      "1": "Client : \nRecherche villa à \nDates : \nBudget : \nPersonnes : \nChambres : \nBesoin : villa, secteur, style, contraintes, services souhaités\nNote : ",
+      "2": "Client : \nRecherche yacht / bateau\nPort / départ : \nDates : \nDurée : \nBudget : \nPersonnes : \nBesoin : taille, équipage, journée ou plusieurs jours, restauration, itinéraire\nNote : ",
+      "3": "Client : \nRecherche voiture\nLieu de livraison : \nDates : \nBudget : \nModèle souhaité : \nBesoin : chauffeur ou sans chauffeur, assurance, livraison, restitution\nNote : ",
+      "4": "Client : \nDemande conciergerie\nLieu : \nDates : \nBudget : \nBesoin : réservation, service maison, transport, événement, personnel, urgence\nNote : ",
+      "5": "Client : \nRecherche : \nDates : \nBudget : \nBesoin : \nNote : "
+    };
+
+    const selectedTemplate = templates[choice.trim()] || templates["5"];
+
+    const text = window.prompt(
+      "Complète le modèle puis valide :",
+      savedText || selectedTemplate
+    );
+
+    if (!text) return;
+
+    return text;
+  }
+
+
+export {createQuickEntryRecords, promptQuickEntryText};
+
+export default function CRMApp({ access, initialTab = "dashboard", onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; onExternalNavigate: (tab: UnifiedTab) => void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
   const currentAccessToken = useCommittedValue(sessionAccessToken);
   const identityLifetime = useRef(new AbortController());
   useEffect(() => {
@@ -5281,13 +5576,14 @@ export default function CRMApp({ sessionUserId, sessionAccessToken, sessionEmail
     return () => controller.abort();
   }, []);
 
+  const [formDirty, setFormDirty] = useState(false);
   const [activeActor, setActiveActor] = useState<CRMActor>(() => {
     const savedActor = crmCache.getItem(ACTOR_STORAGE_KEY);
     return isCRMActor(savedActor) ? savedActor : "Matteo";
   });
 
-  const [activeTab, setActiveTabState] = useState<Tab>("dashboard");
-  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
+  const [, setMobileMoreOpen] = useState(false);
 
 
   const [quickEntryText, setQuickEntryText] = useState("");
@@ -5395,14 +5691,14 @@ export default function CRMApp({ sessionUserId, sessionAccessToken, sessionEmail
   const hasUnsavedChanges = sharedWorkspaceReady && acceptedWorkspaceFingerprint !== null
     && workspaceFingerprint(data) !== acceptedWorkspaceFingerprint;
 
-  useEffect(() => { onUnsavedChange?.(hasUnsavedChanges); }, [hasUnsavedChanges, onUnsavedChange]);
+  useEffect(() => { onUnsavedChange?.(hasUnsavedChanges || formDirty); }, [hasUnsavedChanges, formDirty, onUnsavedChange]);
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
   useEffect(() => {
-    if (!hasUnsavedChanges) return;
+    if (!hasUnsavedChanges && !formDirty) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [hasUnsavedChanges]);
+  }, [hasUnsavedChanges, formDirty]);
 
   const acceptSharedWorkspace = useCallback((payload: CRMData, revision: string) => {
     workspaceSync.current.load(payload, revision);
@@ -5471,6 +5767,8 @@ export default function CRMApp({ sessionUserId, sessionAccessToken, sessionEmail
 
 
   function setActiveTab(tab: Tab) {
+    if ((hasUnsavedChanges || formDirty) && tab !== activeTab && !window.confirm("Une saisie est en cours. Quitter ce module ?")) return;
+    setFormDirty(false);
     setQuery("");
     setActiveTabState(tab);
   }
@@ -6231,57 +6529,8 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     setToast({ message, tone });
   }
 
-  function normalizeDuplicateKey(value?: string | number | null) {
-    return String(value ?? "")
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/\s+/g, " ");
-  }
-
-  function confirmDuplicateContact(contact: Contact) {
-    const candidateName = normalizeDuplicateKey(contact.name);
-    const candidateEmail = normalizeDuplicateKey(contact.email);
-
-    const duplicate = data.contacts.find((existing) => {
-      const sameName = candidateName && normalizeDuplicateKey(existing.name) === candidateName;
-      const sameEmail = candidateEmail && normalizeDuplicateKey(existing.email) === candidateEmail;
-
-      return sameName || sameEmail;
-    });
-
-    if (!duplicate) return true;
-
-    return window.confirm(
-      `Doublon possible détecté.\n\nContact existant : ${duplicate.name}${duplicate.email ? ` (${duplicate.email})` : ""}\nNouveau contact : ${contact.name}${contact.email ? ` (${contact.email})` : ""}\n\nCréer quand même ?`
-    );
-  }
-
-  function confirmDuplicateLead(lead: Lead) {
-    const candidateContact = normalizeDuplicateKey(lead.contactName);
-    const candidateCategory = normalizeDuplicateKey(lead.category);
-    const candidateStart = normalizeDuplicateKey(lead.rentalStartDate);
-    const candidateEnd = normalizeDuplicateKey(lead.rentalEndDate);
-
-    const duplicate = data.leads.find((existing) => {
-      const sameContact = normalizeDuplicateKey(existing.contactName) === candidateContact;
-      const sameCategory = normalizeDuplicateKey(existing.category) === candidateCategory;
-      const sameAsset = Boolean(lead.assetId && existing.assetId && existing.assetId === lead.assetId);
-      const sameDates =
-        Boolean(candidateStart || candidateEnd) &&
-        normalizeDuplicateKey(existing.rentalStartDate) === candidateStart &&
-        normalizeDuplicateKey(existing.rentalEndDate) === candidateEnd;
-
-      return sameContact && sameCategory && (sameAsset || sameDates);
-    });
-
-    if (!duplicate) return true;
-
-    return window.confirm(
-      `Lead similaire déjà existant.\n\nContact : ${duplicate.contactName}\nCatégorie : ${duplicate.category}\nDates : ${duplicate.rentalStartDate || "?"} → ${duplicate.rentalEndDate || "?"}\n\nCréer quand même ?`
-    );
-  }
+  function confirmDuplicateContact(contact: Contact) { return confirmDuplicateContactIn(data.contacts, contact); }
+  function confirmDuplicateLead(lead: Lead) { return confirmDuplicateLeadIn(data.leads, lead); }
 
   function confirmDuplicateAsset(kind: "bien" | "voiture" | "bateau", item: { name?: string; city?: string; port?: string }) {
     const candidateName = normalizeDuplicateKey(item.name);
@@ -6314,196 +6563,10 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
 
 
-  function normalizeQuickEntryDate(value: string) {
-    const match = value.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})/);
-    if (!match) return "";
-
-    const day = match[1].padStart(2, "0");
-    const month = match[2].padStart(2, "0");
-    const rawYear = match[3];
-    const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
-
-    return `${year}-${month}-${day}`;
-  }
-
-  function parseQuickEntryText(text: string) {
-    const raw = text.trim();
-    const lower = raw.toLowerCase();
-
-    const email = raw.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ?? "";
-    const phone = raw.match(/(\+?\d[\d\s().-]{7,}\d)/)?.[0]?.trim() ?? "";
-
-    const budgetMatch = raw.match(/(?:budget|prix|valeur|montant)\s*[:\-]?\s*([\d\s.,]+)\s*€?/i)
-      ?? raw.match(/([\d\s]{4,})\s*€/);
-
-    const budget = budgetMatch
-      ? Number(String(budgetMatch[1]).replace(/[^\d]/g, ""))
-      : 0;
-
-    const explicitName = raw.match(/(?:client|nom|contact)\s*[:\-]\s*([^\n]+)/i)?.[1]?.trim();
-
-    const fallbackName = raw
-      .split(/\n/)
-      .map((line) => line.trim())
-      .find((line) =>
-        line.length > 2 &&
-        line.length < 60 &&
-        !line.includes("@") &&
-        !/budget|prix|date|villa|bateau|voiture|conciergerie|message|note/i.test(line)
-      );
-
-    const contactName = explicitName || fallbackName || "Contact à qualifier";
-
-    const destination =
-      raw.match(/(?:ville|lieu|destination|secteur)\s*[:\-]\s*([^\n]+)/i)?.[1]?.trim()
-      || (lower.includes("super cannes") ? "Super Cannes" : "")
-      || (lower.includes("cannes") ? "Cannes" : "");
-
-    const category =
-      lower.includes("bateau") || lower.includes("yacht") ? "Yacht"
-      : lower.includes("voiture") || lower.includes("car") ? "Voiture"
-      : lower.includes("conciergerie") ? "Conciergerie"
-      : "Villa";
-
-    const dateMatches = [...raw.matchAll(/\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}/g)].map((m) => m[0]);
-    const rentalStartDate = dateMatches[0] ? normalizeQuickEntryDate(dateMatches[0]) : "";
-    const rentalEndDate = dateMatches[1] ? normalizeQuickEntryDate(dateMatches[1]) : "";
-
-    const bedroomsMatch = raw.match(/(\d+)\s*(?:chambres|chambre|beds|bedrooms)/i);
-    const peopleMatch = raw.match(/(\d+)\s*(?:personnes|pax|guests|adultes|adults)/i);
-
-    const nextAction =
-      category === "Villa"
-        ? "Qualifier dates, destination, nombre de personnes, chambres, budget réel et critères prioritaires."
-        : category === "Yacht"
-          ? "Qualifier dates, port, nombre de personnes, durée, budget et type de bateau."
-          : category === "Voiture"
-            ? "Qualifier dates, lieu de livraison, modèle souhaité, budget et assurance."
-            : "Qualifier besoin conciergerie, dates, lieu, urgence et budget.";
-
-    const notes = [
-      raw,
-      bedroomsMatch ? `Chambres détectées : ${bedroomsMatch[1]}` : "",
-      peopleMatch ? `Personnes détectées : ${peopleMatch[1]}` : ""
-    ].filter(Boolean).join("\\n\\n");
-
-    return {
-      contactName,
-      email,
-      phone,
-      budget,
-      destination,
-      category,
-      rentalStartDate,
-      rentalEndDate,
-      nextAction,
-      notes
-    };
-  }
   function saveQuickEntryText(rawText: string) {
-    const cleanedText = rawText.trim();
-
-    if (!cleanedText) {
-      window.alert("Colle d’abord un message client.");
-      return;
-    }
-
-    const forbiddenPatterns = [
-      /git\s+(add|commit|push|checkout|status)/i,
-      /npm\s+(run|install|build)/i,
-      /components\/CRMApp\.tsx/i,
-      /function\s+\w+/i,
-      /const\s+\w+\s*=/i,
-      /<button|<div|<section/i
-    ];
-
-    if (forbiddenPatterns.some((pattern) => pattern.test(cleanedText))) {
-      window.alert("Créer depuis message refusé : ce texte ressemble à du code ou à une commande terminal, pas à une demande client.");
-      return;
-    }
-
-    const draft = parseQuickEntryText(cleanedText);
-
-    const weakNames = [
-      "client",
-      "hello",
-      "bonjour",
-      "one address riviera",
-      "oneaddress riviera",
-      "à compléter",
-      "a completer",
-      "git add",
-      "npm run"
-    ];
-
-    const currentName = String(draft.contactName || "").trim();
-    const nameLooksWeak =
-      !currentName ||
-      currentName.length < 3 ||
-      weakNames.some((weakName) => currentName.toLowerCase().includes(weakName));
-
-    if (nameLooksWeak) {
-      const manualName = window.prompt(
-        "Nom du client non détecté clairement. Indique le nom complet du client avant de créer la fiche :",
-        draft.email ? draft.email.split("@")[0] : ""
-      );
-
-      if (!manualName?.trim()) {
-        window.alert("Création annulée : nom client obligatoire.");
-        return;
-      }
-
-      draft.contactName = manualName.trim();
-    }
-
-    const confirmed = window.confirm(
-      `Créer un contact + lead pour : ${draft.contactName} ?\n\nEmail : ${draft.email || "À compléter"}\nCatégorie : ${draft.category || "À compléter"}\nDestination / actif : ${draft.destination || "À compléter"}\nDates : ${draft.rentalStartDate || "À compléter"} → ${draft.rentalEndDate || "À compléter"}\nBudget : ${draft.budget ? draft.budget.toLocaleString("fr-FR") + " €" : "À compléter"}\n\nProchaine action :\n${draft.nextAction || "À compléter"}`
-    );
-
-    if (!confirmed) return;
-
-    const today = new Date().toISOString().slice(0, 10);
-    const contactId = crypto.randomUUID();
-    const leadId = crypto.randomUUID();
-
-    const newContact = {
-      id: contactId,
-      name: draft.contactName,
-      kind: "Client",
-      email: draft.email,
-      phone: draft.phone,
-      city: draft.destination,
-      postalAddress: "",
-      budget: draft.budget,
-      source: "Saisie rapide",
-      notes: draft.notes,
-      clientLevel: "Standard",
-      preferredLanguage: "Français",
-      relationshipStatus: "Prospect",
-      preferences: "",
-      importantNotes: "",
-      createdAt: today
-    } as any;
-
-    const newLead = {
-      id: leadId,
-      category: draft.category,
-      contactName: draft.contactName,
-      assetType: "",
-      assetId: "",
-      status: "Nouveau",
-      value: draft.budget,
-      priority: "Moyenne",
-      nextAction: draft.nextAction,
-      notes: draft.notes,
-      dueDate: today,
-      rentalStartDate: draft.rentalStartDate,
-      rentalEndDate: draft.rentalEndDate
-    } as any;
-
-    if (!confirmDuplicateContact(newContact as Contact)) return;
-    if (!confirmDuplicateLead(newLead as Lead)) return;
-
+    const records = createQuickEntryRecords(rawText, data.contacts, data.leads);
+    if (!records) return;
+    const {newContact, newLead} = records;
     setData((current: any) => ({
       ...current,
       contacts: [newContact, ...(current.contacts ?? [])],
@@ -7243,31 +7306,8 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   }
 
   function openQuickEntryPrompt() {
-    const choice = window.prompt(
-      "Choisis un modèle :\n\n1 = Villa\n2 = Bateau / Yacht\n3 = Voiture\n4 = Conciergerie\n5 = Texte libre",
-      "1"
-    );
-
-    if (!choice) return;
-
-    const templates: Record<string, string> = {
-      "1": "Client : \nRecherche villa à \nDates : \nBudget : \nPersonnes : \nChambres : \nBesoin : villa, secteur, style, contraintes, services souhaités\nNote : ",
-      "2": "Client : \nRecherche yacht / bateau\nPort / départ : \nDates : \nDurée : \nBudget : \nPersonnes : \nBesoin : taille, équipage, journée ou plusieurs jours, restauration, itinéraire\nNote : ",
-      "3": "Client : \nRecherche voiture\nLieu de livraison : \nDates : \nBudget : \nModèle souhaité : \nBesoin : chauffeur ou sans chauffeur, assurance, livraison, restitution\nNote : ",
-      "4": "Client : \nDemande conciergerie\nLieu : \nDates : \nBudget : \nBesoin : réservation, service maison, transport, événement, personnel, urgence\nNote : ",
-      "5": "Client : \nRecherche : \nDates : \nBudget : \nBesoin : \nNote : "
-    };
-
-    const selectedTemplate = templates[choice.trim()] || templates["5"];
-
-    const text = window.prompt(
-      "Complète le modèle puis valide :",
-      quickEntryText || selectedTemplate
-    );
-
-    if (!text) return;
-
-    saveQuickEntryText(text);
+    const text = promptQuickEntryText(quickEntryText);
+    if (text) saveQuickEntryText(text);
   }
 
   function createQuickEntry() {
@@ -8661,31 +8701,10 @@ function createQuoteDraftFromLead(lead: Lead) {
 
 
   return (
-    <main className="crm-shell crm-readable-redesign">
-      <aside className="sidebar">
-        <div className="brand-block brand-block-logo">
-          <Image src={crmLogo} alt="One Address Riviera" className="crm-sidebar-logo" />
-        </div>
-
-        <nav className="nav-list" aria-label="Navigation principale">
-          {crmNavigationItems.map((item) => (
-            <NavButton
-              key={item.tab}
-              label={item.label}
-              icon={item.icon}
-              active={activeTab === item.tab}
-              onClick={() => setActiveTab(item.tab)}
-              badge={sidebarBadgeCounts[item.tab]}
-            />
-          ))}
-        </nav>
-
-        <div className="sidebar-card">
-          <p className="eyebrow">MVP</p>
-          <strong>Sauvegardes</strong>
-          <span>Utilisez Backup fichier et Sauvegarde cloud après chaque lot d’ajouts. Prêt à connecter une DB ensuite.</span>
-        </div>
-      </aside>
+    <main className="crm-shell crm-readable-redesign" onChangeCapture={event=>{if((event.target as HTMLElement).closest("form"))setFormDirty(true);}} onSubmitCapture={()=>setFormDirty(false)}>
+      <UnifiedNavigation access={access} active={activeTab} badges={sidebarBadgeCounts} onLogout={onLogout} onNavigate={tab => {
+        if (tab === "izord" || tab === "admin") onExternalNavigate(tab); else setActiveTab(tab);
+      }} />
 
       <section className="content-panel">
         <MobileCRMHeader
@@ -9006,50 +9025,8 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
       </section>
 
-      <MobileCRMNavigation
-        activeTab={activeTab}
-        badgeCounts={sidebarBadgeCounts}
-        moreOpen={mobileMoreOpen}
-        onNavigate={navigateToTab}
-        onOpenMore={() => setMobileMoreOpen(true)}
-      />
-
-      <MobileMoreMenu
-        activeTab={activeTab}
-        badgeCounts={sidebarBadgeCounts}
-        open={mobileMoreOpen}
-        sessionEmail={sessionEmail}
-        secondaryActions={mobileSecondaryActions}
-        onClose={() => setMobileMoreOpen(false)}
-        onNavigate={navigateToTab}
-      />
-
       {toast && <div className={`toast ${toast.tone}`}>{toast.message}</div>}
     </main>
-  );
-}
-
-function NavButton({
-  label,
-  icon,
-  active,
-  onClick,
-  badge
-}: {
-  label: string;
-  icon: string;
-  active: boolean;
-  onClick: () => void;
-  badge?: number | string;
-}) {
-  const badgeText = typeof badge === "number" ? (badge > 0 ? String(badge) : "") : String(badge || "");
-
-  return (
-    <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>
-      <span className="nav-button-icon">{icon}</span>
-      <span className="nav-button-label">{label}</span>
-      {badgeText ? <span className="nav-badge" aria-label={`${badgeText} élément(s) à traiter`}>{badgeText}</span> : null}
-    </button>
   );
 }
 
@@ -9559,6 +9536,7 @@ function PlanningView({
   onPatchPlanningEntry: (id: string, patch: Partial<PlanningEntry>) => void;
   onPatchLeadReservationDates: (id: string, startDate: string, endDate: string) => void;
 }) {
+  const business = useBusinessPermissions();
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [assetFilter, setAssetFilter] = useState("Tous");
   const [startDate, setStartDate] = useState("");
@@ -9992,18 +9970,18 @@ function PlanningView({
 
     return (
       <div className="planning-quick-actions planning-quick-actions-clean">
-        <button className="asset-edit-button planning-edit-main" type="button" onClick={() => startPlanningEntryEdit(entry)}>Modifier</button>
+        <BusinessButton permission="write" className="asset-edit-button planning-edit-main" type="button" onClick={() => startPlanningEntryEdit(entry)}>Modifier</BusinessButton>
         <details className="planning-entry-more planning-entry-more-clean">
           <summary aria-label="Plus d'actions">•••</summary>
           <div className="planning-entry-more-menu">
             {!isClosed ? (
               <>
-                <button type="button" onClick={() => markPlanningEntryDone(entry)}>Terminer</button>
-                <button type="button" onClick={() => postponePlanningEntry(entry)}>Reporter</button>
-                <button type="button" onClick={() => cancelPlanningEntryOperationally(entry)}>Annuler</button>
+                <BusinessButton type="button" onClick={() => markPlanningEntryDone(entry)}>Terminer</BusinessButton>
+                <BusinessButton type="button" onClick={() => postponePlanningEntry(entry)}>Reporter</BusinessButton>
+                <BusinessButton type="button" onClick={() => cancelPlanningEntryOperationally(entry)}>Annuler</BusinessButton>
               </>
             ) : null}
-            <button
+            <BusinessButton permission="remove"
               className="planning-delete-button"
               type="button"
               onClick={() => {
@@ -10012,7 +9990,7 @@ function PlanningView({
                 }
                 onDeletePlanningEntry(entry.id);
               }}
-            >Supprimer définitivement</button>
+            >Supprimer définitivement</BusinessButton>
           </div>
         </details>
       </div>
@@ -10233,7 +10211,7 @@ function PlanningView({
         <div className="planning-agenda-actions">
           <Badge>{getPlanningEventOperationalStatus(event)}</Badge>
           {matchingPlanningEntry ? (
-            <button className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(matchingPlanningEntry)}>Modifier</button>
+            <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(matchingPlanningEntry)}>Modifier</BusinessButton>
           ) : null}
         </div>
       </article>
@@ -10385,8 +10363,8 @@ function PlanningView({
           </div>
         </div>
 
-        <form className="form-grid compact">
-          <label>Planning
+        <BusinessForm className="form-grid compact">
+          <BusinessLabel>Planning
             <select value={categoryFilter} onChange={(event) => {
               setCategoryFilter(event.target.value);
               setAssetFilter("Tous");
@@ -10395,26 +10373,26 @@ function PlanningView({
                 <option key={category}>{category}</option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Actif précis
+          <BusinessLabel>Actif précis
             <select value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}>
               <option value="Tous">Tous les actifs</option>
               {assetFilterOptions.map((asset) => (
                 <option key={asset.key} value={asset.key}>{asset.label}</option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Date début
+          <BusinessLabel>Date début
             <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-          </label>
+          </BusinessLabel>
 
-          <label>Date fin
+          <BusinessLabel>Date fin
             <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
-          </label>
+          </BusinessLabel>
 
-          <button
+          <BusinessButton
             className="ghost-button planning-filter-reset"
             type="button"
             onClick={() => {
@@ -10425,8 +10403,8 @@ function PlanningView({
             }}
           >
             Réinitialiser les filtres
-          </button>
-        </form>
+          </BusinessButton>
+        </BusinessForm>
 
         <div className="planning-scope-notice">
           <strong>Planning actuel : {categoryFilter === "Tous" ? "Vue globale" : categoryFilter}</strong>
@@ -10524,7 +10502,7 @@ function PlanningView({
                   <strong>{entry.title}</strong>
                   <span>{formatDateFR(entry.startDate)} · manque : {missing.join(", ")}</span>
                 </div>
-                <button className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(entry)}>Compléter</button>
+                <BusinessButton className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(entry)}>Compléter</BusinessButton>
               </article>
             ))}
           </div>
@@ -10546,7 +10524,7 @@ function PlanningView({
           </div>
         )}
 
-        <form
+        <BusinessForm
           className="form-grid compact planning-entry-form"
           key={editingPlanningEntry?.id ?? `new-planning-entry-${quickPlanningDate || categoryFilter}`}
           onSubmit={(event) => {
@@ -10563,35 +10541,35 @@ function PlanningView({
             }
           }}
         >
-          <label>Titre
+          <BusinessLabel>Titre
             <input name="title" defaultValue={editingPlanningEntry?.title ?? (quickPlanningDate ? "Rendez-vous" : "")} placeholder="Gardens Jardinier · entretien jardin" required />
-          </label>
+          </BusinessLabel>
 
-          <label>Type
+          <BusinessLabel>Type
             <select name="type" defaultValue={editingPlanningEntry?.type ?? (quickPlanningDate ? "Autre" : "Intervention prestataire")}>
               {planningEntryTypes.map((type) => (
                 <option key={type}>{type}</option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Planning
+          <BusinessLabel>Planning
             <select name="planningCategory" defaultValue={editingPlanningCategory}>
               {planningCategoryOptions.map((category) => (
                 <option key={category}>{category}</option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Statut
+          <BusinessLabel>Statut
             <select name="status" defaultValue={editingPlanningEntry ? getPlanningEntryStatus(editingPlanningEntry) : "Prévu"}>
               {planningEntryStatuses.map((status) => (
                 <option key={status}>{status}</option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Contact lié
+          <BusinessLabel>Contact lié
             <input
               name="contactName"
               list="planning-contact-options"
@@ -10604,54 +10582,54 @@ function PlanningView({
                 <option key={contact.id} value={contact.value}>{contact.label}</option>
               ))}
             </datalist>
-          </label>
+          </BusinessLabel>
 
-          <label>Actif lié
+          <BusinessLabel>Actif lié
             <select name="assetKey" defaultValue={editingPlanningAssetKey}>
               <option value="">Aucun actif lié</option>
               {visibleAssetOptions.map((asset) => (
                 <option key={asset.key} value={asset.key}>{asset.label}</option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Date début
+          <BusinessLabel>Date début
             <input type="date" name="startDate" defaultValue={editingPlanningEntry?.startDate ?? quickPlanningDate} required />
-          </label>
+          </BusinessLabel>
 
-          <label>Date fin
+          <BusinessLabel>Date fin
             <input type="date" name="endDate" defaultValue={editingPlanningEntry?.endDate ?? quickPlanningDate} />
-          </label>
+          </BusinessLabel>
 
-          <label>Heure arrivée
+          <BusinessLabel>Heure arrivée
             <input type="time" name="startTime" defaultValue={editingPlanningEntry?.startTime ?? ""} />
-          </label>
+          </BusinessLabel>
 
-          <label>Heure départ
+          <BusinessLabel>Heure départ
             <input type="time" name="endTime" defaultValue={editingPlanningEntry?.endTime ?? ""} />
-          </label>
+          </BusinessLabel>
 
-          <label>Bloque la disponibilité
+          <BusinessLabel>Bloque la disponibilité
             <select name="blocksAvailability" defaultValue={editingPlanningEntry?.blocksAvailability ? "true" : "false"}>
               <option value="false">Non</option>
               <option value="true">Oui</option>
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label className="planning-entry-notes">Notes
+          <BusinessLabel className="planning-entry-notes">Notes
             <textarea name="notes" defaultValue={editingPlanningEntry?.notes ?? ""} placeholder="Détails internes, horaires, consignes..." />
-          </label>
+          </BusinessLabel>
 
-          <button className="primary-button planning-entry-submit" type="submit">
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
             {editingPlanningEntry ? "Enregistrer les modifications" : "Ajouter au planning"}
-          </button>
+          </BusinessButton>
 
           {editingPlanningEntry && (
-            <button className="ghost-button" type="button" onClick={cancelPlanningEntryEdit}>
+            <BusinessButton className="ghost-button" type="button" onClick={cancelPlanningEntryEdit}>
               Annuler
-            </button>
+            </BusinessButton>
           )}
-        </form>
+        </BusinessForm>
 
         <div className="planning-legend">
           <span><i className="legend-dot status-finished" /> Vert = terminé</span>
@@ -10667,15 +10645,15 @@ function PlanningView({
 
           <div className="planning-list-summary-actions">
             {activePlanningEntries.length > 7 ? (
-              <button className="ghost-button" type="button" onClick={() => setShowAllUpcomingPlanningEntries((value) => !value)}>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setShowAllUpcomingPlanningEntries((value) => !value)}>
                 {showAllUpcomingPlanningEntries ? "Réduire aux 7 prochaines" : `Afficher toutes les à venir (${activePlanningEntries.length})`}
-              </button>
+              </BusinessButton>
             ) : null}
 
             {completedPlanningEntries.length > 0 ? (
-              <button className="ghost-button muted-action-button" type="button" onClick={() => setShowCompletedPlanningEntries((value) => !value)}>
+              <BusinessButton className="ghost-button muted-action-button" type="button" onClick={() => setShowCompletedPlanningEntries((value) => !value)}>
                 {showCompletedPlanningEntries ? "Masquer les terminées" : `Afficher les terminées (${completedPlanningEntries.length})`}
-              </button>
+              </BusinessButton>
             ) : null}
           </div>
         </div>
@@ -10751,34 +10729,34 @@ function PlanningView({
           </div>
 
           <div className="quote-actions">
-            <button className="ghost-button" type="button" onClick={() => moveCalendarMonth(-1)}>
+            <BusinessButton className="ghost-button" type="button" onClick={() => moveCalendarMonth(-1)}>
               Mois précédent
-            </button>
+            </BusinessButton>
 
-            <button className="ghost-button" type="button" onClick={() => moveCalendarMonth(1)}>
+            <BusinessButton className="ghost-button" type="button" onClick={() => moveCalendarMonth(1)}>
               Mois suivant
-            </button>
+            </BusinessButton>
           </div>
         </div>
 
-        <form className="form-grid compact planning-view-controls">
-          <label>Vue
+        <BusinessForm className="form-grid compact planning-view-controls">
+          <BusinessLabel>Vue
             <select value={planningViewMode} onChange={(event) => setPlanningViewMode(event.target.value as "month" | "week")}>
               <option value="month">Mois</option>
               <option value="week">Semaine</option>
             </select>
-          </label>
+          </BusinessLabel>
 
           {planningViewMode === "month" ? (
-            <label>Mois
+            <BusinessLabel>Mois
               <input type="month" value={calendarMonth} onChange={(event) => setCalendarMonth(event.target.value)} />
-            </label>
+            </BusinessLabel>
           ) : (
-            <label>Semaine du
+            <BusinessLabel>Semaine du
               <input type="date" value={planningWeekStart} onChange={(event) => setPlanningWeekStart(event.target.value)} />
-            </label>
+            </BusinessLabel>
           )}
-        </form>
+        </BusinessForm>
 
         {planningViewMode === "month" ? (
           <div className="table-wrap planning-month-table-wrap">
@@ -10829,7 +10807,7 @@ function PlanningView({
                                 const eventExplanation = eventSegment.explanation;
 
                                 return matchingPlanningEntry ? (
-                                  <button
+                                  <BusinessButton
                                     className={`planning-event-pill planning-event-button ${event.blocksAvailability ? "blocked" : "entry"} status-${getPlanningStatusClass(eventSegment.status)}`}
                                     key={`${event.source}-${event.id}`}
                                     type="button"
@@ -10839,7 +10817,7 @@ function PlanningView({
                                     title={eventExplanation}
                                   >
                                     {cleanPlanningCalendarVisibleLabel(eventLabel)}
-                                  </button>
+                                  </BusinessButton>
                                 ) : (
                                   <span
                                     className={`planning-event-pill ${event.blocksAvailability ? "blocked" : "option"} status-${getPlanningStatusClass(eventSegment.status)}`}
@@ -10873,9 +10851,9 @@ function PlanningView({
         ) : (
           <div className="planning-week-view">
             <div className="planning-week-toolbar">
-              <button className="ghost-button" type="button" onClick={() => movePlanningWeek(-1)}>Semaine précédente</button>
+              <BusinessButton className="ghost-button" type="button" onClick={() => movePlanningWeek(-1)}>Semaine précédente</BusinessButton>
               <strong>{formatDateFR(planningWeekDays[0]?.iso)} → {formatDateFR(planningWeekDays[6]?.iso)}</strong>
-              <button className="ghost-button" type="button" onClick={() => movePlanningWeek(1)}>Semaine suivante</button>
+              <BusinessButton className="ghost-button" type="button" onClick={() => movePlanningWeek(1)}>Semaine suivante</BusinessButton>
             </div>
 
             <div className="planning-week-grid">
@@ -10905,7 +10883,7 @@ function PlanningView({
                         const eventExplanation = eventSegment.explanation;
 
                         return matchingPlanningEntry ? (
-                          <button
+                          <BusinessButton
                             className={`planning-week-event ${event.blocksAvailability ? "blocked" : "entry"} status-${getPlanningStatusClass(eventSegment.status)}`}
                             key={`${event.source}-${event.id}-${day.iso}`}
                             type="button"
@@ -10915,7 +10893,7 @@ function PlanningView({
                             title={eventExplanation}
                           >
                             {cleanPlanningCalendarVisibleLabel(eventLabel)}
-                          </button>
+                          </BusinessButton>
                         ) : (
                           <span
                             className={`planning-week-event ${event.blocksAvailability ? "blocked" : "option"} status-${getPlanningStatusClass(eventSegment.status)}`}
@@ -11215,6 +11193,7 @@ function Dashboard({
   onCloudBackup: () => void;
   onDashboardAction: (tab: Tab, targetId?: string) => void;
 }) {
+  const business = useBusinessPermissions();
   type DashboardItem = {
     id: string;
     title: string;
@@ -11265,7 +11244,7 @@ function Dashboard({
   }
 
   function renderDashboardList(items: DashboardItem[], emptyText: string, limit = 5) {
-    const visibleItems = items.slice(0, limit);
+    const visibleItems = items.filter(item => !business || !item.tab || business.read(item.tab as import("@/lib/access/modules").ModuleId)).slice(0, limit);
 
     if (visibleItems.length === 0) {
       return <p className="muted-line dashboard-command-empty">{emptyText}</p>;
@@ -11291,7 +11270,7 @@ function Dashboard({
           }
 
           return (
-            <button
+            <BusinessButton
               className={rowClassName}
               key={item.id}
               type="button"
@@ -11299,7 +11278,7 @@ function Dashboard({
               title="Ouvrir le module concerné"
             >
               {rowContent}
-            </button>
+            </BusinessButton>
           );
         })}
       </div>
@@ -11308,8 +11287,8 @@ function Dashboard({
 
 
 
-  const quotes = mergeQuoteRequests((((data as any).quotes ?? []) as QuoteRequest[]), loadSavedQuotes());
-  const confirmedBookings = quotes.filter((quote) => getQuoteStatus(quote.status) === "Accepted");
+  const quotes = mergeQuoteRequests((((data as any).quotes ?? []) as QuoteRequest[]), business ? [] : loadSavedQuotes());
+  const confirmedBookings: QuoteRequest[] = business ? ((data as any).bookings ?? []) : quotes.filter((quote) => getQuoteStatus(quote.status) === "Accepted");
   const planningEntries = (((data as any).planningEntries ?? []) as PlanningEntry[]);
   const vendorInvoices = (((data as any).vendorInvoices ?? []) as VendorInvoice[]);
   const documents = (((data as any).documents ?? []) as CRMDocument[]);
@@ -11413,7 +11392,7 @@ function Dashboard({
     ...data.boats.filter((boat) => boat.status === "En maintenance").map((boat) => boat.name)
   ];
 
-  const contactsIncomplete = data.contacts.filter((contact) => !contact.email || !contact.phone);
+  const contactsIncomplete = business ? [] : data.contacts.filter((contact) => !contact.email || !contact.phone);
   const leadsWithoutBudget = data.leads.filter((lead) => lead.status !== "Gagné" && lead.status !== "Perdu" && Number(lead.value || 0) <= 0);
   const documentsToCheck = documents.filter((document) => !document.isFolder && document.status !== "À jour");
 
@@ -11670,8 +11649,8 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
         <DashboardCommandCard eyebrow="Commercial" title="Leads et devis" summary={`${commercialItems.length} sujet${commercialItems.length > 1 ? "s" : ""}`}>
           {renderDashboardList(commercialItems, "Aucun lead ou devis urgent à relancer.", 6)}
           <div className="dashboard-command-actions">
-            <button className="secondary-button compact-button" type="button" onClick={onShowLeads}>Voir les leads</button>
-            <button className="secondary-button compact-button" type="button" onClick={onStartMessage}>Créer depuis message</button>
+            <BusinessButton disabled={Boolean(business&&!business.read("leads"))} className="secondary-button compact-button" type="button" onClick={onShowLeads}>Voir les leads</BusinessButton>
+            <BusinessButton disabled={Boolean(business&&(!business.canWrite("contacts")||!business.canWrite("leads")))} className="secondary-button compact-button" type="button" onClick={onStartMessage}>Créer depuis message</BusinessButton>
           </div>
         </DashboardCommandCard>
       </div>
@@ -11719,12 +11698,16 @@ function ContactsView({
   contacts: Contact[];
   leads: Lead[];
   tasks: Task[];
-  onAdd: (event: React.FormEvent<HTMLFormElement>) => void;
-  onUpdate: (contact: Pick<Contact, "id"> & Partial<Contact>) => void;
+  onAdd: (event: React.FormEvent<HTMLFormElement>) => FormSave;
+  onUpdate: (contact: Pick<Contact, "id"> & Partial<Contact>) => FormSave;
   onDelete: (id: string) => void;
   onCreateLead: (contactName: string) => void;
   onCreateTask: (contactName: string) => void;
 }) {
+  const business = useBusinessPermissions();
+  const creation = useConfirmedForm(business?.markDirty);
+  const [creationRecordId,setCreationRecordId] = useState<string|null>(null);
+  const edition = useConfirmedForm(business?.markDirty);
   const changedContactFields = useRef(new Set<string>());
   const [contactFilter, setContactFilter] = useState("Tous");
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("Toutes");
@@ -11837,12 +11820,15 @@ function ContactsView({
     };
 
     const update = getContactFormUpdate(updatedContact, changedContactFields.current);
-    onUpdate({ id: editingContact.id, ...update });
-    setEditingContact(null);
-    setSelectedContact(mergeContactUpdate(contacts.find(contact => contact.id === editingContact.id) || editingContact, update));
+    void edition.submit(event.currentTarget, () => onUpdate({ id: editingContact.id, ...update }), newerDraft => {
+      if(newerDraft)return;
+      setEditingContact(null);
+      setSelectedContact(mergeContactUpdate(contacts.find(contact => contact.id === editingContact.id) || editingContact, update));
+    });
   }
 
   function openEdit(contact: Contact) {
+    edition.changed();
     const latestContact = contacts.find(item => item.id === contact.id) || contact;
     setSelectedContact(null);
     changedContactFields.current.clear();
@@ -11878,27 +11864,27 @@ function ContactsView({
 
         <div className="contact-filter-row contacts-toolbar-stable-filters">
           {filterOptions.map((option) => (
-            <button
+            <BusinessButton
               key={option}
               type="button"
               className={contactFilter === option ? "primary-button" : "secondary-button"}
               onClick={() => setContactFilter(option)}
             >
               {option}
-            </button>
+            </BusinessButton>
           ))}
         </div>
 
         {contactFilter === "Prestataires" && (
           <div className="contacts-toolbar-stable-supplier-filter">
-            <label>Profession / activité
+            <BusinessLabel>Profession / activité
               <select value={supplierCategoryFilter} onChange={(event) => setSupplierCategoryFilter(event.target.value)}>
                 <option>Toutes</option>
                 {supplierProfessionOptions.map((category) => (
                   <option key={category}>{category}</option>
                 ))}
               </select>
-            </label>
+            </BusinessLabel>
           </div>
         )}
       </section>
@@ -11940,16 +11926,16 @@ function ContactsView({
                   <div className="item-actions contact-row-actions oar-contact-actions">
                     {contact.phone && <a className="secondary-button" href={`tel:${contact.phone}`}>Appeler</a>}
                     {contact.email && <a className="secondary-button" href={`mailto:${contact.email}`}>Email</a>}
-                    <button className="secondary-button" type="button" onClick={() => onCreateLead(getContactActionLabel(contact))}>
+                    <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => onCreateLead(getContactActionLabel(contact))}>
                       Créer lead
-                    </button>
-                    <button className="secondary-button" type="button" onClick={() => setSelectedContact(contact)}>
+                    </BusinessButton>
+                    <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contact)}>
                       Détails
-                    </button>
-                    <button className="secondary-button" type="button" onClick={() => openEdit(contact)}>
+                    </BusinessButton>
+                    <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => openEdit(contact)}>
                       Modifier
-                    </button>
-                    <button
+                    </BusinessButton>
+                    <BusinessButton permission="remove"
                       className="danger-button"
                       type="button"
                       onClick={() => {
@@ -11958,7 +11944,7 @@ function ContactsView({
                       }}
                     >
                       Supprimer
-                    </button>
+                    </BusinessButton>
                   </div>
                 </article>
               ))}
@@ -11968,111 +11954,116 @@ function ContactsView({
 
         <section className="card form-card contacts-form-card oar-contacts-form-card">
           <p className="eyebrow">Nouveau</p>
-          <h3>Ajouter un contact</h3>
+          <h3>{creationRecordId?"Modifier le contact créé":"Ajouter un contact"}</h3>
 
-          <form className="form-grid contact-create-form" onSubmit={onAdd}>
-            <label>Civilité
+          <BusinessForm className="form-grid contact-create-form" data-saved-record-id={creationRecordId||undefined} pending={creation.saving} onChangeCapture={creation.changed} onSubmit={event=>{
+            if(!business){void onAdd(event);return;}
+            event.preventDefault();const form=event.currentTarget;
+            void creation.submit(form,()=>onAdd(event),(newerDraft,result)=>{if(newerDraft){setCreationRecordId(result?.recordId??null);return;}form.reset();setCreationRecordId(null);setNewContactKind("Client");});
+          }}>
+            {creation.message&&<p role="alert">{creation.message}</p>}
+            <BusinessLabel>Civilité
               <select name="civility" defaultValue="">
                 <option value="">—</option>
                 <option value="M">M</option>
                 <option value="MME">MME</option>
               </select>
-            </label>
-            <label>Prénom<input name="firstName" placeholder="Prénom" /></label>
-            <label>Nom<input name="name" placeholder="Nom" /></label>
-            <label>Société<input name="companyName" placeholder="Nom de la société" /></label>
-            <label>Type
+            </BusinessLabel>
+            <BusinessLabel>Prénom<input name="firstName" placeholder="Prénom" /></BusinessLabel>
+            <BusinessLabel>Nom<input name="name" placeholder="Nom" /></BusinessLabel>
+            <BusinessLabel>Société<input name="companyName" placeholder="Nom de la société" /></BusinessLabel>
+            <BusinessLabel>Type
               <select name="kind" value={newContactKind} onChange={(event) => setNewContactKind(event.target.value as ContactKind)}>
                 {contactKinds.map((kind) => <option key={kind}>{kind}</option>)}
               </select>
-            </label>
-            <label>Email<input name="email" type="email" placeholder="email@example.com" /></label>
-            <label>Téléphone<input name="phone" placeholder="+33..." /></label>
+            </BusinessLabel>
+            <BusinessLabel>Email<input name="email" type="email" placeholder="email@example.com" /></BusinessLabel>
+            <BusinessLabel>Téléphone<input name="phone" placeholder="+33..." /></BusinessLabel>
             <ContactPostalAddressField />
-            <label>Ville / zone<input name="city" placeholder="Cannes, Monaco..." /></label>
-            <label>Source<input name="source" placeholder="Site, recommandation, réseau..." /></label>
+            <BusinessLabel>Ville / zone<input name="city" placeholder="Cannes, Monaco..." /></BusinessLabel>
+            <BusinessLabel>Source<input name="source" placeholder="Site, recommandation, réseau..." /></BusinessLabel>
 
             {newContactKind !== "Prestataire" && (
               <>
-                <label>Relation
+                <BusinessLabel>Relation
                   <select name="relationshipStatus" defaultValue="Prospect">
                     {nonSupplierRelationshipStatuses.map((status) => <option key={status}>{status}</option>)}
                   </select>
-                </label>
-                <label>Budget<input name="budget" type="number" min="0" placeholder="Si client" /></label>
+                </BusinessLabel>
+                <BusinessLabel>Budget<input name="budget" type="number" min="0" placeholder="Si client" /></BusinessLabel>
               </>
             )}
 
             {newContactKind === "Client" && (
               <>
-                <label>Niveau client
+                <BusinessLabel>Niveau client
                   <select name="clientLevel" defaultValue="Standard">
                     {contactLevels.map((level) => <option key={level}>{level}</option>)}
                   </select>
-                </label>
-                <label>Langue
+                </BusinessLabel>
+                <BusinessLabel>Langue
                   <select name="preferredLanguage" defaultValue="Français">
                     {contactLanguages.map((language) => <option key={language}>{language}</option>)}
                   </select>
-                </label>
-                <label className="full">Préférences
+                </BusinessLabel>
+                <BusinessLabel className="full">Préférences
                   <textarea name="preferences" placeholder="Villa, voiture, yacht, dates, habitudes..." />
-                </label>
-                <label className="full">Notes importantes
+                </BusinessLabel>
+                <BusinessLabel className="full">Notes importantes
                   <textarea name="importantNotes" placeholder="À savoir avant de proposer quelque chose" />
-                </label>
+                </BusinessLabel>
               </>
             )}
 
             {newContactKind === "Prestataire" && (
               <>
-                <label>Profession / activité
+                <BusinessLabel>Profession / activité
                   <select name="supplierCategory" defaultValue="">
                     <option value="">—</option>
                     {supplierProfessionOptions.map((category) => <option key={category}>{category}</option>)}
                   </select>
-                </label>
-                <label>Ajouter une profession
+                </BusinessLabel>
+                <BusinessLabel>Ajouter une profession
                   <input name="supplierCategoryCustom" placeholder="Ex : Technicien volets" />
-                </label>
-                <label>Fiabilité
+                </BusinessLabel>
+                <BusinessLabel>Fiabilité
                   <select name="supplierReliability" defaultValue="À tester">
                     <option>À tester</option>
                     <option>Fiable</option>
                     <option>Très fiable</option>
                     <option>À éviter</option>
                   </select>
-                </label>
-                <label>Contact référent<input name="supplierContactName" placeholder="Nom du contact" /></label>
-                <label>Statut prestataire
+                </BusinessLabel>
+                <BusinessLabel>Contact référent<input name="supplierContactName" placeholder="Nom du contact" /></BusinessLabel>
+                <BusinessLabel>Statut prestataire
                   <select name="supplierStatus" defaultValue="Actif">
                     <option>Actif</option>
                     <option>À vérifier</option>
                     <option>Inactif</option>
                   </select>
-                </label>
-                <label>Qualité
+                </BusinessLabel>
+                <BusinessLabel>Qualité
                   <select name="supplierQuality" defaultValue="Standard">
                     <option>Standard</option>
                     <option>Premium</option>
                     <option>Très premium</option>
                   </select>
-                </label>
-                <label className="full">Notes prix / accord prestataire
+                </BusinessLabel>
+                <BusinessLabel className="full">Notes prix / accord prestataire
                   <textarea name="supplierPriceNotes" placeholder="Tarifs, minimum spend, conditions..." />
-                </label>
-                <label className="full">Commission / marge
+                </BusinessLabel>
+                <BusinessLabel className="full">Commission / marge
                   <textarea name="supplierCommissionNotes" placeholder="Commission, marge, accord commercial..." />
-                </label>
+                </BusinessLabel>
               </>
             )}
 
-            <label className="full">Notes
+            <BusinessLabel className="full">Notes
               <textarea name="notes" placeholder="Contexte, préférences, infos utiles" />
-            </label>
+            </BusinessLabel>
 
-            <button className="primary-button planning-entry-submit" type="submit">Ajouter</button>
-          </form>
+            <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{creationRecordId?"Enregistrer les modifications":"Ajouter"}</BusinessButton>
+          </BusinessForm>
         </section>
       </div>
 
@@ -12114,7 +12105,7 @@ function ContactsView({
               <div className="full"><span>Notes</span><p>{selectedContact.notes || "Aucune note."}</p></div>
             </div>
 
-            {isSupplierContact(selectedContact) && <VendorBankAccounts contact={contacts.find(c => c.id === selectedContact.id) || selectedContact} actor={actor} onUpdate={onUpdate} />}
+            {!business && isSupplierContact(selectedContact) && <VendorBankAccounts contact={contacts.find(c => c.id === selectedContact.id) || selectedContact} actor={actor} onUpdate={onUpdate} />}
 
             {!isSupplierContact(selectedContact) && (
               <div className="contact-related-section">
@@ -12133,10 +12124,10 @@ function ContactsView({
             )}
 
             <div className="confirm-actions">
-              <button className="ghost-button" type="button" onClick={() => setSelectedContact(null)}>Fermer</button>
-              <button className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); setSelectedContact(null); onCreateLead(name); }}>Créer un lead</button>
-              <button className="secondary-button" type="button" onClick={() => { const name = selectedContact.name; setSelectedContact(null); onCreateTask(name); }}>Créer une tâche</button>
-              <button className="primary-button" type="button" onClick={() => openEdit(selectedContact)}>Modifier</button>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedContact(null)}>Fermer</BusinessButton>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); setSelectedContact(null); onCreateLead(name); }}>Créer un lead</BusinessButton>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = selectedContact.name; setSelectedContact(null); onCreateTask(name); }}>Créer une tâche</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedContact)}>Modifier</BusinessButton>
             </div>
           </div>
         </div>
@@ -12148,118 +12139,119 @@ function ContactsView({
             <p className="eyebrow">Modification</p>
             <h3>Modifier le contact</h3>
 
-            <form className="form-grid contact-edit-form" onSubmit={submitEdit} onChange={(event) => {
+            <BusinessForm className="form-grid contact-edit-form" pending={edition.saving} onSubmit={submitEdit} onChangeCapture={edition.changed} onChange={(event) => {
               const target = event.target;
               if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
                 changedContactFields.current.add(target.name);
               }
             }}>
-              <label>Civilité
+              {edition.message&&<p role="alert">{edition.message}</p>}
+              <BusinessLabel>Civilité
                 <select name="civility" defaultValue={editingContact.civility ?? ""}>
                   <option value="">—</option>
                   <option value="M">M</option>
                   <option value="MME">MME</option>
                 </select>
-              </label>
-              <label>Prénom<input name="firstName" defaultValue={editingContact.firstName ?? ""} /></label>
-              <label>Nom<input name="name" defaultValue={editingContact.name} /></label>
-              <label>Société<input name="companyName" defaultValue={editingContact.companyName ?? ""} /></label>
+              </BusinessLabel>
+              <BusinessLabel>Prénom<input name="firstName" defaultValue={editingContact.firstName ?? ""} /></BusinessLabel>
+              <BusinessLabel>Nom<input name="name" defaultValue={editingContact.name} /></BusinessLabel>
+              <BusinessLabel>Société<input name="companyName" defaultValue={editingContact.companyName ?? ""} /></BusinessLabel>
 
-              <label>Type
+              <BusinessLabel>Type
                 <select name="kind" value={editingContactKind} onChange={(event) => setEditingContactKind(event.target.value as ContactKind)}>
                   {contactKinds.map((kind) => <option key={kind}>{kind}</option>)}
                 </select>
-              </label>
-              <label>Email<input name="email" type="email" defaultValue={editingContact.email} /></label>
-              <label>Téléphone<input name="phone" defaultValue={editingContact.phone} /></label>
+              </BusinessLabel>
+              <BusinessLabel>Email<input name="email" type="email" defaultValue={editingContact.email} /></BusinessLabel>
+              <BusinessLabel>Téléphone<input name="phone" defaultValue={editingContact.phone} /></BusinessLabel>
               <ContactPostalAddressField value={editingContact.postalAddress} />
-              <label>Ville / zone<input name="city" defaultValue={editingContact.city} /></label>
-              <label>Source<input name="source" defaultValue={editingContact.source} /></label>
+              <BusinessLabel>Ville / zone<input name="city" defaultValue={editingContact.city} /></BusinessLabel>
+              <BusinessLabel>Source<input name="source" defaultValue={editingContact.source} /></BusinessLabel>
 
               {editingContactKind !== "Prestataire" && (
                 <>
-                  <label>Relation
+                  <BusinessLabel>Relation
                     <select name="relationshipStatus" defaultValue={getContactRelationshipStatus(editingContact) === "Prestataire" ? "Prospect" : getContactRelationshipStatus(editingContact)}>
                       {nonSupplierRelationshipStatuses.map((status) => <option key={status}>{status}</option>)}
                     </select>
-                  </label>
-                  <label>Budget<input name="budget" type="number" min="0" defaultValue={editingContact.budget || ""} /></label>
+                  </BusinessLabel>
+                  <BusinessLabel>Budget<input name="budget" type="number" min="0" defaultValue={editingContact.budget || ""} /></BusinessLabel>
                 </>
               )}
 
               {editingContactKind === "Client" && (
                 <>
-                  <label>Niveau client
+                  <BusinessLabel>Niveau client
                     <select name="clientLevel" defaultValue={getContactClientLevel(editingContact)}>
                       {contactLevels.map((level) => <option key={level}>{level}</option>)}
                     </select>
-                  </label>
-                  <label>Langue
+                  </BusinessLabel>
+                  <BusinessLabel>Langue
                     <select name="preferredLanguage" defaultValue={getContactPreferredLanguage(editingContact)}>
                       {contactLanguages.map((language) => <option key={language}>{language}</option>)}
                     </select>
-                  </label>
-                  <label className="full">Préférences
+                  </BusinessLabel>
+                  <BusinessLabel className="full">Préférences
                     <textarea name="preferences" defaultValue={editingContact.preferences ?? ""} />
-                  </label>
-                  <label className="full">Notes importantes
+                  </BusinessLabel>
+                  <BusinessLabel className="full">Notes importantes
                     <textarea name="importantNotes" defaultValue={editingContact.importantNotes ?? ""} />
-                  </label>
+                  </BusinessLabel>
                 </>
               )}
 
               {editingContactKind === "Prestataire" && (
                 <>
-                  <label>Profession / activité
+                  <BusinessLabel>Profession / activité
                     <select name="supplierCategory" defaultValue={editingContact.supplierCategory || ""}>
                       <option value="">—</option>
                       {supplierProfessionOptions.map((category) => <option key={category}>{category}</option>)}
                     </select>
-                  </label>
-                  <label>Ajouter une profession
+                  </BusinessLabel>
+                  <BusinessLabel>Ajouter une profession
                     <input name="supplierCategoryCustom" placeholder="Nouvelle profession si absente de la liste" />
-                  </label>
-                  <label>Contact référent<input name="supplierContactName" defaultValue={editingContact.supplierContactName || ""} /></label>
-                  <label>Fiabilité
+                  </BusinessLabel>
+                  <BusinessLabel>Contact référent<input name="supplierContactName" defaultValue={editingContact.supplierContactName || ""} /></BusinessLabel>
+                  <BusinessLabel>Fiabilité
                     <select name="supplierReliability" defaultValue={editingContact.supplierReliability || "À tester"}>
                       <option>À tester</option>
                       <option>Fiable</option>
                       <option>Très fiable</option>
                       <option>À éviter</option>
                     </select>
-                  </label>
-                  <label>Statut prestataire
+                  </BusinessLabel>
+                  <BusinessLabel>Statut prestataire
                     <select name="supplierStatus" defaultValue={editingContact.supplierStatus || "Actif"}>
                       <option>Actif</option>
                       <option>À vérifier</option>
                       <option>Inactif</option>
                     </select>
-                  </label>
-                  <label>Qualité
+                  </BusinessLabel>
+                  <BusinessLabel>Qualité
                     <select name="supplierQuality" defaultValue={editingContact.supplierQuality || "Standard"}>
                       <option>Standard</option>
                       <option>Premium</option>
                       <option>Très premium</option>
                     </select>
-                  </label>
-                  <label className="full">Notes prix
+                  </BusinessLabel>
+                  <BusinessLabel className="full">Notes prix
                     <textarea name="supplierPriceNotes" defaultValue={editingContact.supplierPriceNotes || ""} />
-                  </label>
-                  <label className="full">Commission / marge
+                  </BusinessLabel>
+                  <BusinessLabel className="full">Commission / marge
                     <textarea name="supplierCommissionNotes" defaultValue={editingContact.supplierCommissionNotes || ""} />
-                  </label>
+                  </BusinessLabel>
                 </>
               )}
 
-              <label className="full">Notes
+              <BusinessLabel className="full">Notes
                 <textarea name="notes" defaultValue={editingContact.notes} />
-              </label>
+              </BusinessLabel>
 
               <div className="confirm-actions full">
-                <button className="ghost-button" type="button" onClick={() => setEditingContact(null)}>Annuler</button>
-                <button className="primary-button planning-entry-submit" type="submit">Enregistrer</button>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => {edition.changed();setEditingContact(null);}}>Annuler</BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
               </div>
-            </form>
+            </BusinessForm>
           </div>
         </div>
       )}
@@ -12298,6 +12290,7 @@ function LeadsView({
   quotes?: QuoteRequest[];
   onCreateTask: (lead: Lead) => void;
 }) {
+  const business = useBusinessPermissions();
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [leadCategoryFilter, setLeadCategoryFilter] = useState<"Toutes" | Lead["category"]>("Toutes");
@@ -12426,20 +12419,20 @@ const visibleLeads = leads.filter((lead) => {
           <h3>Ajouter un lead</h3>
         </div>
 
-        <form className="lead-smart-form" onSubmit={onAdd}>
+        <BusinessForm className="lead-smart-form" onSubmit={onAdd}>
           <fieldset className="lead-form-block">
             <legend>1 · Client & demande</legend>
 
-            <label>Catégorie
+            <BusinessLabel>Catégorie
               <select name="category" defaultValue="Villa">
                 <option value="Villa">Villa</option>
                 <option value="Voiture">Voiture</option>
                 <option value="Bateau">Bateau</option>
                 <option value="Conciergerie">Conciergerie</option>
               </select>
-            </label>
+            </BusinessLabel>
 
-            <label>Contact
+            <BusinessLabel>Contact
               <input
                 name="contactName"
                 list="lead-contact-options"
@@ -12452,9 +12445,9 @@ const visibleLeads = leads.filter((lead) => {
                   return <option key={contact.id} value={label}>{contact.companyName ? `${label} · ${contact.companyName}` : label}</option>;
                 })}
               </datalist>
-            </label>
+            </BusinessLabel>
 
-            <label>Actif proposé
+            <BusinessLabel>Actif proposé
               <select name="assetKey" defaultValue="">
                 <option value="">Aucun actif lié</option>
                 {assetOptions.map((asset) => (
@@ -12463,29 +12456,29 @@ const visibleLeads = leads.filter((lead) => {
                   </option>
                 ))}
               </select>
-            </label>
+            </BusinessLabel>
           </fieldset>
 
           <fieldset className="lead-form-block">
             <legend>2 · Planning & budget</legend>
 
-            <label>Début réservation
+            <BusinessLabel>Début réservation
               <input name="rentalStartDate" type="date" />
-            </label>
+            </BusinessLabel>
 
-            <label>Fin réservation
+            <BusinessLabel>Fin réservation
               <input name="rentalEndDate" type="date" />
-            </label>
+            </BusinessLabel>
 
-            <label>Valeur
+            <BusinessLabel>Valeur
               <input name="value" type="number" min="0" placeholder="2500" />
-            </label>
+            </BusinessLabel>
           </fieldset>
 
           <fieldset className="lead-form-block">
             <legend>3 · Suivi commercial</legend>
 
-            <label>Statut
+            <BusinessLabel>Statut
               <select name="status" defaultValue="Nouveau">
                 
         {visibleLeads.length === 0 && (
@@ -12501,33 +12494,33 @@ const visibleLeads = leads.filter((lead) => {
                   <option key={status}>{status}</option>
                 ))}
               </select>
-            </label>
+            </BusinessLabel>
 
-            <label>Priorité
+            <BusinessLabel>Priorité
               <select name="priority" defaultValue="Moyenne">
                 <option>Basse</option>
                 <option>Moyenne</option>
                 <option>Haute</option>
               </select>
-            </label>
+            </BusinessLabel>
 
-            <label>Date réponse
+            <BusinessLabel>Date réponse
               <input name="dueDate" type="date" />
-            </label>
+            </BusinessLabel>
 
-            <label className="full">Prochaine action
+            <BusinessLabel className="full">Prochaine action
               <input name="nextAction" placeholder="Appeler, envoyer proposition, relancer..." />
-            </label>
+            </BusinessLabel>
 
-            <label className="full">Notes internes
+            <BusinessLabel className="full">Notes internes
               <textarea name="notes" placeholder="Préférences client, contraintes, détails importants..." />
-            </label>
+            </BusinessLabel>
           </fieldset>
 
           <div className="lead-form-actions">
-            <button className="primary-button planning-entry-submit" type="submit">Ajouter le lead</button>
+            <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter le lead</BusinessButton>
           </div>
-        </form>
+        </BusinessForm>
       </section>
 
       <section className="card lead-filter-card">
@@ -12537,7 +12530,7 @@ const visibleLeads = leads.filter((lead) => {
         </div>
 
         <div className="lead-filter-grid">
-          <label>Catégorie
+          <BusinessLabel>Catégorie
             <select
               value={leadCategoryFilter}
               onChange={(event) => setLeadCategoryFilter(event.target.value as "Toutes" | Lead["category"])}
@@ -12548,9 +12541,9 @@ const visibleLeads = leads.filter((lead) => {
               <option value="Bateau">Bateau</option>
               <option value="Conciergerie">Conciergerie</option>
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Statut
+          <BusinessLabel>Statut
             <select
               value={leadStatusFilter}
               onChange={(event) => setLeadStatusFilter(event.target.value as "Tous" | LeadStatus)}
@@ -12560,9 +12553,9 @@ const visibleLeads = leads.filter((lead) => {
                 <option key={status} value={status}>{status}</option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Priorité
+          <BusinessLabel>Priorité
             <select
               value={leadPriorityFilter}
               onChange={(event) => setLeadPriorityFilter(event.target.value as "Toutes" | Lead["priority"])}
@@ -12572,7 +12565,7 @@ const visibleLeads = leads.filter((lead) => {
               <option value="Moyenne">Moyenne</option>
               <option value="Haute">Haute</option>
             </select>
-          </label>
+          </BusinessLabel>
         </div>
       </section>
 
@@ -12587,7 +12580,7 @@ const visibleLeads = leads.filter((lead) => {
 
           return (
             <div className={`pipeline-column ${isCollapsed ? "is-collapsed" : ""}`} key={status}>
-              <button
+              <BusinessButton
                 className="asset-reset-button pipeline-title pipeline-toggle"
                 type="button"
                 onClick={() => toggleLeadColumn(status)}
@@ -12596,7 +12589,7 @@ const visibleLeads = leads.filter((lead) => {
                 <strong>{status}</strong>
                 <span>{columnLeads.length}</span>
                 <em>{isCollapsed ? "▾" : "▴"}</em>
-              </button>
+              </BusinessButton>
 
               {!isCollapsed && (
                 <div className="list-stack oar-contact-list-stack">
@@ -12605,7 +12598,7 @@ const visibleLeads = leads.filter((lead) => {
                       <div className="lead-topline">
                         <Badge>{lead.priority}</Badge>
 
-                        <button
+                        <BusinessButton permission="remove"
                           className="icon-button"
                           type="button"
                           onClick={() => {
@@ -12620,7 +12613,7 @@ const visibleLeads = leads.filter((lead) => {
                           aria-label="Supprimer"
                         >
                           ×
-                        </button>
+                        </BusinessButton>
                       </div>
 
                       <strong>{lead.category}</strong>
@@ -12644,26 +12637,26 @@ const visibleLeads = leads.filter((lead) => {
                         </small>
                       </div>
 
-                      <select value={lead.status} onChange={(event) => onStatusChange(lead.id, event.target.value as LeadStatus)}>
+                      <BusinessSelect value={lead.status} onChange={(event) => onStatusChange(lead.id, event.target.value as LeadStatus)}>
                         {leadStatuses.map((option) => <option key={option}>{option}</option>)}
-                      </select>
+                      </BusinessSelect>
 
                       <div className="lead-card-actions">
-                        <button className="lead-detail-button" type="button" onClick={() => setSelectedLead(lead)}>
+                        <BusinessButton className="lead-detail-button" type="button" onClick={() => setSelectedLead(lead)}>
                           Détails
-                        </button>
+                        </BusinessButton>
 
-                        <button className="lead-detail-button" type="button" onClick={() => onCreateTask(lead)}>
+                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateTask(lead)}>
                           Tâche
-                        </button>
+                        </BusinessButton>
 
-                        <button className="lead-detail-button" type="button" onClick={() => onCreateQuote(lead)}>
+                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateQuote(lead)}>
                           {quotes.some((quote) => quote.leadId === lead.id) ? "Ouvrir devis lié" : "Créer devis"}
-                        </button>
+                        </BusinessButton>
 
-                        <button className="lead-edit-button" type="button" onClick={() => openEdit(lead)}>
+                        <BusinessButton permission="write" className="lead-edit-button" type="button" onClick={() => openEdit(lead)}>
                           Modifier
-                        </button>
+                        </BusinessButton>
                       </div>
                     </article>
                   ))}
@@ -12743,11 +12736,11 @@ const visibleLeads = leads.filter((lead) => {
             </div>
 
             <div className="confirm-actions">
-              <button className="ghost-button" type="button" onClick={() => setSelectedLead(null)}>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedLead(null)}>
                 Fermer
-              </button>
+              </BusinessButton>
 
-                              <button
+                              <BusinessButton permission="write"
                 className="secondary-button"
                 type="button"
                 onClick={() => {
@@ -12757,9 +12750,9 @@ const visibleLeads = leads.filter((lead) => {
                 }}
               >
                 Créer une tâche
-              </button>
+              </BusinessButton>
 
-              <button
+              <BusinessButton permission="write"
                 className="primary-button"
                 type="button"
                 onClick={() => {
@@ -12769,7 +12762,7 @@ const visibleLeads = leads.filter((lead) => {
                 }}
               >
                 Modifier
-              </button>
+              </BusinessButton>
             </div>
           </div>
         </div>
@@ -12781,17 +12774,17 @@ const visibleLeads = leads.filter((lead) => {
             <p className="eyebrow">Modification</p>
             <h3>Modifier le lead</h3>
 
-            <form className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <label>Catégorie
+            <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
+              <BusinessLabel>Catégorie
                 <select name="category" defaultValue={editingLead.category}>
                   <option value="Villa">Villa</option>
                   <option value="Voiture">Voiture</option>
                   <option value="Bateau">Bateau</option>
                   <option value="Conciergerie">Conciergerie</option>
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Contact
+              <BusinessLabel>Contact
                 <select name="contactName" defaultValue={editingLead.contactName} required>
                   <option value="">Sélectionner un contact</option>
                   {contacts.map((contact) => (
@@ -12800,9 +12793,9 @@ const visibleLeads = leads.filter((lead) => {
                     </option>
                   ))}
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Actif proposé
+              <BusinessLabel>Actif proposé
                 <select
                   name="assetKey"
                   defaultValue={editingLead.assetType && editingLead.assetId ? `${editingLead.assetType}:${editingLead.assetId}` : ""}
@@ -12814,46 +12807,46 @@ const visibleLeads = leads.filter((lead) => {
                     </option>
                   ))}
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Statut
+              <BusinessLabel>Statut
                 <select name="status" defaultValue={editingLead.status}>
                   {leadStatuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Valeur<input name="value" type="number" min="0" defaultValue={editingLead.value || ""} /></label>
+              <BusinessLabel>Valeur<input name="value" type="number" min="0" defaultValue={editingLead.value || ""} /></BusinessLabel>
 
-              <label>Priorité
+              <BusinessLabel>Priorité
                 <select name="priority" defaultValue={editingLead.priority}>
                   <option>Basse</option>
                   <option>Moyenne</option>
                   <option>Haute</option>
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Date<input name="dueDate" type="date" defaultValue={editingLead.dueDate} /></label>
-              <label>Début réservation<input name="rentalStartDate" type="date" defaultValue={editingLead.rentalStartDate} /></label>
-              <label>Fin réservation<input name="rentalEndDate" type="date" defaultValue={editingLead.rentalEndDate} /></label>
+              <BusinessLabel>Date<input name="dueDate" type="date" defaultValue={editingLead.dueDate} /></BusinessLabel>
+              <BusinessLabel>Début réservation<input name="rentalStartDate" type="date" defaultValue={editingLead.rentalStartDate} /></BusinessLabel>
+              <BusinessLabel>Fin réservation<input name="rentalEndDate" type="date" defaultValue={editingLead.rentalEndDate} /></BusinessLabel>
 
-              <label className="full">Prochaine action
+              <BusinessLabel className="full">Prochaine action
                 <input name="nextAction" defaultValue={editingLead.nextAction} />
-              </label>
+              </BusinessLabel>
 
-              <label className="full">Notes internes
+              <BusinessLabel className="full">Notes internes
                 <textarea name="notes" defaultValue={editingLead.notes ?? ""} />
-              </label>
+              </BusinessLabel>
 
               <div className="confirm-actions full">
-                <button className="ghost-button" type="button" onClick={() => setEditingLead(null)}>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingLead(null)}>
                   Annuler
-                </button>
+                </BusinessButton>
 
-                <button className="primary-button planning-entry-submit" type="submit">
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
                   Enregistrer
-                </button>
+                </BusinessButton>
               </div>
-            </form>
+            </BusinessForm>
           </div>
         </div>
       )}
@@ -12875,6 +12868,7 @@ function PropertiesView({
   onUpdate: (property: Property) => void;
   onDelete: (id: string) => void;
 }) {
+  const business = useBusinessPermissions();
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [propertyStatusFilter, setPropertyStatusFilter] = useState<"Tous" | PropertyStatus>("Tous");
@@ -12936,16 +12930,16 @@ function PropertiesView({
           </div>
 
           <div className="asset-filter-grid">
-            <label>Statut
+            <BusinessLabel>Statut
               <select value={propertyStatusFilter} onChange={(event) => setPropertyStatusFilter(event.target.value as "Tous" | PropertyStatus)}>
                 <option value="Tous">Tous</option>
                 {propertyStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
               </select>
-            </label>
+            </BusinessLabel>
 
-            <label>Ville
+            <BusinessLabel>Ville
               <input value={propertyCityFilter} onChange={(event) => setPropertyCityFilter(event.target.value)} placeholder="Cannes, Nice..." />
-            </label>
+            </BusinessLabel>
           </div>
         </div>
 
@@ -12961,7 +12955,7 @@ function PropertiesView({
             <div className="property-visual">
               <span>{property.city || "Bien"}</span>
 
-              <button
+              <BusinessButton permission="remove"
                 className="asset-reset-button icon-button light"
                 onClick={() => {
                   const confirmed = window.confirm(`Supprimer "${property.name}" ?`);
@@ -12970,7 +12964,7 @@ function PropertiesView({
                 aria-label="Supprimer"
               >
                 ×
-              </button>
+              </BusinessButton>
             </div>
 
             <div className="property-body">
@@ -12991,13 +12985,13 @@ function PropertiesView({
               <ActionMeta item={property} />
 
               <div className="asset-card-actions">
-                <button className="asset-detail-button" type="button" onClick={() => setSelectedProperty(property)}>
+                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedProperty(property)}>
                   Détails
-                </button>
+                </BusinessButton>
 
-                <button className="asset-edit-button" type="button" onClick={() => openEdit(property)}>
+                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(property)}>
                   Modifier
-                </button>
+                </BusinessButton>
               </div>
             </div>
           </article>
@@ -13008,23 +13002,23 @@ function PropertiesView({
         <p className="eyebrow">Nouveau</p>
         <h3>Ajouter un bien</h3>
 
-        <form className="form-grid contact-create-form" onSubmit={onAdd}>
-          <label>Nom<input name="name" placeholder="Villa Belle Époque" /></label>
-          <label>Ville<input name="city" placeholder="Cannes" /></label>
-          <label>Prix<input name="price" type="number" min="0" placeholder="120000" /></label>
+        <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
+          <BusinessLabel>Nom<input name="name" placeholder="Villa Belle Époque" /></BusinessLabel>
+          <BusinessLabel>Ville<input name="city" placeholder="Cannes" /></BusinessLabel>
+          <BusinessLabel>Prix<input name="price" type="number" min="0" placeholder="120000" /></BusinessLabel>
 
-          <label>Statut
+          <BusinessLabel>Statut
             <select name="status">
               {propertyStatuses.map((status) => <option key={status}>{status}</option>)}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Propriétaire<input name="owner" placeholder="Nom owner" /></label>
-          <label>Chambres<input name="bedrooms" type="number" min="0" placeholder="6" /></label>
-          <label>Surface m²<input name="surface" type="number" min="0" placeholder="420" /></label>
+          <BusinessLabel>Propriétaire<input name="owner" placeholder="Nom owner" /></BusinessLabel>
+          <BusinessLabel>Chambres<input name="bedrooms" type="number" min="0" placeholder="6" /></BusinessLabel>
+          <BusinessLabel>Surface m²<input name="surface" type="number" min="0" placeholder="420" /></BusinessLabel>
 
-          <button className="primary-button planning-entry-submit" type="submit">Ajouter</button>
-        </form>
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
+        </BusinessForm>
       </section>
 
       {selectedProperty && (
@@ -13064,8 +13058,8 @@ function PropertiesView({
             </div>
 
             <div className="confirm-actions">
-              <button className="ghost-button" type="button" onClick={() => setSelectedProperty(null)}>Fermer</button>
-              <button className="primary-button" type="button" onClick={() => openEdit(selectedProperty)}>Modifier</button>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedProperty(null)}>Fermer</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedProperty)}>Modifier</BusinessButton>
             </div>
           </div>
         </div>
@@ -13077,30 +13071,30 @@ function PropertiesView({
             <p className="eyebrow">Modification</p>
             <h3>Modifier le bien</h3>
 
-            <form className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <label>Nom<input name="name" defaultValue={editingProperty.name} /></label>
-              <label>Ville<input name="city" defaultValue={editingProperty.city} /></label>
-              <label>Prix<input name="price" type="number" min="0" defaultValue={editingProperty.price || ""} /></label>
+            <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
+              <BusinessLabel>Nom<input name="name" defaultValue={editingProperty.name} /></BusinessLabel>
+              <BusinessLabel>Ville<input name="city" defaultValue={editingProperty.city} /></BusinessLabel>
+              <BusinessLabel>Prix<input name="price" type="number" min="0" defaultValue={editingProperty.price || ""} /></BusinessLabel>
 
-              <label>Statut
+              <BusinessLabel>Statut
                 <select name="status" defaultValue={editingProperty.status}>
                   {propertyStatuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Propriétaire<input name="owner" defaultValue={editingProperty.owner} /></label>
-              <label>Chambres<input name="bedrooms" type="number" min="0" defaultValue={editingProperty.bedrooms || ""} /></label>
-              <label>Surface m²<input name="surface" type="number" min="0" defaultValue={editingProperty.surface || ""} /></label>
+              <BusinessLabel>Propriétaire<input name="owner" defaultValue={editingProperty.owner} /></BusinessLabel>
+              <BusinessLabel>Chambres<input name="bedrooms" type="number" min="0" defaultValue={editingProperty.bedrooms || ""} /></BusinessLabel>
+              <BusinessLabel>Surface m²<input name="surface" type="number" min="0" defaultValue={editingProperty.surface || ""} /></BusinessLabel>
 
-              <label className="full">Notes internes
+              <BusinessLabel className="full">Notes internes
                 <textarea name="notes" defaultValue={editingProperty.notes ?? ""} />
-              </label>
+              </BusinessLabel>
 
               <div className="confirm-actions full">
-                <button className="ghost-button" type="button" onClick={() => setEditingProperty(null)}>Annuler</button>
-                <button className="primary-button planning-entry-submit" type="submit">Enregistrer</button>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingProperty(null)}>Annuler</BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
               </div>
-            </form>
+            </BusinessForm>
           </div>
         </div>
       )}
@@ -13121,6 +13115,7 @@ function VehiclesView({
   onUpdate: (vehicle: Vehicle) => void;
   onDelete: (id: string) => void;
 }) {
+  const business = useBusinessPermissions();
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [vehicleStatusFilter, setVehicleStatusFilter] = useState<"Tous" | VehicleStatus>("Tous");
@@ -13180,16 +13175,16 @@ function VehiclesView({
           </div>
 
           <div className="asset-filter-grid">
-            <label>Statut
+            <BusinessLabel>Statut
               <select value={vehicleStatusFilter} onChange={(event) => setVehicleStatusFilter(event.target.value as "Tous" | VehicleStatus)}>
                 <option value="Tous">Tous</option>
                 {vehicleStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
               </select>
-            </label>
+            </BusinessLabel>
 
-            <label>Ville
+            <BusinessLabel>Ville
               <input value={vehicleCityFilter} onChange={(event) => setVehicleCityFilter(event.target.value)} placeholder="Cannes, Monaco..." />
-            </label>
+            </BusinessLabel>
           </div>
         </div>
 
@@ -13204,10 +13199,10 @@ function VehiclesView({
           <article className="property-card" key={vehicle.id}>
             <div className="property-visual">
               <span>{vehicle.brand || "Voiture"}</span>
-              <button className="asset-reset-button icon-button light" onClick={() => {
+              <BusinessButton permission="remove" className="asset-reset-button icon-button light" onClick={() => {
                 const confirmed = window.confirm(`Supprimer "${vehicle.name}" ?`);
                 if (confirmed) onDelete(vehicle.id);
-              }} aria-label="Supprimer">×</button>
+              }} aria-label="Supprimer">×</BusinessButton>
             </div>
 
             <div className="property-body">
@@ -13228,8 +13223,8 @@ function VehiclesView({
               <ActionMeta item={vehicle} />
 
               <div className="asset-card-actions">
-                <button className="asset-detail-button" type="button" onClick={() => setSelectedVehicle(vehicle)}>Détails</button>
-                <button className="asset-edit-button" type="button" onClick={() => openEdit(vehicle)}>Modifier</button>
+                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedVehicle(vehicle)}>Détails</BusinessButton>
+                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(vehicle)}>Modifier</BusinessButton>
               </div>
             </div>
           </article>
@@ -13240,25 +13235,25 @@ function VehiclesView({
         <p className="eyebrow">Nouveau</p>
         <h3>Ajouter une voiture</h3>
 
-        <form className="form-grid contact-create-form" onSubmit={onAdd}>
-          <label>Nom<input name="name" placeholder="Range Rover Autobiography" /></label>
-          <label>Marque<input name="brand" placeholder="Land Rover" /></label>
-          <label>Modèle<input name="model" placeholder="Range Rover" /></label>
-          <label>Ville<input name="city" placeholder="Cannes" /></label>
-          <label>Prix / jour<input name="price" type="number" min="0" placeholder="900" /></label>
+        <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
+          <BusinessLabel>Nom<input name="name" placeholder="Range Rover Autobiography" /></BusinessLabel>
+          <BusinessLabel>Marque<input name="brand" placeholder="Land Rover" /></BusinessLabel>
+          <BusinessLabel>Modèle<input name="model" placeholder="Range Rover" /></BusinessLabel>
+          <BusinessLabel>Ville<input name="city" placeholder="Cannes" /></BusinessLabel>
+          <BusinessLabel>Prix / jour<input name="price" type="number" min="0" placeholder="900" /></BusinessLabel>
 
-          <label>Statut
+          <BusinessLabel>Statut
             <select name="status">
               {vehicleStatuses.map((status) => <option key={status}>{status}</option>)}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Propriétaire<input name="owner" placeholder="Nom owner" /></label>
-          <label>Année<input name="year" type="number" min="1900" placeholder="2024" /></label>
-          <label>Kilométrage<input name="mileage" type="number" min="0" placeholder="12000" /></label>
+          <BusinessLabel>Propriétaire<input name="owner" placeholder="Nom owner" /></BusinessLabel>
+          <BusinessLabel>Année<input name="year" type="number" min="1900" placeholder="2024" /></BusinessLabel>
+          <BusinessLabel>Kilométrage<input name="mileage" type="number" min="0" placeholder="12000" /></BusinessLabel>
 
-          <button className="primary-button planning-entry-submit" type="submit">Ajouter</button>
-        </form>
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
+        </BusinessForm>
       </section>
 
       {selectedVehicle && (
@@ -13300,8 +13295,8 @@ function VehiclesView({
             </div>
 
             <div className="confirm-actions">
-              <button className="ghost-button" type="button" onClick={() => setSelectedVehicle(null)}>Fermer</button>
-              <button className="primary-button" type="button" onClick={() => openEdit(selectedVehicle)}>Modifier</button>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedVehicle(null)}>Fermer</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedVehicle)}>Modifier</BusinessButton>
             </div>
           </div>
         </div>
@@ -13313,32 +13308,32 @@ function VehiclesView({
             <p className="eyebrow">Modification</p>
             <h3>Modifier la voiture</h3>
 
-            <form className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <label>Nom<input name="name" defaultValue={editingVehicle.name} /></label>
-              <label>Marque<input name="brand" defaultValue={editingVehicle.brand} /></label>
-              <label>Modèle<input name="model" defaultValue={editingVehicle.model} /></label>
-              <label>Ville<input name="city" defaultValue={editingVehicle.city} /></label>
-              <label>Prix / jour<input name="price" type="number" min="0" defaultValue={editingVehicle.price || ""} /></label>
+            <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
+              <BusinessLabel>Nom<input name="name" defaultValue={editingVehicle.name} /></BusinessLabel>
+              <BusinessLabel>Marque<input name="brand" defaultValue={editingVehicle.brand} /></BusinessLabel>
+              <BusinessLabel>Modèle<input name="model" defaultValue={editingVehicle.model} /></BusinessLabel>
+              <BusinessLabel>Ville<input name="city" defaultValue={editingVehicle.city} /></BusinessLabel>
+              <BusinessLabel>Prix / jour<input name="price" type="number" min="0" defaultValue={editingVehicle.price || ""} /></BusinessLabel>
 
-              <label>Statut
+              <BusinessLabel>Statut
                 <select name="status" defaultValue={editingVehicle.status}>
                   {vehicleStatuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Propriétaire<input name="owner" defaultValue={editingVehicle.owner} /></label>
-              <label>Année<input name="year" type="number" min="1900" defaultValue={editingVehicle.year || ""} /></label>
-              <label>Kilométrage<input name="mileage" type="number" min="0" defaultValue={editingVehicle.mileage || ""} /></label>
+              <BusinessLabel>Propriétaire<input name="owner" defaultValue={editingVehicle.owner} /></BusinessLabel>
+              <BusinessLabel>Année<input name="year" type="number" min="1900" defaultValue={editingVehicle.year || ""} /></BusinessLabel>
+              <BusinessLabel>Kilométrage<input name="mileage" type="number" min="0" defaultValue={editingVehicle.mileage || ""} /></BusinessLabel>
 
-              <label className="full">Notes internes
+              <BusinessLabel className="full">Notes internes
                 <textarea name="notes" defaultValue={editingVehicle.notes ?? ""} />
-              </label>
+              </BusinessLabel>
 
               <div className="confirm-actions full">
-                <button className="ghost-button" type="button" onClick={() => setEditingVehicle(null)}>Annuler</button>
-                <button className="primary-button planning-entry-submit" type="submit">Enregistrer</button>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingVehicle(null)}>Annuler</BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
               </div>
-            </form>
+            </BusinessForm>
           </div>
         </div>
       )}
@@ -13359,6 +13354,7 @@ function BoatsView({
   onUpdate: (boat: Boat) => void;
   onDelete: (id: string) => void;
 }) {
+  const business = useBusinessPermissions();
   const [editingBoat, setEditingBoat] = useState<Boat | null>(null);
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
   const [boatStatusFilter, setBoatStatusFilter] = useState<"Tous" | BoatStatus>("Tous");
@@ -13417,16 +13413,16 @@ function BoatsView({
           </div>
 
           <div className="asset-filter-grid">
-            <label>Statut
+            <BusinessLabel>Statut
               <select value={boatStatusFilter} onChange={(event) => setBoatStatusFilter(event.target.value as "Tous" | BoatStatus)}>
                 <option value="Tous">Tous</option>
                 {boatStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
               </select>
-            </label>
+            </BusinessLabel>
 
-            <label>Port
+            <BusinessLabel>Port
               <input value={boatPortFilter} onChange={(event) => setBoatPortFilter(event.target.value)} placeholder="Cannes, Antibes..." />
-            </label>
+            </BusinessLabel>
           </div>
         </div>
 
@@ -13441,10 +13437,10 @@ function BoatsView({
           <article className="property-card" key={boat.id}>
             <div className="property-visual">
               <span>{boat.type || "Bateau"}</span>
-              <button className="icon-button light" onClick={() => {
+              <BusinessButton permission="remove" className="icon-button light" onClick={() => {
                 const confirmed = window.confirm(`Supprimer "${boat.name}" ?`);
                 if (confirmed) onDelete(boat.id);
-              }} aria-label="Supprimer">×</button>
+              }} aria-label="Supprimer">×</BusinessButton>
             </div>
 
             <div className="property-body">
@@ -13465,8 +13461,8 @@ function BoatsView({
               <ActionMeta item={boat} />
 
               <div className="asset-card-actions">
-                <button className="asset-detail-button" type="button" onClick={() => setSelectedBoat(boat)}>Détails</button>
-                <button className="asset-edit-button" type="button" onClick={() => openEdit(boat)}>Modifier</button>
+                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedBoat(boat)}>Détails</BusinessButton>
+                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(boat)}>Modifier</BusinessButton>
               </div>
             </div>
           </article>
@@ -13477,24 +13473,24 @@ function BoatsView({
         <p className="eyebrow">Nouveau</p>
         <h3>Ajouter un bateau</h3>
 
-        <form className="form-grid contact-create-form" onSubmit={onAdd}>
-          <label>Nom<input name="name" placeholder="Sunseeker Manhattan 55" /></label>
-          <label>Port<input name="port" placeholder="Cannes" /></label>
-          <label>Type<input name="type" placeholder="Yacht, day boat..." /></label>
-          <label>Prix / jour<input name="price" type="number" min="0" placeholder="4500" /></label>
+        <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
+          <BusinessLabel>Nom<input name="name" placeholder="Sunseeker Manhattan 55" /></BusinessLabel>
+          <BusinessLabel>Port<input name="port" placeholder="Cannes" /></BusinessLabel>
+          <BusinessLabel>Type<input name="type" placeholder="Yacht, day boat..." /></BusinessLabel>
+          <BusinessLabel>Prix / jour<input name="price" type="number" min="0" placeholder="4500" /></BusinessLabel>
 
-          <label>Statut
+          <BusinessLabel>Statut
             <select name="status">
               {boatStatuses.map((status) => <option key={status}>{status}</option>)}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Propriétaire<input name="owner" placeholder="Nom owner" /></label>
-          <label>Année<input name="year" type="number" min="1900" placeholder="2021" /></label>
-          <label>Longueur m<input name="length" type="number" min="0" placeholder="17" /></label>
+          <BusinessLabel>Propriétaire<input name="owner" placeholder="Nom owner" /></BusinessLabel>
+          <BusinessLabel>Année<input name="year" type="number" min="1900" placeholder="2021" /></BusinessLabel>
+          <BusinessLabel>Longueur m<input name="length" type="number" min="0" placeholder="17" /></BusinessLabel>
 
-          <button className="primary-button planning-entry-submit" type="submit">Ajouter</button>
-        </form>
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
+        </BusinessForm>
       </section>
 
       {selectedBoat && (
@@ -13535,8 +13531,8 @@ function BoatsView({
             </div>
 
             <div className="confirm-actions">
-              <button className="ghost-button" type="button" onClick={() => setSelectedBoat(null)}>Fermer</button>
-              <button className="primary-button" type="button" onClick={() => openEdit(selectedBoat)}>Modifier</button>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedBoat(null)}>Fermer</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedBoat)}>Modifier</BusinessButton>
             </div>
           </div>
         </div>
@@ -13548,31 +13544,31 @@ function BoatsView({
             <p className="eyebrow">Modification</p>
             <h3>Modifier le bateau</h3>
 
-            <form className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <label>Nom<input name="name" defaultValue={editingBoat.name} /></label>
-              <label>Port<input name="port" defaultValue={editingBoat.port} /></label>
-              <label>Type<input name="type" defaultValue={editingBoat.type} /></label>
-              <label>Prix / jour<input name="price" type="number" min="0" defaultValue={editingBoat.price || ""} /></label>
+            <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
+              <BusinessLabel>Nom<input name="name" defaultValue={editingBoat.name} /></BusinessLabel>
+              <BusinessLabel>Port<input name="port" defaultValue={editingBoat.port} /></BusinessLabel>
+              <BusinessLabel>Type<input name="type" defaultValue={editingBoat.type} /></BusinessLabel>
+              <BusinessLabel>Prix / jour<input name="price" type="number" min="0" defaultValue={editingBoat.price || ""} /></BusinessLabel>
 
-              <label>Statut
+              <BusinessLabel>Statut
                 <select name="status" defaultValue={editingBoat.status}>
                   {boatStatuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Propriétaire<input name="owner" defaultValue={editingBoat.owner} /></label>
-              <label>Année<input name="year" type="number" min="1900" defaultValue={editingBoat.year || ""} /></label>
-              <label>Longueur m<input name="length" type="number" min="0" defaultValue={editingBoat.length || ""} /></label>
+              <BusinessLabel>Propriétaire<input name="owner" defaultValue={editingBoat.owner} /></BusinessLabel>
+              <BusinessLabel>Année<input name="year" type="number" min="1900" defaultValue={editingBoat.year || ""} /></BusinessLabel>
+              <BusinessLabel>Longueur m<input name="length" type="number" min="0" defaultValue={editingBoat.length || ""} /></BusinessLabel>
 
-              <label className="full">Notes internes
+              <BusinessLabel className="full">Notes internes
                 <textarea name="notes" defaultValue={editingBoat.notes ?? ""} />
-              </label>
+              </BusinessLabel>
 
               <div className="confirm-actions full">
-                <button className="ghost-button" type="button" onClick={() => setEditingBoat(null)}>Annuler</button>
-                <button className="primary-button planning-entry-submit" type="submit">Enregistrer</button>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingBoat(null)}>Annuler</BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
               </div>
-            </form>
+            </BusinessForm>
           </div>
         </div>
       )}
@@ -13600,6 +13596,7 @@ function TasksView({
   onStatusChange: (id: string, status: TaskStatus) => void;
   onDelete: (id: string) => void;
 }) {
+  const business = useBusinessPermissions();
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   function getLinkedLeadLabel(linkedTo: string) {
@@ -13703,21 +13700,21 @@ function TasksView({
                                 <small className="task-completed-hint">Disparaît automatiquement après 3 jours</small>
                               )}
 
-                              <button
+                              <BusinessButton permission="write"
                                 className="task-edit-button"
                                 type="button"
                                 onClick={() => openEdit(task)}
                               >
                                 Modifier
-                              </button>
+                              </BusinessButton>
                             </div>
 
                             <div className="task-actions">
-                              <select value={task.status} onChange={(event) => onStatusChange(task.id, event.target.value as TaskStatus)}>
+                              <BusinessSelect value={task.status} onChange={(event) => onStatusChange(task.id, event.target.value as TaskStatus)}>
                                 {taskStatuses.map((option) => <option key={option}>{option}</option>)}
-                              </select>
+                              </BusinessSelect>
 
-                              <button
+                              <BusinessButton permission="remove"
                                 className="icon-button"
                                 type="button"
                                 onClick={() => {
@@ -13730,7 +13727,7 @@ function TasksView({
                                 aria-label="Supprimer"
                               >
                                 ×
-                              </button>
+                              </BusinessButton>
                             </div>
                           </article>
                         );
@@ -13748,19 +13745,19 @@ function TasksView({
         <p className="eyebrow">Nouvelle</p>
         <h3>Ajouter une tâche</h3>
 
-        <form className="form-grid contact-create-form" onSubmit={onAdd}>
-          <label>Titre<input name="title" placeholder="Envoyer proposition" defaultValue={prefilledTitle || ""} /></label>
-          <label>Responsable<input name="owner" placeholder="Matteo" /></label>
+        <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
+          <BusinessLabel>Titre<input name="title" placeholder="Envoyer proposition" defaultValue={prefilledTitle || ""} /></BusinessLabel>
+          <BusinessLabel>Responsable<input name="owner" placeholder="Matteo" /></BusinessLabel>
 
-          <label>Statut
+          <BusinessLabel>Statut
             <select name="status">
               {taskStatuses.map((status) => <option key={status}>{status}</option>)}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <label>Date<input name="dueDate" type="date" /></label>
+          <BusinessLabel>Date<input name="dueDate" type="date" /></BusinessLabel>
 
-          <label className="full">Lead lié
+          <BusinessLabel className="full">Lead lié
             <select name="linkedTo" defaultValue={preselectedLeadId || ""}>
               <option value="">Aucun lead lié</option>
               {leads.map((lead) => (
@@ -13769,10 +13766,10 @@ function TasksView({
                 </option>
               ))}
             </select>
-          </label>
+          </BusinessLabel>
 
-          <button className="primary-button planning-entry-submit" type="submit">Ajouter</button>
-        </form>
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
+        </BusinessForm>
       </section>
 
       {editingTask && (
@@ -13782,19 +13779,19 @@ function TasksView({
             <h3>Modifier la tâche</h3>
             <ActionMeta item={editingTask} />
 
-            <form className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <label>Titre<input name="title" defaultValue={editingTask.title} /></label>
-              <label>Responsable<input name="owner" defaultValue={editingTask.owner} /></label>
+            <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
+              <BusinessLabel>Titre<input name="title" defaultValue={editingTask.title} /></BusinessLabel>
+              <BusinessLabel>Responsable<input name="owner" defaultValue={editingTask.owner} /></BusinessLabel>
 
-              <label>Statut
+              <BusinessLabel>Statut
                 <select name="status" defaultValue={editingTask.status}>
                   {taskStatuses.map((status) => <option key={status}>{status}</option>)}
                 </select>
-              </label>
+              </BusinessLabel>
 
-              <label>Date<input name="dueDate" type="date" defaultValue={editingTask.dueDate} /></label>
+              <BusinessLabel>Date<input name="dueDate" type="date" defaultValue={editingTask.dueDate} /></BusinessLabel>
 
-              <label className="full">Lead lié
+              <BusinessLabel className="full">Lead lié
                 <select name="linkedTo" defaultValue={editingTask.linkedTo}>
                   <option value="">Aucun lead lié</option>
                   {leads.map((lead) => (
@@ -13803,18 +13800,18 @@ function TasksView({
                     </option>
                   ))}
                 </select>
-              </label>
+              </BusinessLabel>
 
               <div className="confirm-actions full">
-                <button className="ghost-button" type="button" onClick={() => setEditingTask(null)}>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingTask(null)}>
                   Annuler
-                </button>
+                </BusinessButton>
 
-                <button className="primary-button planning-entry-submit" type="submit">
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
                   Enregistrer
-                </button>
+                </BusinessButton>
               </div>
-            </form>
+            </BusinessForm>
           </div>
         </div>
       )}
@@ -13826,3 +13823,7 @@ function TasksView({
 function Badge({ children }: { children: React.ReactNode }) {
   return <span className="badge">{children}</span>;
 }
+
+// Shared business views: importing these never mounts CRMApp or its global persistence.
+export { QuotesView, BookingsView, HouseTrackingView, VendorInvoicesView, ContactsView, LeadsView, PropertiesView, VehiclesView, BoatsView, TasksView, PlanningView, Dashboard, createDraftQuoteFromLead, safeNumber, parseAssetKey, normalizePlanningCategory, getPlanningCategoryFromAssetType, isValidPlanningDate, planningDateValue, getQuoteStatus, getQuoteTotal };
+export type { QuoteRequest };

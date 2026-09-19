@@ -55,6 +55,7 @@ for (const failure of ["JWT absent", "JWT invalide", "RPC inaccessible", "migrat
       if (url.pathname === "/auth/v1/user") {
         return failure === "JWT invalide" ? Response.json({ message:"rejected" },{status:401}) : Response.json({ id:"11111111-1111-4111-8111-111111111111", email:"test@example.invalid" });
       }
+      if (url.pathname === "/rest/v1/rpc/crm_authorize_drive") return Response.json(true);
       if (url.pathname === "/rest/v1/app_memberships") return Response.json({ role: "member" });
       if (url.pathname === "/rest/v1/crm_workspace_state") return Response.json({ payload: { contacts: [fictionalContact] } });
       assert.equal(url.pathname,"/rest/v1/rpc/crm_drive_folder_claim");
@@ -71,7 +72,7 @@ for (const failure of ["JWT absent", "JWT invalide", "RPC inaccessible", "migrat
     const body = await response.text();
     assert.doesNotMatch(body,/internal|PGRST|NEXT_PUBLIC|GOOGLE_|GCP_|fictional-user-jwt/);
     assert.equal(drivePosts,0); assert.equal(drive.state.generated,0);
-    assert.deepEqual(trace, failure === "JWT absent" ? [] : failure === "JWT invalide" ? ["/auth/v1/user"] : ["/auth/v1/user","/rest/v1/app_memberships","/rest/v1/crm_workspace_state","/rest/v1/rpc/crm_drive_folder_claim"]);
+    assert.deepEqual(trace, failure === "JWT absent" ? [] : failure === "JWT invalide" ? ["/auth/v1/user"] : ["/auth/v1/user","/rest/v1/app_memberships","/rest/v1/rpc/crm_authorize_drive","/rest/v1/crm_workspace_state","/rest/v1/rpc/crm_drive_folder_claim"]);
   });
 }
 test("configuration absente : erreur générique avant toute écriture", async t => {

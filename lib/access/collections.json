@@ -1,0 +1,902 @@
+[
+  {
+    "collection": "contacts",
+    "module": "contacts",
+    "label": "Contacts",
+    "fields": {
+      "name": {
+        "type": "string",
+        "label": "Nom"
+      },
+      "firstName": {
+        "type": "string",
+        "label": "Prénom"
+      },
+      "companyName": {
+        "type": "string",
+        "label": "Entreprise"
+      },
+      "kind": {
+        "type": "string",
+        "label": "Type de contact",
+        "enum": [
+          "Client",
+          "Propriétaire",
+          "Prestataire"
+        ]
+      },
+      "email": {
+        "type": "string",
+        "label": "Email"
+      },
+      "phone": {
+        "type": "string",
+        "label": "Téléphone"
+      },
+      "city": {
+        "type": "string",
+        "label": "Ville"
+      },
+      "postalAddress": {
+        "type": "string",
+        "label": "Adresse postale"
+      },
+      "supplierCategory": {
+        "type": "string",
+        "label": "Catégorie prestataire"
+      },
+      "supplierStatus": {
+        "type": "string",
+        "label": "État prestataire",
+        "enum": [
+          "",
+          "Actif",
+          "À vérifier",
+          "Inactif"
+        ]
+      },
+      "preferredLanguage": {
+        "type": "string",
+        "label": "Langue préférée",
+        "enum": [
+          "Français",
+          "Anglais",
+          "Italien",
+          "Autre"
+        ]
+      },
+      "budget": {
+        "type": "number",
+        "label": "Budget"
+      },
+      "civility": {
+        "type": "string",
+        "label": "civility",
+        "enum": [
+          "",
+          "M",
+          "MME"
+        ]
+      },
+      "source": {
+        "type": "string",
+        "label": "source"
+      },
+      "clientLevel": {
+        "type": "string",
+        "label": "clientLevel",
+        "enum": [
+          "Standard",
+          "VIP",
+          "Ultra VIP"
+        ]
+      },
+      "relationshipStatus": {
+        "type": "string",
+        "label": "relationshipStatus",
+        "enum": [
+          "Prospect",
+          "Actif",
+          "Dormant",
+          "Prestataire"
+        ]
+      },
+      "supplierContactName": {
+        "type": "string",
+        "label": "supplierContactName"
+      },
+      "supplierZone": {
+        "type": "string",
+        "label": "supplierZone"
+      },
+      "supplierQuality": {
+        "type": "string",
+        "label": "supplierQuality",
+        "enum": [
+          "Standard",
+          "Premium",
+          "Très premium"
+        ]
+      },
+      "supplierReliability": {
+        "type": "string",
+        "label": "supplierReliability",
+        "enum": [
+          "",
+          "À tester",
+          "Fiable",
+          "Très fiable",
+          "À éviter"
+        ]
+      }
+    }
+  },
+  {
+    "collection": "leads",
+    "module": "leads",
+    "label": "Leads",
+    "fields": {
+      "category": {
+        "type": "string",
+        "label": "Catégorie",
+        "enum": [
+          "Villa",
+          "Voiture",
+          "Bateau",
+          "Conciergerie"
+        ]
+      },
+      "status": {
+        "type": "string",
+        "label": "Statut",
+        "enum": [
+          "Nouveau",
+          "Contacté",
+          "Devis",
+          "Négociation",
+          "Gagné",
+          "Perdu"
+        ]
+      },
+      "priority": {
+        "type": "string",
+        "label": "Priorité",
+        "enum": [
+          "Basse",
+          "Moyenne",
+          "Haute"
+        ]
+      },
+      "nextAction": {
+        "type": "string",
+        "label": "Prochaine action"
+      },
+      "dueDate": {
+        "type": "string",
+        "label": "Échéance",
+        "date": true
+      },
+      "rentalStartDate": {
+        "type": "string",
+        "label": "Début de location",
+        "date": true
+      },
+      "rentalEndDate": {
+        "type": "string",
+        "label": "Fin de location",
+        "date": true
+      },
+      "value": {
+        "type": "number",
+        "label": "Valeur"
+      },
+      "contactName": {
+        "type": "string",
+        "label": "contactName",
+        "requires": "contacts"
+      },
+      "assetType": {
+        "type": "string",
+        "label": "assetType"
+      },
+      "assetId": {
+        "type": "string",
+        "label": "assetId"
+      }
+    }
+  },
+  {
+    "collection": "properties",
+    "module": "properties",
+    "label": "Biens",
+    "fields": {
+      "name": {
+        "type": "string",
+        "label": "Nom"
+      },
+      "city": {
+        "type": "string",
+        "label": "Ville"
+      },
+      "type": {
+        "type": "string",
+        "label": "Type"
+      },
+      "status": {
+        "type": "string",
+        "label": "Statut",
+        "enum": [
+          "Disponible",
+          "Mandat en cours",
+          "Loué",
+          "Vendu"
+        ]
+      },
+      "price": {
+        "type": "number",
+        "label": "Prix"
+      },
+      "bedrooms": {
+        "type": "number",
+        "label": "Chambres"
+      },
+      "surface": {
+        "type": "number",
+        "label": "Surface"
+      },
+      "owner": {
+        "type": "string",
+        "label": "owner",
+        "requires": "contacts"
+      }
+    }
+  },
+  {
+    "collection": "vehicles",
+    "module": "vehicles",
+    "label": "Voitures",
+    "fields": {
+      "name": {
+        "type": "string",
+        "label": "Nom"
+      },
+      "brand": {
+        "type": "string",
+        "label": "Marque"
+      },
+      "model": {
+        "type": "string",
+        "label": "Modèle"
+      },
+      "city": {
+        "type": "string",
+        "label": "Ville"
+      },
+      "status": {
+        "type": "string",
+        "label": "Statut",
+        "enum": [
+          "Disponible",
+          "En location",
+          "En maintenance",
+          "Vendu"
+        ]
+      },
+      "price": {
+        "type": "number",
+        "label": "Prix"
+      },
+      "year": {
+        "type": "number",
+        "label": "Année"
+      },
+      "mileage": {
+        "type": "number",
+        "label": "Kilométrage"
+      },
+      "owner": {
+        "type": "string",
+        "label": "owner",
+        "requires": "contacts"
+      }
+    }
+  },
+  {
+    "collection": "boats",
+    "module": "boats",
+    "label": "Bateaux",
+    "fields": {
+      "name": {
+        "type": "string",
+        "label": "Nom"
+      },
+      "port": {
+        "type": "string",
+        "label": "Port"
+      },
+      "type": {
+        "type": "string",
+        "label": "Type"
+      },
+      "status": {
+        "type": "string",
+        "label": "Statut",
+        "enum": [
+          "Disponible",
+          "En charter",
+          "En maintenance",
+          "Vendu"
+        ]
+      },
+      "price": {
+        "type": "number",
+        "label": "Prix"
+      },
+      "year": {
+        "type": "number",
+        "label": "Année"
+      },
+      "length": {
+        "type": "number",
+        "label": "Longueur"
+      },
+      "owner": {
+        "type": "string",
+        "label": "owner",
+        "requires": "contacts"
+      }
+    }
+  },
+  {
+    "collection": "tasks",
+    "module": "tasks",
+    "label": "Tâches",
+    "fields": {
+      "title": {
+        "type": "string",
+        "label": "Titre"
+      },
+      "status": {
+        "type": "string",
+        "label": "Statut",
+        "enum": [
+          "À faire",
+          "En cours",
+          "Terminé"
+        ]
+      },
+      "dueDate": {
+        "type": "string",
+        "label": "Échéance",
+        "date": true
+      },
+      "owner": {
+        "type": "string",
+        "label": "owner"
+      },
+      "linkedTo": {
+        "type": "string",
+        "label": "linkedTo",
+        "requires": "leads"
+      }
+    }
+  },
+  {
+    "collection": "planningEntries",
+    "module": "planning",
+    "label": "Planning",
+    "fields": {
+      "title": {
+        "type": "string",
+        "label": "Titre"
+      },
+      "type": {
+        "type": "string",
+        "label": "Type",
+        "enum": [
+          "Réservation",
+          "Intervention prestataire",
+          "Maintenance",
+          "Tâche interne",
+          "Autre"
+        ]
+      },
+      "planningCategory": {
+        "type": "string",
+        "label": "Catégorie planning",
+        "enum": [
+          "Villa",
+          "Bateau",
+          "Voiture",
+          "Conciergerie"
+        ]
+      },
+      "status": {
+        "type": "string",
+        "label": "Statut",
+        "enum": [
+          "Prévu",
+          "À confirmer",
+          "En cours",
+          "Terminé",
+          "Annulé"
+        ]
+      },
+      "priority": {
+        "type": "string",
+        "label": "Priorité",
+        "enum": [
+          "Normal",
+          "Important",
+          "Critique"
+        ]
+      },
+      "startDate": {
+        "type": "string",
+        "label": "Date de début",
+        "date": true
+      },
+      "startTime": {
+        "type": "string",
+        "label": "Début"
+      },
+      "endDate": {
+        "type": "string",
+        "label": "Date de fin",
+        "date": true
+      },
+      "endTime": {
+        "type": "string",
+        "label": "Fin"
+      },
+      "contactName": {
+        "type": "string",
+        "label": "contactName",
+        "requires": "contacts"
+      },
+      "assetType": {
+        "type": "string",
+        "label": "assetType"
+      },
+      "assetId": {
+        "type": "string",
+        "label": "assetId"
+      },
+      "blocksAvailability": {
+        "type": "boolean",
+        "label": "blocksAvailability"
+      }
+    }
+  },
+  {
+    "collection": "quotes",
+    "module": "quotes",
+    "label": "Devis",
+    "fields": {
+      "title": {
+        "type": "string",
+        "label": "Titre"
+      },
+      "clientName": {
+        "type": "string",
+        "label": "Nom du client",
+        "requires": "contacts"
+      },
+      "requestDate": {
+        "type": "string",
+        "label": "Date de demande",
+        "date": true
+      },
+      "startDate": {
+        "type": "string",
+        "label": "Date de début",
+        "date": true
+      },
+      "endDate": {
+        "type": "string",
+        "label": "Date de fin",
+        "date": true
+      },
+      "leadId": {
+        "type": "string",
+        "label": "leadId",
+        "requires": "leads"
+      },
+      "location": {
+        "type": "string",
+        "label": "location"
+      },
+      "guestCount": {
+        "type": "string",
+        "label": "guestCount"
+      },
+      "categories": {
+        "type": "array",
+        "label": "categories"
+      },
+      "items": {
+        "type": "array",
+        "label": "items"
+      },
+      "unitPrice": {
+        "type": "number",
+        "label": "unitPrice"
+      },
+      "validityDate": {
+        "type": "string",
+        "label": "validityDate",
+        "date": true
+      },
+      "paymentTerms": {
+        "type": "string",
+        "label": "paymentTerms"
+      },
+      "cancellationTerms": {
+        "type": "string",
+        "label": "cancellationTerms"
+      },
+      "included": {
+        "type": "string",
+        "label": "included"
+      },
+      "excluded": {
+        "type": "string",
+        "label": "excluded"
+      },
+      "status": {
+        "type": "string",
+        "label": "status",
+        "enum": [
+          "Draft",
+          "Sent",
+          "Negotiation",
+          "Accepted",
+          "Declined"
+        ]
+      },
+      "supplierCost": {
+        "type": "number",
+        "label": "supplierCost"
+      },
+      "depositReceived": {
+        "type": "number",
+        "label": "depositReceived"
+      },
+      "balanceReceived": {
+        "type": "number",
+        "label": "balanceReceived"
+      },
+      "paymentStatus": {
+        "type": "string",
+        "label": "paymentStatus",
+        "enum": [
+          "Non payé",
+          "Acompte reçu",
+          "Partiel",
+          "Payé",
+          "Annulé / remboursé"
+        ]
+      },
+      "expectedDeposit": {
+        "type": "number",
+        "label": "expectedDeposit"
+      },
+      "paymentDueDate": {
+        "type": "string",
+        "label": "paymentDueDate",
+        "date": true
+      },
+      "bookingStatus": {
+        "type": "string",
+        "label": "bookingStatus",
+        "enum": [
+          "À préparer",
+          "Prestataire à confirmer",
+          "Confirmé",
+          "En cours",
+          "Terminé",
+          "Annulé"
+        ]
+      },
+      "clientConfirmed": {
+        "type": "boolean",
+        "label": "clientConfirmed"
+      },
+      "depositConfirmed": {
+        "type": "boolean",
+        "label": "depositConfirmed"
+      },
+      "supplierConfirmed": {
+        "type": "boolean",
+        "label": "supplierConfirmed"
+      },
+      "balanceConfirmed": {
+        "type": "boolean",
+        "label": "balanceConfirmed"
+      },
+      "detailsSent": {
+        "type": "boolean",
+        "label": "detailsSent"
+      },
+      "serviceCompleted": {
+        "type": "boolean",
+        "label": "serviceCompleted"
+      },
+      "assignedContactId": {
+        "type": "string",
+        "label": "assignedContactId",
+        "requires": "contacts"
+      }
+    }
+  },
+  {
+    "collection": "vendorQuotes",
+    "module": "vendorQuotes",
+    "label": "Devis prestataires",
+    "fields": {
+      "title": {
+        "type": "string",
+        "label": "Titre"
+      },
+      "category": {
+        "type": "string",
+        "label": "Catégorie"
+      },
+      "quoteReference": {
+        "type": "string",
+        "label": "Référence du devis"
+      },
+      "quoteDate": {
+        "type": "string",
+        "label": "Date du devis",
+        "date": true
+      },
+      "validUntil": {
+        "type": "string",
+        "label": "Valable jusqu’au"
+      },
+      "amount": {
+        "type": "number",
+        "label": "Montant"
+      },
+      "contactId": {
+        "type": "string",
+        "label": "contactId",
+        "requires": "contacts"
+      },
+      "contactName": {
+        "type": "string",
+        "label": "contactName",
+        "requires": "contacts"
+      },
+      "contactPersonName": {
+        "type": "string",
+        "label": "contactPersonName",
+        "requires": "contacts"
+      },
+      "quoteDocumentStoragePath": {
+        "type": "string",
+        "label": "quoteDocumentStoragePath",
+        "requires": "documents"
+      },
+      "quoteDocumentName": {
+        "type": "string",
+        "label": "quoteDocumentName",
+        "requires": "documents"
+      }
+    }
+  },
+  {
+    "collection": "vendorInvoices",
+    "module": "vendorInvoices",
+    "label": "Factures prestataires",
+    "fields": {
+      "title": {
+        "type": "string",
+        "label": "Titre"
+      },
+      "category": {
+        "type": "string",
+        "label": "Catégorie"
+      },
+      "invoiceReference": {
+        "type": "string",
+        "label": "Référence de facture"
+      },
+      "invoiceDate": {
+        "type": "string",
+        "label": "Date de facture",
+        "date": true
+      },
+      "dueDate": {
+        "type": "string",
+        "label": "Échéance",
+        "date": true
+      },
+      "amount": {
+        "type": "number",
+        "label": "Montant"
+      },
+      "contactId": {
+        "type": "string",
+        "label": "contactId",
+        "requires": "contacts"
+      },
+      "contactName": {
+        "type": "string",
+        "label": "contactName",
+        "requires": "contacts"
+      },
+      "contactPersonName": {
+        "type": "string",
+        "label": "contactPersonName",
+        "requires": "contacts"
+      },
+      "paidAmount": {
+        "type": "number",
+        "label": "paidAmount",
+        "writeSensitive": "payment"
+      },
+      "paymentMethod": {
+        "type": "string",
+        "label": "paymentMethod",
+        "writeSensitive": "payment"
+      },
+      "invoiceDocumentStoragePath": {
+        "type": "string",
+        "label": "invoiceDocumentStoragePath",
+        "requires": "documents"
+      },
+      "invoiceDocumentName": {
+        "type": "string",
+        "label": "invoiceDocumentName",
+        "requires": "documents"
+      }
+    }
+  },
+  {
+    "collection": "houseTrackingHouses",
+    "module": "houseTracking",
+    "label": "Maisons",
+    "fields": {
+      "name": {
+        "type": "string",
+        "label": "Nom"
+      },
+      "address": {
+        "type": "string",
+        "label": "Adresse"
+      }
+    }
+  },
+  {
+    "collection": "houseTrackingWorkers",
+    "module": "houseTracking",
+    "label": "Intervenants",
+    "fields": {
+      "contactName": {
+        "type": "string",
+        "label": "Nom de l’intervenant"
+      },
+      "role": {
+        "type": "string",
+        "label": "Fonction"
+      },
+      "status": {
+        "type": "string",
+        "label": "Statut",
+        "enum": [
+          "Actif",
+          "Inactif"
+        ]
+      },
+      "hourlyRate": {
+        "type": "number",
+        "label": "Taux horaire"
+      },
+      "contactId": {
+        "type": "string",
+        "label": "contactId",
+        "requires": "contacts"
+      },
+      "documentStoragePath": {
+        "type": "string",
+        "label": "documentStoragePath",
+        "requires": "documents"
+      },
+      "documentFileName": {
+        "type": "string",
+        "label": "documentFileName",
+        "requires": "documents"
+      }
+    }
+  },
+  {
+    "collection": "houseTimeEntries",
+    "module": "houseTracking",
+    "label": "Heures",
+    "fields": {
+      "houseId": {
+        "type": "string",
+        "label": "Maison"
+      },
+      "workerId": {
+        "type": "string",
+        "label": "Intervenant"
+      },
+      "date": {
+        "type": "string",
+        "label": "Date",
+        "date": true
+      },
+      "startTime": {
+        "type": "string",
+        "label": "Début"
+      },
+      "endTime": {
+        "type": "string",
+        "label": "Fin"
+      },
+      "note": {
+        "type": "string",
+        "label": "Note"
+      },
+      "breakMinutes": {
+        "type": "number",
+        "label": "Pause (minutes)"
+      },
+      "hourlyRate": {
+        "type": "number",
+        "label": "Taux horaire"
+      },
+      "houseName": {
+        "type": "string",
+        "label": "houseName"
+      },
+      "workerName": {
+        "type": "string",
+        "label": "workerName"
+      }
+    }
+  },
+  {
+    "collection": "housePayments",
+    "module": "houseTracking",
+    "label": "Paiements des heures",
+    "fields": {
+      "houseId": {
+        "type": "string",
+        "label": "Maison"
+      },
+      "workerId": {
+        "type": "string",
+        "label": "Intervenant"
+      },
+      "date": {
+        "type": "string",
+        "label": "Date",
+        "date": true
+      },
+      "method": {
+        "type": "string",
+        "label": "Mode de règlement"
+      },
+      "note": {
+        "type": "string",
+        "label": "Note"
+      },
+      "amount": {
+        "type": "number",
+        "label": "Montant"
+      },
+      "houseName": {
+        "type": "string",
+        "label": "houseName"
+      },
+      "workerName": {
+        "type": "string",
+        "label": "workerName"
+      }
+    }
+  }
+]

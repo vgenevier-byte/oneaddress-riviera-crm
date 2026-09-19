@@ -212,7 +212,7 @@ export function createGoogleDriveFetch(
   });
 }
 
-async function verifySupabaseAccessToken(token: string): Promise<AuthenticatedCRMUser | null> {
+async function verifySupabaseAccessToken(token: string, resource: string | null = null, download = false): Promise<AuthenticatedCRMUser | null> {
   const supabase = createClient(
     requireServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireServerEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
@@ -235,6 +235,9 @@ async function verifySupabaseAccessToken(token: string): Promise<AuthenticatedCR
     .eq("user_id", data.user.id).eq("workspace_id", "oar").eq("status", "active").maybeSingle();
   if (membershipError) throw new DriveRouteError("Vérification des accès indisponible.", 503);
   if (!membership) throw new DriveRouteError("Accès OAR non autorisé.", 403);
+  const { data: fullAccess, error: moduleError } = await supabase.rpc("crm_authorize_drive", { p_resource: resource, p_download: download });
+  if (moduleError) throw new DriveRouteError("Vérification des droits indisponible.", 503);
+  if (!fullAccess) throw new DriveRouteError("Ce parcours Drive global exige un accès complet. Utilisez les documents classés de votre module.", 403);
 
   return {
     id: data.user.id,
@@ -257,7 +260,10 @@ export async function requireAuthenticatedCRMUser(
   }
 
   try {
-    const user = await (dependencies.verifyAccessToken || verifySupabaseAccessToken)(token);
+    const url = new URL(request.url);
+    const scopedFile = request.method === "GET" && url.pathname === "/api/drive/file";
+    const user = dependencies.verifyAccessToken ? await dependencies.verifyAccessToken(token)
+      : await verifySupabaseAccessToken(token, scopedFile ? url.searchParams.get("fileId") : null, scopedFile && url.searchParams.get("download") === "1");
 
     if (!user) {
       throw new DriveRouteError("Session CRM invalide ou expirée.", 401);

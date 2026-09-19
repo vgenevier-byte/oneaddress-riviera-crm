@@ -1,0 +1,19 @@
+import assert from 'node:assert/strict';
+import {writeFileSync} from 'node:fs';
+import {connect,sql,grant,user,rpc,status,dir} from './local.mjs';
+await connect();const u=await user('matrix'),admin=await user('admin');const ok=r=>{assert.ok([200,204].includes(r.status),JSON.stringify(r));return r.data;};const result=[];
+try{
+ await grant(u,{dashboard:{level:'read'},tasks:{level:'contribute',sensitive:{delete:true,export:true}},documents:{level:'contribute',sensitive:{delete:true,export:true}}});
+ const dash=ok(await rpc('crm_read_module',u.token,{p_module:'dashboard'}));assert.deepEqual(Object.keys(dash.collections),['tasks']);result.push({name:'Dashboard aggregates only the explicitly allowed source module',status:'passed'});
+ const path=ok(await rpc('crm_new_document',u.token,{p_collection:'tasks',p_record:'unified-tasks',p_title:'Document fictif de tâche.pdf'}));const headers={apikey:status.ANON_KEY,Authorization:'Bearer '+u.token};
+ const bytes='%PDF-1.4\nFICTIONAL DOCUMENT\n';const upload=await fetch(status.API_URL+'/storage/v1/object/crm-documents/'+path,{method:'POST',headers:{...headers,'Content-Type':'application/pdf'},body:bytes});assert.equal(upload.status,200,await upload.text());
+ const list=ok(await rpc('crm_read_module',u.token,{p_module:'documents'}));assert.ok(list.collections.documents.some(d=>d.resource_id===path));
+ const signed=await fetch(status.API_URL+'/storage/v1/object/sign/crm-documents/'+path,{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({expiresIn:10})});assert.equal(signed.status,200);const signedBody=await signed.json();const download=await fetch(status.API_URL+'/storage/v1'+signedBody.signedURL);assert.equal(await download.text(),bytes);
+ await grant(u,{tasks:{level:'read',sensitive:{export:true}},documents:{level:'read',sensitive:{export:true}}});const removalDenied=await fetch(status.API_URL+'/storage/v1/object/crm-documents',{method:'DELETE',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({prefixes:[path]})});assert.ok(removalDenied.status>=400||JSON.stringify(await removalDenied.json())==='[]');
+ assert.equal((await sql.query("select count(*)::int n from storage.objects where bucket_id='crm-documents' and name=$1",[path])).rows[0].n,1);
+ await grant(u,{tasks:{level:'contribute',sensitive:{delete:true,export:true}},documents:{level:'contribute',sensitive:{delete:true,export:true}}});const removed=await fetch(status.API_URL+'/storage/v1/object/crm-documents',{method:'DELETE',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({prefixes:[path]})});assert.equal(removed.status,200);ok(await rpc('crm_forget_document',u.token,{p_resource:path}));assert.equal((await sql.query('select count(*)::int n from crm_document_scopes where resource_id=$1',[path])).rows[0].n,0);result.push({name:'Restricted classified document upload/list/sign/download/delete with actual Storage bytes and separate delete permission',status:'passed'});
+ ok(await rpc('crm_classify_document',admin.token,{p_provider:'google-drive',p_resource:'fixture-document',p_collection:'tasks',p_record:'unified-tasks',p_title:'Document Drive fictif',p_bank:false}));
+ let r=await fetch('http://127.0.0.1:3160/api/drive/file?fileId=fixture-document&download=1',{headers:{Authorization:'Bearer '+u.token}});assert.equal(r.status,200);assert.match(await r.text(),/FICTIONAL DRIVE DOCUMENT/);
+ await grant(u,{documents:{level:'read',sensitive:{export:true}}});r=await fetch('http://127.0.0.1:3160/api/drive/file?fileId=fixture-document&download=1',{headers:{Authorization:'Bearer '+u.token}});assert.equal(r.status,403);result.push({name:'Classified Drive endpoint allows authorized owner and denies Documents-only profile, Google transport simulated',status:'passed'});
+ console.log(JSON.stringify(result));writeFileSync(dir+'/documents.json',JSON.stringify(result,null,2));
+}finally{await sql.end();}

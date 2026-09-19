@@ -1,7 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import Link from "next/link";
+import { OperationProvider } from "@/lib/access/operations";
+import UnifiedNavigation, { type UnifiedTab } from "./UnifiedNavigation";
+import { moduleItems, readable, type AccessSnapshot, type ModuleId } from "@/lib/access/modules";
+import type { CRMTab } from "./crmNavigation";
+const ModuleWorkspace = dynamic(() => import("./ModuleWorkspace"), { ssr: false });
+const AccessAdministration = dynamic(() => import("./AccessAdministration"), { ssr: false });
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
@@ -16,19 +21,54 @@ import styles from "./AccessPortal.module.css";
 const CRMApp = dynamic(() => import("./CRMApp"), { ssr: false });
 const IzordGenerator = dynamic(() => import("./izord/IzordGenerator"), { ssr: false });
 type Membership = { workspace_id: "oar" | "izord"; role: string };
-type Access = { session: Session | null; memberships: Membership[]; loading: boolean; error: string; phase?: "verified" | "unavailable" | "denied" };
+type Access = { permissions?: AccessSnapshot; session: Session | null; memberships: Membership[]; loading: boolean; error: string; phase?: "verified" | "unavailable" | "denied" };
 const initial: Access = { session: null, memberships: [], loading: true, error: "" };
 type GeneratorHost = { key: string; userId: string; role: string; controller: AbortController; recovery?: GeneratorDraft; capture: (draft: GeneratorDraft) => void };
 class AccessCheckFailure extends Error {
   constructor(readonly temporary: boolean, message: string) { super(message); }
 }
 
-export default function AccessPortal({ space }: { space: "oar" | "izord" | "choose" }) {
+export default function AccessPortal({ space }: { space: "oar" | "izord" | "choose" | "admin" }) {
+  const [businessDraft,setBusinessDraft]=useState<{user:string;revision:number;module:ModuleId;value:Record<string,string>}|null>(null);
+  const [view,setView] = useState<UnifiedTab>(space === "izord" ? "izord" : space === "admin" ? "admin" : "dashboard");
+  const permissionsRef = useRef<string>("");
+  const [invitation,setInvitation] = useState<string | null>(null);
+  const [invitationReady,setInvitationReady] = useState(false);
+  const [invitationError,setInvitationError] = useState(false);
+  const [invitationSetup,setInvitationSetup] = useState(false);
+  const [invitationAccepted,setInvitationAccepted] = useState(false);
+  const [invitationPasswordError,setInvitationPasswordError] = useState(false);
+
   const [access, setAccess] = useState<Access>(initial);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  useEffect(()=>{ let alive=true; const timer=window.setTimeout(async()=>{
+    const url=new URL(window.location.href),query=url.searchParams,fragment=new URLSearchParams(url.hash.slice(1));
+    const pending=query.get("invite");
+    setInvitation(pending);setInvitationSetup(query.get('setup')==='1');
+    setInvitationAccepted(!pending&&query.get('setup')==='1');
+    let failed=query.has('error')||query.has('error_code')||query.has('invitation_error')||fragment.has('error')||fragment.has('error_code');
+    if(pending){
+      // Native Auth consumes its fragment and verifies /user. Never interpret an
+      // Auth token as the business invitation, or derive rights from metadata.
+      const initialized=await supabase.auth.initialize();
+      failed ||= Boolean(initialized.error);
+      if(!alive)return;
+      const cleaned=new URL(window.location.pathname,window.location.origin);
+      cleaned.searchParams.set('invite',pending);
+      if(query.get('setup')==='1')cleaned.searchParams.set('setup','1');
+      // Persist failure across reloads: an old session must not accept a failed link.
+      if(failed)cleaned.searchParams.set('invitation_error','1');
+      window.history.replaceState(null,'',cleaned.pathname+cleaned.search);
+      setInvitationError(failed);
+      if(failed)setMessage('Lien d’invitation invalide ou expiré. Demandez une nouvelle invitation.');
+    }
+    if(!alive)return;
+    setInvitationReady(true);
+    const requested=query.get("module");if(moduleItems.some(m=>m.tab===requested))setView(requested as UnifiedTab);
+  },0);return()=>{alive=false;window.clearTimeout(timer);}; },[]);
   const [cacheTransition, setCacheTransition] = useState<PersistentCRMCacheState | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [generatorHost, setGeneratorHost] = useState<GeneratorHost | null>(null);
@@ -45,10 +85,10 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "choo
   }, []);
 
   useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { const draft = draftRecovery.current?.draft; if (draft?.dirty || draft?.reports.length || draft?.sourceFiles.length) event.preventDefault(); };
+    const warn = (event: BeforeUnloadEvent) => { const draft = draftRecovery.current?.draft; if (hasUnsavedChanges || draft?.dirty || draft?.reports.length || draft?.sourceFiles.length) { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, []);
+  }, [hasUnsavedChanges]);
 
   useEffect(() => {
     let alive = true, generation = 0;
@@ -100,9 +140,17 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "choo
           .select("workspace_id, role").eq("user_id", userId).eq("status", "active");
         if (error) throw new AccessCheckFailure(temporaryAccessFailure(error, status), "Vérification des accès indisponible.");
         if (!alive || current !== generation || cacheBlocked()) return;
-        const memberships = (data ?? []) as Membership[];
+        const { data: permissions, error: permissionError } = await supabase.rpc("crm_access_snapshot");
+        if (permissionError) throw new AccessCheckFailure(temporaryAccessFailure(permissionError), "Vérification des droits par module indisponible.");
+        if (!alive || current !== generation) return;
+        const fingerprint = JSON.stringify(permissions);
+        if (permissionsRef.current && permissionsRef.current !== fingerprint) {
+          stopGenerator(); clearCRMCache(); setMessage("Vos droits ont changé. Les données précédentes ont été retirées ; les nouveaux droits sont appliqués.");
+        }
+        permissionsRef.current = fingerprint;
+        const memberships = ((data ?? []) as Membership[]).filter(m => m.workspace_id !== "izord" || readable(permissions,"izord"));
         const izordMembership = memberships.find(m => m.workspace_id === "izord");
-        if (space === "izord") {
+        if (view === "izord") {
           if (!izordMembership) stopGenerator();
           else {
             // A confirmed reduction closes the old writer before any subsequent
@@ -145,7 +193,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "choo
         }
         if (memberships.some(m => m.workspace_id === "oar")) bindCRMCache(userId!);
         else clearCRMCache();
-        setAccess({ session, memberships, loading: false, error: "", phase: "verified" });
+        setAccess({ session, memberships, permissions, loading: false, error: "", phase: "verified" });
       } catch (error) {
         failedCheck(error, session, current);
       }
@@ -198,10 +246,11 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "choo
     const timer = window.setInterval(refresh, 60000);
     window.addEventListener("focus", refresh);
     return () => { alive = false; generation++; generatorRef.current?.controller.abort(); generatorRef.current = null; draftRecovery.current = null; subscription.unsubscribe(); window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("storage", onStorage); window.removeEventListener(CRM_CACHE_CHANGED, onRecovered); channel?.close(); };
-  }, [space,stopGenerator]);
+  }, [view,stopGenerator]);
 
   function confirmLeaving() { return !(hasUnsavedChanges || draftRecovery.current?.draft.dirty || draftRecovery.current?.draft.reports.length) || window.confirm("Des modifications ne sont pas encore sauvegardées. Annulez pour les sauvegarder ou utiliser Backup fichier avant de quitter. Quitter quand même ?"); }
   async function logout() {
+    setBusinessDraft(null);
     if (!confirmLeaving()) return;
     stopGenerator();
     setAccess(initial);
@@ -212,49 +261,48 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "choo
     window.location.assign("/spaces");
   }
   if (cacheTransition) return <CacheRecovery state={cacheTransition} />;
-  const oar = access.memberships.some(m => m.workspace_id === "oar");
+  const permissions = access.permissions;
   const izord = access.memberships.find(m => m.workspace_id === "izord");
-  if (!access.loading && space === "oar" && oar && access.session) return <>
-    <nav className={styles.workspaceNav} aria-label="Espaces"><Link href="/spaces" onClick={event => { if (!confirmLeaving()) event.preventDefault(); }}>Mes espaces</Link>{izord && <Link href="/izord" onClick={event => { if (!confirmLeaving()) event.preventDefault(); }}>IZORD Invest</Link>}</nav>
-    <CRMApp key={access.session.user.id} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email ?? "utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} />
-  </>;
-
-  return <main className={styles.shell}>
-    <div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA <span>×</span> IZORD INVEST</span><span>Espace privé</span></div>
-    <section className={`${styles.card} ${space === "izord" && izord && access.session ? styles.generatorCard : ""}`}>
-      <p className={styles.eyebrow}>{space === "izord" ? "IZORD INVEST" : "VOTRE ESPACE DE TRAVAIL"}</p>
-      <h1>{space === "izord" ? "Fiches projets" : "Mes espaces"}</h1>
-      {access.loading ? <p role="status">Vérification des accès…</p> : !access.session ? <>
-        <p>Connectez-vous avec votre compte individuel.</p>
-        <form className={styles.form} onSubmit={async e => {
-          e.preventDefault(); setBusy(true); setMessage("");
-          try { const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password }); if (error) setMessage("Connexion impossible. Vérifiez vos identifiants."); }
-          catch { setMessage("Connexion indisponible."); } finally { setBusy(false); }
-        }}>
-          <label>Email<input type="email" autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} required /></label>
-          <label>Mot de passe<input type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} required /></label>
-          <button disabled={busy}>{busy ? "Connexion…" : "Se connecter"}</button>
-        </form>
-      </> : <>
-        <p className={styles.identity}>{access.session.user.email}</p>
-        {access.error ? <><p role="alert">{access.error}</p>{access.phase === "unavailable" && <button onClick={()=>retryAccess.current()}>Réessayer la vérification</button>}</> : <>
-          {space === "oar" && !oar && <p role="alert">Votre compte ne dispose pas d’un accès OAR.</p>}
-          {space === "izord" && !izord && <p role="alert">Votre compte ne dispose pas d’un accès IZORD.</p>}
-          {!oar && !izord && <p>Aucune adhésion active. Une invitation doit être acceptée avant l’accès.</p>}
-          {space === "izord" && izord && generatorHost && <IzordGenerator key={generatorHost.key} role={izord.role} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={setHasUnsavedChanges} />}
-          <nav className={styles.links} aria-label="Espaces autorisés">
-            {oar && <Link href="/" onClick={event => { if (!confirmLeaving()) event.preventDefault(); }}>One Address Riviera — CRM <span>Ouvrir →</span></Link>}
-            {izord && space !== "izord" && <Link href="/izord">IZORD Invest — Fiches projets <span>Ouvrir →</span></Link>}
-            {space !== "choose" && <Link href="/spaces" onClick={event => { if (!confirmLeaving()) event.preventDefault(); }}>Mes espaces</Link>}
-          </nav>
-        </>}
-        <button className={styles.secondary} onClick={logout}>Se déconnecter</button>
-      </>}
-      {message && <p role="status">{message}</p>}
-    </section>
-    <footer className={styles.footer}>Des accès individuels, propres à chaque espace.</footer>
-  </main>;
+  const allowed = permissions ? moduleItems.filter(m=>readable(permissions,m.tab)) : [];
+  const selected = (view === "admin" ? permissions?.generalAdmin : permissions && readable(permissions,view)) ? view : allowed[0]?.tab ?? (permissions?.generalAdmin ? "admin" : null);
+  function navigate(tab:UnifiedTab) {
+    if(!confirmLeaving())return;
+    stopGenerator(); setHasUnsavedChanges(false); setView(tab);
+    window.history.replaceState(null,"",tab === "izord" ? "/izord" : tab === "admin" ? "/admin" : "/?module="+tab);
+  }
+  if(invitationReady && !access.loading && access.session && permissions && !access.error && !invitation && !invitationAccepted) {
+    if(selected && selected!==view) return <SelectAllowed select={()=>setView(selected)} />;
+    if(selected && selected!=="izord" && selected!=="admin" && permissions.fullAccess) return <CRMApp key={access.session.user.id+":"+permissions.revision} access={permissions} initialTab={selected as CRMTab} onExternalNavigate={navigate} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email??"utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} />;
+    return <OperationProvider userId={access.session.user.id} access={permissions}><main className="crm-shell crm-readable-redesign"><UnifiedNavigation access={permissions} active={selected??"dashboard"} onNavigate={navigate} onLogout={logout}/><section className="content-panel">
+      {message&&<p role="status">{message}</p>}
+      {!selected && <div className="module-workspace"><h1>Aucun accès autorisé</h1><p>Votre compte est connecté, mais aucun module ne lui est attribué. Contactez votre administrateur.</p><button onClick={logout}>Se déconnecter</button></div>}
+      {selected==="admin"&&<AccessAdministration key={access.session.user.id} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
+      {selected==="izord"&&izord&&generatorHost&&<div className="module-workspace"><h1>IZORD Invest</h1><IzordGenerator key={generatorHost.key} role={permissions.modules.izord?.level==='read'?'reader':izord.role} canExport={Boolean(permissions.modules.izord?.sensitive.export)} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={setHasUnsavedChanges}/></div>}
+      {selected && selected!=="admin"&&selected!=="izord"&&<ModuleWorkspace key={access.session.user.id+":"+permissions.revision+":"+selected} module={selected} access={permissions} onDirty={setHasUnsavedChanges} draft={businessDraft?.user===access.session.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===selected?businessDraft.value:undefined} onNavigate={(tab,value)=>{setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);navigate(tab);}}/>}
+    </section></main></OperationProvider>;
+  }
+  return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>CRM privé</span></div><section className={styles.card}><h1>Connexion au CRM</h1>
+    {(access.loading||!invitationReady)?<p role="status">Vérification des accès…</p>:!access.session?<><p>Connectez-vous avec votre compte individuel.</p><form className={styles.form} onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage("");try{const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)setMessage("Connexion impossible. Vérifiez vos identifiants.");}catch{setMessage("Connexion indisponible.");}finally{setBusy(false);}}}><label>Email<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Mot de passe<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Se connecter</button></form></>:<>
+      <p>{access.session.user.email}</p>{(invitation||invitationAccepted)?<>{invitationPasswordError&&<p role="alert">Invitation acceptée. Mot de passe non enregistré : choisissez un autre mot de passe ou réessayez.</p>}{invitationSetup&&<label>Choisissez un mot de passe<input type="password" autoComplete="new-password" minLength={8} value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy||invitationError||(invitationSetup&&password.length<8)} onClick={async()=>{
+        setBusy(true);setMessage('');
+        try{
+          if(!invitationAccepted){
+            const r=await supabase.rpc('crm_invite_accept',{p_token:invitation});
+            if(r.error){setMessage('Invitation refusée : destinataire, expiration ou droits à faire vérifier par l’administrateur.');return;}
+            setInvitationAccepted(true);setInvitation(null);
+            // This marker only resumes password setup, never grants permissions.
+            if(invitationSetup)window.history.replaceState(null,'','/?setup=1');
+          }
+          // Validate recipient and privilege history BEFORE touching any password.
+          if(invitationSetup){const changed=await supabase.auth.updateUser({password});if(changed.error){setInvitationPasswordError(true);return;}}
+          setInvitationPasswordError(false);setPassword('');setInvitation(null);setInvitationAccepted(false);window.history.replaceState(null,'','/');retryAccess.current();
+        }catch{setMessage('Acceptation indisponible. Réessayez après vérification de la connexion.');}finally{setBusy(false);}
+      }}>{invitationAccepted?"Enregistrer mon mot de passe":"Accepter mon invitation"}</button></>:<><p role="alert">{access.error}</p><button onClick={()=>retryAccess.current()}>Réessayer la vérification</button></>}<button onClick={logout}>Se déconnecter</button></>}
+      {message&&<p role="status">{message}</p>}
+    </section></main>;
 }
+function SelectAllowed({select}:{select:()=>void}) { useEffect(select,[select]); return <p role="status">Ouverture du module autorisé…</p>; }
+
 
 
 function CacheRecovery({ state }: { state: PersistentCRMCacheState }) {

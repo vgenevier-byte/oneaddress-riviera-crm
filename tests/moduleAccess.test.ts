@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { requireAuthenticatedCRMUser } from "../app/api/drive/_utils";
 
-for (const scenario of ["oar", "izord", "revoked", "missing-migration", "invalid-jwt"] as const) {
+for (const scenario of ["oar", "oar-limited", "izord", "revoked", "missing-migration", "invalid-jwt"] as const) {
  test(`Drive authorization: ${scenario}`, async t => {
   const env = { NEXT_PUBLIC_SUPABASE_URL: "https://fixture.example.invalid", NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "fictional-key" };
   for (const [key,value] of Object.entries(env)) { const old = process.env[key]; process.env[key]=value; t.after(() => { if(old===undefined) delete process.env[key]; else process.env[key]=old; }); }
@@ -12,10 +12,11 @@ for (const scenario of ["oar", "izord", "revoked", "missing-migration", "invalid
    assert.equal(new Headers(init.headers).get("authorization"),"Bearer fictional-jwt");
    assert.equal(init.cache,"no-store");
    if(url.pathname==="/auth/v1/user") return scenario==="invalid-jwt" ? Response.json({message:"invalid"},{status:401}) : Response.json({id:"11111111-1111-4111-8111-111111111111",email:"test@example.invalid"});
+   if(url.pathname==="/rest/v1/rpc/crm_authorize_drive") return Response.json(scenario==="oar");
    assert.equal(url.pathname,"/rest/v1/app_memberships"); membershipCalls++;
    assert.equal(url.searchParams.get("workspace_id"),"eq.oar"); assert.equal(url.searchParams.get("status"),"eq.active");
    if(scenario==="missing-migration") return Response.json({message:"missing"},{status:404});
-   return Response.json(scenario==="oar" ? {role:"member"} : null);
+   return Response.json((scenario==="oar" || scenario==="oar-limited") ? {role:"member"} : null);
   });
   const run=()=>requireAuthenticatedCRMUser(new Request("http://localhost/api/drive/file",{headers:{authorization:"Bearer fictional-jwt"}}));
   if(scenario==="oar") assert.equal((await run()).id,"11111111-1111-4111-8111-111111111111");
