@@ -1,7 +1,9 @@
 "use client";
 
 import { BusinessForm, BusinessLabel, BusinessButton, BusinessSelect, useBusinessPermissions } from "./BusinessPermissions";
-import { useConfirmedForm, type FormSave } from "@/lib/access/useConfirmedForm";
+import { useConfirmedForm, type FormSave, type FormSaveResult } from "@/lib/access/useConfirmedForm";
+import { useScopedOperations, isCancelled } from "@/lib/access/operations";
+import HouseWorkerEditor from "./HouseWorkerEditor";
 import QuickRepliesView from "./QuickRepliesView";
 import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
@@ -74,6 +76,9 @@ import {
   isHouseTrackingWorkerActive,
   permanentlyDeleteHouseTrackingWorker,
   QUARTER_HOUR_TIME_OPTIONS,
+  parseHouseHourlyRate,
+  houseHourlyRateInput,
+  type HouseWorkerEdit,
   setHouseTrackingWorkerStatus
 } from "@/lib/houseTracking";
 import {
@@ -472,14 +477,15 @@ function normalizeHouseTrackingWorker(value: unknown): HouseTrackingWorker | nul
   if (!value || typeof value !== "object") return null;
 
   const raw = value as Record<string, unknown>;
-  const hourlyRate = Number(raw.hourlyRate || 0);
+  const hourlyRate = raw.hourlyRate == null || String(raw.hourlyRate).trim() === ""
+    ? undefined : Number(String(raw.hourlyRate).replace(",", "."));
 
   return {
     id: String(raw.id || makeId("worker")),
     contactId: String(raw.contactId || ""),
     contactName: String(raw.contactName || "Intervenant à compléter"),
     role: String(raw.role || "Intervenant"),
-    hourlyRate: Number.isFinite(hourlyRate) ? hourlyRate : 0,
+    hourlyRate: hourlyRate !== undefined && Number.isFinite(hourlyRate) ? hourlyRate : undefined,
     documentUrl: String(raw.documentUrl || ""),
     documentStoragePath: String(raw.documentStoragePath || raw.storagePath || ""),
     documentFileName: String(raw.documentFileName || raw.fileName || ""),
@@ -3410,6 +3416,7 @@ function HouseTrackingView({
   onAddHouse,
   onDeleteHouse,
   onAddWorker,
+  onUpdateWorker,
   onArchiveWorker,
   onReactivateWorker,
   onPermanentlyDeleteWorker,
@@ -3426,10 +3433,11 @@ function HouseTrackingView({
   onAddHouse: (house: HouseTrackingHouse) => void;
   onDeleteHouse: (id: string) => void;
   onAddWorker: (worker: HouseTrackingWorker) => void;
+  onUpdateWorker?: (id: string, patch: HouseWorkerEdit) => Promise<FormSaveResult>;
   onArchiveWorker: (id: string) => void;
   onReactivateWorker: (id: string) => void;
   onPermanentlyDeleteWorker: (id: string) => void;
-  onAddTimeEntry: (entry: HouseTimeEntry) => void;
+  onAddTimeEntry: (entry: HouseTimeEntry) => FormSave;
   onDeleteTimeEntry: (id: string) => void;
   onAddPayment: (payment: HousePayment) => void;
   onDeletePayment: (id: string) => void;
@@ -3450,9 +3458,12 @@ function HouseTrackingView({
     startTime: "09:00",
     endTime: "13:00",
     breakMinutes: "0",
-    hourlyRate: initialActiveWorker?.hourlyRate ? String(initialActiveWorker.hourlyRate) : "",
+    hourlyRate: houseHourlyRateInput(initialActiveWorker),
     note: ""
   });
+  const [editingWorkerId, setEditingWorkerId] = useState<string | null>(null);
+  const [rateError, setRateError] = useState("");
+  const hourConfirmation = useConfirmedForm(business?.markDirty);
   const [showAllHoursHistory, setShowAllHoursHistory] = useState(false);
   const [showAllPaymentsHistory, setShowAllPaymentsHistory] = useState(false);
   const [uploadingWorkerDocument, setUploadingWorkerDocument] = useState(false);
@@ -3460,10 +3471,10 @@ function HouseTrackingView({
   const [showArchivedWorkerPicker, setShowArchivedWorkerPicker] = useState(false);
   const [archivedWorkerSearch, setArchivedWorkerSearch] = useState("");
 
-  if (!activeWorkers.some(worker => worker.id === hourDraft.workerId)) {
+  if (hourDraft.workerId && !activeWorkers.some(worker => worker.id === hourDraft.workerId)) {
     const firstActiveWorker = activeWorkers[0];
     const workerId = firstActiveWorker?.id || "";
-    const hourlyRate = firstActiveWorker?.hourlyRate ? String(firstActiveWorker.hourlyRate) : "";
+    const hourlyRate = houseHourlyRateInput(firstActiveWorker);
     if (hourDraft.workerId !== workerId || hourDraft.hourlyRate !== hourlyRate) {
       setHourDraft({ ...hourDraft, workerId, hourlyRate });
     }
@@ -3669,13 +3680,12 @@ function HouseTrackingView({
   const totalPaid = getAutoAllocatedPaidForSelectedEntries(filteredEntries);
   const totalBalance = totalDue - totalPaid;
 
-  const selectedWorker = activeWorkers.find((worker) => worker.id === hourDraft.workerId);
-  const currentRate = parseEuroAmount(hourDraft.hourlyRate || selectedWorker?.hourlyRate || 0);
+  const currentRate = parseHouseHourlyRate(hourDraft.hourlyRate);
   const previewEntry = {
     startTime: hourDraft.startTime,
     endTime: hourDraft.endTime,
     breakMinutes: Number(hourDraft.breakMinutes || 0),
-    hourlyRate: currentRate
+    hourlyRate: currentRate ?? 0
   };
   const previewHours = getHouseTimeHours(previewEntry);
   const previewAmount = getHouseTimeAmount(previewEntry);
@@ -3807,6 +3817,9 @@ function HouseTrackingView({
 
     if (!contact) return window.alert("Choisissez un contact CRM existant. Créez-le d’abord dans Contacts si besoin.");
 
+    const rate = parseHouseHourlyRate(String(form.get("hourlyRate") ?? ""));
+    if (rate === null) return window.alert("Saisissez un taux horaire valide, avec au maximum deux décimales (0 est accepté).");
+
     const workerId = makeId("worker");
     const file = form.get("documentFile");
     let uploadedDocument: Partial<HouseTrackingWorker> = {};
@@ -3830,7 +3843,7 @@ function HouseTrackingView({
       contactId: contact.id,
       contactName: getHouseContactDisplayName(contact),
       role: contact.supplierCategory || contact.kind || "Prestataire",
-      hourlyRate: safeNumber(form.get("hourlyRate")),
+      hourlyRate: rate,
       documentUrl: "",
       documentStoragePath: uploadedDocument.documentStoragePath || "",
       documentFileName: uploadedDocument.documentFileName || "",
@@ -3856,8 +3869,10 @@ function HouseTrackingView({
     if (!house) return window.alert("Choisissez une maison.");
     if (!worker) return window.alert("Choisissez un intervenant actif.");
     if (previewHours <= 0) return window.alert("Vérifiez les heures de début et de fin.");
+    if (currentRate === null) { setRateError("Saisissez un taux horaire valide, avec au maximum deux décimales (0 est accepté)."); return; }
+    setRateError("");
 
-    onAddTimeEntry({
+    const entry: HouseTimeEntry = {
       id: makeId("hours"),
       houseId: house.id,
       houseName: house.name,
@@ -3867,12 +3882,13 @@ function HouseTrackingView({
       startTime: hourDraft.startTime,
       endTime: hourDraft.endTime,
       breakMinutes: Number(hourDraft.breakMinutes || 0),
-      hourlyRate: parseEuroAmount(currentRate),
+      hourlyRate: currentRate,
       note: hourDraft.note.trim(),
       createdAt: new Date().toISOString()
+    };
+    void hourConfirmation.submit(event.currentTarget, () => onAddTimeEntry(entry), newerDraft => {
+      if (!newerDraft) setHourDraft(current => ({ ...current, note: "", hourlyRate: houseHourlyRateInput(worker) }));
     });
-
-    setHourDraft((current) => ({ ...current, note: "" }));
   }
 
   function submitPayment(event: React.FormEvent<HTMLFormElement>) {
@@ -4119,7 +4135,7 @@ function HouseTrackingView({
           <section className="card house-tab-panel">
             <p className="eyebrow">Saisie</p>
             <h3>Ajouter des heures</h3>
-            <BusinessForm className="form-grid house-compact-form" onSubmit={submitTimeEntry}>
+            <BusinessForm className="form-grid house-compact-form" onSubmit={submitTimeEntry} pending={hourConfirmation.saving} onChange={hourConfirmation.changed}>
               <BusinessLabel>Date
                 <input type="date" value={hourDraft.date} onChange={(event) => setHourDraft((current) => ({ ...current, date: event.target.value }))} />
               </BusinessLabel>
@@ -4132,7 +4148,7 @@ function HouseTrackingView({
               <BusinessLabel>Intervenant
                 <select value={hourDraft.workerId} onChange={(event) => {
                   const worker = activeWorkers.find((item) => item.id === event.target.value);
-                  setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: worker?.hourlyRate ? String(worker.hourlyRate) : current.hourlyRate }));
+                  setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: houseHourlyRateInput(worker) }));
                 }}>
                   <option value="">Choisir</option>
                   {activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
@@ -4152,13 +4168,14 @@ function HouseTrackingView({
                 <input type="number" min="0" value={hourDraft.breakMinutes} onChange={(event) => setHourDraft((current) => ({ ...current, breakMinutes: event.target.value }))} />
               </BusinessLabel>
               <BusinessLabel>Taux horaire
-                <input type="number" min="0" step="0.5" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />
+                <input type="text" inputMode="decimal" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />
               </BusinessLabel>
               <BusinessLabel>Note
                 <input value={hourDraft.note} onChange={(event) => setHourDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Ex : ménage complet" />
               </BusinessLabel>
               <div className="full house-calculation-line">
-                Calcul immédiat : <strong>{formatHours(previewHours)}</strong> — <strong>{currency.format(previewAmount)}</strong>
+                {(rateError || hourConfirmation.message) && <span role="alert">{rateError || hourConfirmation.message} </span>}
+                Calcul immédiat : <strong>{formatHours(previewHours)}</strong> — <strong>{currentRate === null ? "Taux à renseigner" : currency.format(previewAmount)}</strong>
               </div>
               <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter les heures</BusinessButton>
             </BusinessForm>
@@ -4293,7 +4310,7 @@ function HouseTrackingView({
                 </datalist>
               </BusinessLabel>
               <BusinessLabel>Taux horaire
-                <input name="hourlyRate" type="number" min="0" step="0.5" placeholder="Ex : 18" />
+                <input name="hourlyRate" type="text" inputMode="decimal" required placeholder="Ex : 18,50" />
               </BusinessLabel>
               <BusinessLabel>Document
                 <input name="documentFile" type="file" />
@@ -4306,6 +4323,16 @@ function HouseTrackingView({
               </BusinessButton>
             </BusinessForm>
 
+            {editingWorkerId && onUpdateWorker && (() => {
+              const worker = activeWorkers.find(item => item.id === editingWorkerId);
+              return worker ? <HouseWorkerEditor key={worker.id} worker={worker} onSave={onUpdateWorker}
+                onCancel={() => setEditingWorkerId(null)}
+                onConfirmed={rate => {
+                  setHourDraft(current => current.workerId === worker.id ? { ...current, hourlyRate: String(rate) } : current);
+                  setEditingWorkerId(null);
+                }} /> : null;
+            })()}
+
             <div className="list-stack house-history-list">
               {activeWorkers.length === 0 ? <p className="muted-line">Aucun intervenant actif.</p> : activeWorkers.map((worker) => {
                 const hasHistory = houseTrackingWorkerHasHistory(worker.id, timeEntries, payments);
@@ -4314,13 +4341,14 @@ function HouseTrackingView({
                   <article className="mini-row house-compact-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                     <div>
                       <strong>{worker.contactName}</strong>
-                      <span>{worker.role} · {currency.format(worker.hourlyRate)}/h</span>
+                      <span>{worker.role} · {worker.hourlyRate == null ? "Tarif non renseigné" : `${currency.format(worker.hourlyRate)}/h`}</span>
                       {worker.documentFileName && <span>Document : {worker.documentFileName}</span>}
                       {worker.documentStoragePath && (
                         <BusinessButton permission="export" className="secondary-link" type="button" onClick={() => void downloadHouseWorkerDocument(worker)}>Télécharger document</BusinessButton>
                       )}
                     </div>
                     <div className="house-worker-actions">
+                      {onUpdateWorker && <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingWorkerId(worker.id)}>Modifier</BusinessButton>}
                       <BusinessButton permission="write"
                         className="secondary-button"
                         type="button"
@@ -4354,7 +4382,7 @@ function HouseTrackingView({
                     <article className="mini-row house-compact-row house-archived-worker-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                       <div>
                         <strong>{worker.contactName} <span className="status-pill house-archived-badge">Archivé</span></strong>
-                        <span>{worker.role} · {currency.format(worker.hourlyRate)}/h</span>
+                        <span>{worker.role} · {worker.hourlyRate == null ? "Tarif non renseigné" : `${currency.format(worker.hourlyRate)}/h`}</span>
                         <span>{history.timeEntries} ligne(s) · {formatHours(history.hours)} · {history.payments} paiement(s) · {currency.format(history.paid)} payé</span>
                         <span>Coût {currency.format(history.due)} · Delta {formatHouseBalanceLabel(history.balance)}</span>
                         {worker.documentFileName && <span>Document : {worker.documentFileName}</span>}
@@ -5568,6 +5596,7 @@ function DashboardQuickTile({
 export {createQuickEntryRecords, promptQuickEntryText};
 
 export default function CRMApp({ access, initialTab = "dashboard", onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; onExternalNavigate: (tab: UnifiedTab) => void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+  const beginHouseOperation = useScopedOperations("houseTracking");
   const currentAccessToken = useCommittedValue(sessionAccessToken);
   const identityLifetime = useRef(new AbortController());
   useEffect(() => {
@@ -7620,6 +7649,48 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     notify("Intervenant ajouté.");
   }
 
+  async function persistHouseRecord(kind: "worker" | "hours", id: string, patch: HouseWorkerEdit | HouseTimeEntry): Promise<FormSaveResult> {
+    const before = currentBusinessData.current;
+    if (!sharedWorkspaceReady || workspaceBusy.current || workspaceSync.current.dirty(before)) {
+      return { ok: false, message: "Attendez la synchronisation des modifications en cours, puis réessayez. Votre saisie est conservée." };
+    }
+    const write = workspaceSync.current.prepare(before);
+    if (!write) return { ok: false, message: "Conflit de révision. Votre saisie est conservée ; rechargez les données avant de reprendre." };
+    workspaceBusy.current = true;
+    try {
+      const op = await beginHouseOperation();
+      const result = await op.run(() => op.client.rpc(kind === "worker" ? "crm_update_house_worker" : "crm_create_house_time_entry", {
+        p_id: id, p_patch: patch, p_revision: write.revision
+      }));
+      if (result.error) throw new Error(result.error.message);
+      const merge = (value: CRMData): CRMData => kind === "worker" ? { ...value,
+        houseTrackingWorkers: (value.houseTrackingWorkers ?? []).map(worker => worker.id === id ? { ...worker, ...result.data.worker } : worker)
+      } : { ...value, houseTimeEntries: [result.data.entry as HouseTimeEntry, ...(value.houseTimeEntries ?? [])] };
+      const acknowledged = merge(before);
+      workspaceSync.current.load(acknowledged, result.data.workspaceRevision);
+      setAcceptedWorkspaceFingerprint(workspaceFingerprint(acknowledged));
+      setSharedWorkspaceUpdatedAt(result.data.workspaceRevision);
+      failedSaveFingerprint.current = null;
+      setData(current => merge(current));
+      setFormDirty(false);
+      return { ok: true, recordId: id };
+    } catch (error) {
+      const cancelled = isCancelled(error);
+      return { ok: false, cancelled, message: cancelled
+        ? "Enregistrement interrompu : le compte ou les droits ont changé."
+        : error instanceof Error && error.message.includes("revision_conflict")
+          ? "Conflit : les données ont changé. Votre saisie est conservée ; rechargez avant de reprendre."
+          : "Enregistrement non confirmé. Votre saisie est conservée ; vérifiez la connexion et vos droits." };
+    } finally {
+      workspaceBusy.current = false;
+      if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
+    }
+  }
+
+  function updateHouseTrackingWorker(id: string, patch: HouseWorkerEdit) {
+    return persistHouseRecord("worker", id, patch);
+  }
+
   function archiveHouseTrackingWorker(id: string) {
     setData((current) => ({
       ...current,
@@ -7675,12 +7746,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   }
 
   function addHouseTimeEntry(entry: HouseTimeEntry) {
-    setData((current) => ({
-      ...current,
-      houseTimeEntries: [stampCreated(entry, activeActor), ...(((current as any).houseTimeEntries ?? []) as HouseTimeEntry[])]
-    }));
-
-    notify("Heures ajoutées.");
+    return persistHouseRecord("hours", entry.id, entry);
   }
 
   function deleteHouseTimeEntry(id: string) {
@@ -8965,6 +9031,7 @@ function createQuoteDraftFromLead(lead: Lead) {
             onAddHouse={addHouseTrackingHouse}
             onDeleteHouse={deleteHouseTrackingHouse}
             onAddWorker={addHouseTrackingWorker}
+            onUpdateWorker={updateHouseTrackingWorker}
             onArchiveWorker={archiveHouseTrackingWorker}
             onReactivateWorker={reactivateHouseTrackingWorker}
             onPermanentlyDeleteWorker={permanentlyDeleteHouseTrackingWorkerSafely}

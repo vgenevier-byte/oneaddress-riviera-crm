@@ -1,5 +1,19 @@
 import type { HousePayment, HouseTimeEntry, HouseTrackingWorker } from "./types";
 
+/** Blank/invalid is distinct from an explicitly entered zero. */
+export function parseHouseHourlyRate(value: string): number | null {
+  const text = value.trim();
+  if (!/^\d+(?:[.,]\d{1,2})?$/.test(text)) return null;
+  const amount = Number(text.replace(",", "."));
+  return Number.isFinite(amount) && amount <= 100000000000 ? amount : null;
+}
+
+export function houseHourlyRateInput(worker?: Pick<HouseTrackingWorker, "hourlyRate">) {
+  return worker?.hourlyRate == null ? "" : String(worker.hourlyRate);
+}
+
+export type HouseWorkerEdit = { hourlyRate: number; notes?: string };
+
 export const QUARTER_HOUR_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
   const hours = Math.floor(index / 4).toString().padStart(2, "0");
   const minutes = ((index % 4) * 15).toString().padStart(2, "0");

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  parseHouseHourlyRate,
+  houseHourlyRateInput,
   getHouseTrackingWorkerHistorySummary,
   getHouseTimeHours,
   isHouseTrackingWorkerActive,
@@ -141,4 +143,18 @@ test("les anciens horaires hors quart d’heure restent lisibles et inchangés",
   assert.deepEqual(legacyEntry, originalEntry);
   assert.equal(legacyEntry.startTime, "08:07");
   assert.equal(legacyEntry.endTime, "12:42");
+});
+
+test("le taux distingue vide/invalide, zéro explicite et décimales françaises", () => {
+  for (const value of ["", " ", "abc", "-1", "12,345", "1.2.3", "1e2", "Infinity", "100000000001"])
+    assert.equal(parseHouseHourlyRate(value), null, value);
+  for (const [value, expected] of [["0", 0], ["0,00", 0], ["18,75", 18.75], ["18.75", 18.75], [" 22,5 ", 22.5]] as const)
+    assert.equal(parseHouseHourlyRate(value), expected);
+});
+
+test("chaque sélection propose son taux, y compris zéro ou absent", () => {
+  assert.equal(houseHourlyRateInput(worker("paid")), "20");
+  assert.equal(houseHourlyRateInput({hourlyRate: 0}), "0");
+  assert.equal(houseHourlyRateInput(undefined), "");
+  assert.equal(houseHourlyRateInput({} as HouseTrackingWorker), "");
 });

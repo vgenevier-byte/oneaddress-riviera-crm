@@ -224,7 +224,7 @@ export type HouseTrackingWorker = {
   contactId: string;
   contactName: string;
   role: string;
-  hourlyRate: number;
+  hourlyRate?: number;
   documentUrl?: string;
   documentStoragePath?: string;
   documentFileName?: string;
