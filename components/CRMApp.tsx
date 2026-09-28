@@ -8769,7 +8769,7 @@ function createQuoteDraftFromLead(lead: Lead) {
   return (
     <main className="crm-shell crm-readable-redesign" onChangeCapture={event=>{if((event.target as HTMLElement).closest("form"))setFormDirty(true);}} onSubmitCapture={()=>setFormDirty(false)}>
       <UnifiedNavigation access={access} active={activeTab} badges={sidebarBadgeCounts} onLogout={onLogout} onNavigate={tab => {
-        if (tab === "izord" || tab === "admin") onExternalNavigate(tab); else setActiveTab(tab);
+        if (tab === "izord" || tab === "publisher" || tab === "admin") onExternalNavigate(tab); else setActiveTab(tab);
       }} />
 
       <section className="content-panel">

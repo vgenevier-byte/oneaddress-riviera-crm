@@ -1,0 +1,184 @@
+{
+  "scope": "Local only; external generation simulated",
+  "api": {
+    "actualAuth": true,
+    "actualPostgres": true,
+    "actualLocalMedia": true,
+    "externalGeneration": "simulated",
+    "results": [
+      {
+        "name": "anonymous, no grant, revoked and administration-only receive no content or media",
+        "passed": true
+      },
+      {
+        "name": "reader view and download commands have distinct current server rights",
+        "passed": true
+      },
+      {
+        "name": "Publisher-only cannot read legacy owner records despite matching Auth user IDs",
+        "passed": true
+      },
+      {
+        "name": "legacy cookie, benchmark actions, forged roles and invalid requests do not bypass CRM",
+        "passed": true
+      },
+      {
+        "name": "one persistent job handles double-click, retry, concurrent user and state recovery",
+        "passed": true
+      },
+      {
+        "name": "music choice, text regeneration, optimistic conflict and mark-published preserve source behavior",
+        "passed": true
+      },
+      {
+        "name": "daily generation preserves the one-post-per-day source constraint across new request IDs",
+        "passed": true
+      },
+      {
+        "name": "client timeout recovers the existing durable result without another generation",
+        "passed": true
+      },
+      {
+        "name": "provider outage is terminal for its request ID; state and retry never relaunch it",
+        "passed": true
+      },
+      {
+        "name": "revocation during generation prevents result delivery and further provider work",
+        "passed": true
+      },
+      {
+        "name": "logout invalidates the previously issued JWT at Publisher authorization boundary",
+        "passed": true
+      },
+      {
+        "name": "legacy fixtures keep exact IDs dates media references status music and unknown authors",
+        "passed": true
+      },
+      {
+        "name": "real Next accepts browser destination Origin and rejects foreign Origin or forwarded-host forgery",
+        "passed": true
+      }
+    ]
+  },
+  "browser": {
+    "generatedAt": "2026-09-28T19:34:20.040Z",
+    "simulatedExternalGeneration": true,
+    "results": [
+      {
+        "name": "chromium: CRM login / Publisher-only / direct reload",
+        "passed": true
+      },
+      {
+        "name": "chromium: direction draft survives temporary Auth failure",
+        "passed": true
+      },
+      {
+        "name": "chromium: complete simulated generation, music B survives text regeneration, publication marker",
+        "passed": true
+      },
+      {
+        "name": "chromium: authorized media export preserves real MIME",
+        "passed": true
+      },
+      {
+        "name": "chromium: late export cannot download or copy after account change",
+        "passed": true
+      },
+      {
+        "name": "chromium: late export-text cannot download or copy after account change",
+        "passed": true
+      },
+      {
+        "name": "chromium: mobile 375px navigation Plus open and form",
+        "passed": true
+      },
+      {
+        "name": "chromium: mobile 390px navigation Plus open and form",
+        "passed": true
+      },
+      {
+        "name": "chromium: mobile 430px navigation Plus open and form",
+        "passed": true
+      },
+      {
+        "name": "chromium: reader history is shared and sensitive commands disabled",
+        "passed": true
+      },
+      {
+        "name": "chromium: late real history response cannot reach next account in same context",
+        "passed": true
+      },
+      {
+        "name": "chromium: existing Administration matrix saves Publisher-only explicit sensitive rights",
+        "passed": true
+      },
+      {
+        "name": "webkit: CRM login / Publisher-only / direct reload",
+        "passed": true
+      },
+      {
+        "name": "webkit: direction draft survives temporary Auth failure",
+        "passed": true
+      },
+      {
+        "name": "webkit: complete simulated generation, music B survives text regeneration, publication marker",
+        "passed": true
+      },
+      {
+        "name": "webkit: authorized media export preserves real MIME",
+        "passed": true
+      },
+      {
+        "name": "webkit: mobile 375px navigation Plus open and form",
+        "passed": true
+      },
+      {
+        "name": "webkit: mobile 390px navigation Plus open and form",
+        "passed": true
+      },
+      {
+        "name": "webkit: mobile 430px navigation Plus open and form",
+        "passed": true
+      },
+      {
+        "name": "webkit: reader history is shared and sensitive commands disabled",
+        "passed": true
+      },
+      {
+        "name": "webkit: late real history response cannot reach next account in same context",
+        "passed": true
+      },
+      {
+        "name": "chromium: complete common mobile menu orders IZORD, Publisher, Administration at 375px",
+        "passed": true
+      }
+    ]
+  },
+  "additionalChecks": {
+    "sourceUnitTests": 22,
+    "boundaryAndClosureUnitTests": 5,
+    "mediaPersistenceTests": 9,
+    "authenticatedAccessScenarios": 13,
+    "existingPrivateObjectBoundaryCheck": "passed",
+    "interruptedOperationReconciliation": "passed with zero external calls",
+    "typescript": "passed",
+    "lint": {
+      "errors": 0,
+      "historicalWarnings": 2
+    },
+    "build": {
+      "id": "dgavgP2XegetNcS3t8yCb",
+      "applicationFilesMatch": 120,
+      "clientChunksInspected": 39,
+      "envFilesCopied": 0
+    },
+    "diffCheck": "passed"
+  },
+  "finalLocalState": {
+    "server": "ready",
+    "app": "http://127.0.0.1:3173/publisher",
+    "pendingOperations": 0,
+    "providerFailureSimulation": false,
+    "productSourceMatchesBuild": true
+  }
+}

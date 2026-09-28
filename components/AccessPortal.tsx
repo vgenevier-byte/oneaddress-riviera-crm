@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { clearPublisherDrafts } from "@/lib/publisher/draftRecovery";
 import { OperationProvider } from "@/lib/access/operations";
 import UnifiedNavigation, { type UnifiedTab } from "./UnifiedNavigation";
 import { moduleItems, readable, type AccessSnapshot, type ModuleId } from "@/lib/access/modules";
@@ -19,6 +20,7 @@ import { bindCRMCache, clearCRMCache, inspectPersistentCRMCache, isPersistentCRM
 import styles from "./AccessPortal.module.css";
 
 const CRMApp = dynamic(() => import("./CRMApp"), { ssr: false });
+const PublisherPage = dynamic(() => import("./publisher/PublisherPage"), { ssr: false });
 const IzordGenerator = dynamic(() => import("./izord/IzordGenerator"), { ssr: false });
 type Membership = { workspace_id: "oar" | "izord"; role: string };
 type Access = { permissions?: AccessSnapshot; session: Session | null; memberships: Membership[]; loading: boolean; error: string; phase?: "verified" | "unavailable" | "denied" };
@@ -28,9 +30,9 @@ class AccessCheckFailure extends Error {
   constructor(readonly temporary: boolean, message: string) { super(message); }
 }
 
-export default function AccessPortal({ space }: { space: "oar" | "izord" | "choose" | "admin" }) {
+export default function AccessPortal({ space }: { space: "oar" | "izord" | "publisher" | "choose" | "admin" }) {
   const [businessDraft,setBusinessDraft]=useState<{user:string;revision:number;module:ModuleId;value:Record<string,string>}|null>(null);
-  const [view,setView] = useState<UnifiedTab>(space === "izord" ? "izord" : space === "admin" ? "admin" : "dashboard");
+  const [view,setView] = useState<UnifiedTab>(space === "izord" ? "izord" : space === "publisher" ? "publisher" : space === "admin" ? "admin" : "dashboard");
   const permissionsRef = useRef<string>("");
   const [invitation,setInvitation] = useState<string | null>(null);
   const [invitationReady,setInvitationReady] = useState(false);
@@ -81,7 +83,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "choo
     generatorRef.current?.controller.abort();
     generatorRef.current = null;
     setGeneratorHost(null);
-    if (!retain) { draftRecovery.current = null; setHasUnsavedChanges(false); }
+    if (!retain) { clearPublisherDrafts(); draftRecovery.current = null; setHasUnsavedChanges(false); }
   }, []);
 
   useEffect(() => {
@@ -268,17 +270,18 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "choo
   function navigate(tab:UnifiedTab) {
     if(!confirmLeaving())return;
     stopGenerator(); setHasUnsavedChanges(false); setView(tab);
-    window.history.replaceState(null,"",tab === "izord" ? "/izord" : tab === "admin" ? "/admin" : "/?module="+tab);
+    window.history.replaceState(null,"",tab === "izord" ? "/izord" : tab === "publisher" ? "/publisher" : tab === "admin" ? "/admin" : "/?module="+tab);
   }
   if(invitationReady && !access.loading && access.session && permissions && !access.error && !invitation && !invitationAccepted) {
     if(selected && selected!==view) return <SelectAllowed select={()=>setView(selected)} />;
-    if(selected && selected!=="izord" && selected!=="admin" && permissions.fullAccess) return <OperationProvider userId={access.session.user.id} access={permissions}><CRMApp key={access.session.user.id+":"+permissions.revision} access={permissions} initialTab={selected as CRMTab} onExternalNavigate={navigate} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email??"utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} /></OperationProvider>;
+    if(selected && selected!=="izord" && selected!=="publisher" && selected!=="admin" && permissions.fullAccess) return <OperationProvider userId={access.session.user.id} access={permissions}><CRMApp key={access.session.user.id+":"+permissions.revision} access={permissions} initialTab={selected as CRMTab} onExternalNavigate={navigate} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email??"utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} /></OperationProvider>;
     return <OperationProvider userId={access.session.user.id} access={permissions}><main className="crm-shell crm-readable-redesign"><UnifiedNavigation access={permissions} active={selected??"dashboard"} onNavigate={navigate} onLogout={logout}/><section className="content-panel">
       {message&&<p role="status">{message}</p>}
       {!selected && <div className="module-workspace"><h1>Aucun accès autorisé</h1><p>Votre compte est connecté, mais aucun module ne lui est attribué. Contactez votre administrateur.</p><button onClick={logout}>Se déconnecter</button></div>}
       {selected==="admin"&&<AccessAdministration key={access.session.user.id} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
       {selected==="izord"&&izord&&generatorHost&&<div className="module-workspace"><h1>IZORD Invest</h1><IzordGenerator key={generatorHost.key} role={permissions.modules.izord?.level==='read'?'reader':izord.role} canExport={Boolean(permissions.modules.izord?.sensitive.export)} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={setHasUnsavedChanges}/></div>}
-      {selected && selected!=="admin"&&selected!=="izord"&&<ModuleWorkspace key={access.session.user.id+":"+permissions.revision+":"+selected} module={selected} access={permissions} onDirty={setHasUnsavedChanges} draft={businessDraft?.user===access.session.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===selected?businessDraft.value:undefined} onNavigate={(tab,value)=>{setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);navigate(tab);}}/>}
+      {selected==="publisher"&&permissions.modules.publisher&&<PublisherPage key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} grant={permissions.modules.publisher} accessRevision={permissions.revision} onUnsavedChange={setHasUnsavedChanges}/>}
+      {selected && selected!=="admin"&&selected!=="izord"&&selected!=="publisher"&&<ModuleWorkspace key={access.session.user.id+":"+permissions.revision+":"+selected} module={selected} access={permissions} onDirty={setHasUnsavedChanges} draft={businessDraft?.user===access.session.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===selected?businessDraft.value:undefined} onNavigate={(tab,value)=>{setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);navigate(tab);}}/>}
     </section></main></OperationProvider>;
   }
   return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>CRM privé</span></div><section className={styles.card}><h1>Connexion au CRM</h1>

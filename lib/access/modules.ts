@@ -1,9 +1,17 @@
 import { crmNavigationItems } from "@/components/crmNavigation";
-export const moduleItems = [...crmNavigationItems, { tab: "izord", label: "IZORD Invest", icon: "◇" }] as const;
+export const moduleItems = [...crmNavigationItems, { tab: "izord", label: "IZORD Invest", icon: "◇" }, { tab: "publisher", label: "Instagram Publisher", icon: "▧" }] as const;
 export type ModuleId = typeof moduleItems[number]["tab"];
 export type AccessLevel = "none" | "read" | "contribute";
-export const sensitiveLabels = { delete: "Suppression", export: "Export et téléchargement", bank_read: "Consultation / copie des coordonnées bancaires", bank_write: "Modification / vérification des RIB", payment: "Préparation du paiement" };
+export const sensitiveLabels = { delete: "Suppression", export: "Export et téléchargement", bank_read: "Consultation / copie des coordonnées bancaires", bank_write: "Modification / vérification des RIB", payment: "Préparation du paiement", generate: "Générer / régénérer", mark_published: "Marquer comme publié" };
 export type Sensitive = keyof typeof sensitiveLabels;
+/** Publisher has no deletion feature. Its sensitive actions do not apply to OAR/IZORD. */
+export function moduleSensitivePermissions(module: ModuleId): Sensitive[] {
+  if (module === "publisher") return ["generate", "export", "mark_published"];
+  return ["delete", "export", ...(module === "contacts" ? ["bank_read", "bank_write"] as const : []), ...(module === "vendorInvoices" ? ["payment"] as const : [])];
+}
+export function sensitiveNeedsContribution(permission: Sensitive) {
+  return ["delete", "bank_write", "payment", "generate", "mark_published"].includes(permission);
+}
 export type ModuleGrant = { level: AccessLevel; sensitive: Partial<Record<Sensitive, boolean>> };
 export type AccessSnapshot = { revision: number; active: boolean; generalAdmin: boolean; fullAccess: boolean; modules: Partial<Record<ModuleId, ModuleGrant>> };
 export function emptyGrants(): Record<ModuleId, ModuleGrant> {

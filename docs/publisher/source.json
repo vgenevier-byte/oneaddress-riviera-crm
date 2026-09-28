@@ -1,0 +1,539 @@
+{
+  "verifiedAt": "2026-09-28",
+  "repository": "https://github.com/vgenevier-byte/oneaddressr",
+  "localCheckout": "/Users/vg/Desktop/OARsite-repo",
+  "branch": "publisher/stable",
+  "localHead": "0ec3170d8012956350eb0ac4ba2c9231385b9ed7",
+  "remoteBranchSha": "0ec3170d8012956350eb0ac4ba2c9231385b9ed7",
+  "remoteMainSha": "b7d9bf5873ae153c7a1264ff64d9911eab00100f",
+  "verification": "Git ls-remote origin refs/heads/publisher/stable refs/heads/main and Vercel get_deployment read-only for production alias and deployment id; no application route called.",
+  "production": {
+    "teamId": "team_LCAVB1UAPQQMXOJvQmMggq2G",
+    "project": "oneaddressr-publisher",
+    "projectId": "prj_KxwLLx2Im5NRgg8Dz3GIL2KRofaB",
+    "deploymentId": "dpl_H22CCheuwhwrqoKxfYc86exUjXEU",
+    "url": "https://oneaddressr-publisher-3eggrtaz6-oneaddress-projects.vercel.app",
+    "state": "READY",
+    "target": "production",
+    "source": "git",
+    "sha": "0ec3170d8012956350eb0ac4ba2c9231385b9ed7",
+    "aliases": [
+      "publisher.oneaddressriviera.com",
+      "oneaddressr-publisher.vercel.app",
+      "oneaddressr-publisher-oneaddress-projects.vercel.app",
+      "oneaddressr-publisher-git-publisher-stable-oneaddress-projects.vercel.app"
+    ]
+  },
+  "preexistingSourceChanges": [
+    " M .gitignore",
+    "?? app/frontend/.gitignore"
+  ],
+  "sourceFilesSha256": {
+    "app/frontend/api/publisher.js": "cb14972419eb8acc863c739733b460ea660d60e926c03482831e80fb1ef22078",
+    "app/frontend/server/publisher/api.test.js": "ef838dd946458fc73b0ab35ee26941ad9317970b240df72965a1dfd6a8567f74",
+    "app/frontend/server/publisher/constants.js": "afea3d82a013d94c466c31d8a377ae4d66e234dc621d6ba09162140253a7ac83",
+    "app/frontend/server/publisher/db.js": "4a0905d4b6e13fdb6a1c634301c026d352a26103e373ca8e914bffe599c3257d",
+    "app/frontend/server/publisher/env.js": "b6be9f6c568585e7b39542f2a422c9cd840a110799d3c78a217316e1c2c41f75",
+    "app/frontend/server/publisher/generation.js": "1261f9cbccba455ed35ad7010f894d70f494bac23bea876ce68302ff120e4094",
+    "app/frontend/server/publisher/generation.test.js": "8a19c278f07deaad78ce4da7ce3f57796e0dd50bc5081c5d4fb5c9b0debc642c",
+    "app/frontend/server/publisher/rules.js": "d1fc89cbea34d3f74f588635171b23d0fbad31958f01872858eb724c1c727fae",
+    "app/frontend/server/publisher/rules.test.js": "78939806ed3e7c38fee025cd713e3e3f25e1a2955f6c27ff92aba00786fdcb0c",
+    "app/frontend/server/publisher/schemas.js": "d841959681b9c9d142cb8b0de575c0915569c4c6577e00c430dbba76412da581",
+    "app/frontend/server/publisher/schemas.test.js": "014021d4c0b467139a9c83ec3246d9643b1e43b02a871a0979f3ac3fc06bc73e",
+    "app/frontend/server/publisher/security.js": "987f5d562c9f0958fe782ed7d9ac9477573bde6b966984ca4213aec7d7f21b26",
+    "app/frontend/server/publisher/security.test.js": "b8409bc0d96f57f9e1a4aae5aca53c3b66924f7d832ea617def92cbe0cc2b38c",
+    "app/frontend/server/publisher/storage.js": "3f7ba80d2ab4dedea67c6795fc1f4bae4d6cf2e0e5e24cde8617bdf70e753b08",
+    "app/frontend/server/publisher/storage.test.js": "31a606d095a3dbfa754390453c397e58d752cf5d6237b053f9474b4b1eafa411",
+    "app/frontend/src/publisher/PublisherPage.tsx": "91ca54115c3e63726ec7141e37a86f43c528ffa004465121aeeb6b105736de8f",
+    "app/frontend/src/publisher/api.ts": "c9cba5beb08b9915d84267fa3f24f8909b291b48f2fcbfdfe5de21fe93859519",
+    "app/frontend/src/publisher/publisher.css": "5e23957dbe1487561e0924b36dfa06dbc6ad1541e79f0aa6640a71d2ab1beee8",
+    "app/frontend/src/publisher/types.ts": "4f26e244490ed7732910aba94e3d12a45847a08824302b87150bb7473a4404bd"
+  },
+  "sourceArchitecture": {
+    "ui": "React/Vite PublisherPage.tsx (720 lines), isolated Publisher directory",
+    "api": "Node serverless /api/publisher?action=...; maxDuration 300 seconds",
+    "database": "Neon PostgreSQL through @neondatabase/serverless; DATABASE_URL",
+    "media": "Vercel Blob private; no real media read or copied",
+    "generation": "OpenAI text/image calls with original prompts, fallback/anti-repeat rules, image defaults medium/gpt-image-2 and text gpt-5.6-luna",
+    "daily": "Explicit POST generate daily; GET today/status/history do not generate. No cron configured in checked-in vercel.json; no .github automation directory."
+  },
+  "sourceFeatureMapping": [
+    {
+      "source": "CreativeSelector, ChoiceGroup",
+      "integration": "components/publisher/PublisherPage.tsx: same Univers/Moment/Style values/text/layout"
+    },
+    {
+      "source": "generate daily/guided, polling status, persisted requestId",
+      "integration": "Same API action names, CRM Bearer access, actor-qualified requestId recovery; no automatic regeneration on GET"
+    },
+    {
+      "source": "PostEditor, GenerationProgress, HistoryGrid",
+      "integration": "Same source components, captions/hashtags/music/dates/formats/layout; authenticated Blob previews"
+    },
+    {
+      "source": "PostEditor selectedMusic useEffect dependencies",
+      "integration": "Identity and persisted/primary music dependencies preserved; unrelated text regeneration cannot reset selection"
+    },
+    {
+      "source": "prepareInstagramImage",
+      "integration": "Same 1080x1350 Feed and 1080x1920 Reel still-image crop and JPEG .92; no video added"
+    },
+    {
+      "source": "regenerate-text / regenerate-image",
+      "integration": "Both server functions reused; image action now exposed by a permission-gated button (source UI had only text button)"
+    },
+    {
+      "source": "publish -> markPublished",
+      "integration": "Mark history only; explicit Marquer comme publié, CRM sensitive mark_published, no Meta publishing"
+    },
+    {
+      "source": "shared password/cookie login",
+      "integration": "Removed from integrated UI/API; CRM account session exclusively"
+    },
+    {
+      "source": "copy / image download / music availability",
+      "integration": "Source operations preserved; explicit export permission for export/copy commands and contribution for availability changes"
+    },
+    {
+      "source": "body-level CSS",
+      "integration": "Publisher root scope; no global body class, shared navigation supplied by AccessPortal"
+    }
+  ],
+  "legacyAccessInventory": {
+    "pages": [
+      "/ (Publisher standalone)",
+      "/publisher/* (Publisher standalone or conditional non-standalone build of publisher/stable; absent from inspected current remote main)"
+    ],
+    "api": "/api/publisher?action=...",
+    "actions": [
+      "session",
+      "login",
+      "logout",
+      "today",
+      "generate",
+      "status",
+      "history",
+      "image",
+      "regenerate-text",
+      "regenerate-image",
+      "music-status",
+      "publish"
+    ],
+    "cookie": "oar_publisher_session (14 days)",
+    "benchmark": "x-publisher-benchmark on preview deployment allows generate/status/image/history using PUBLISHER_BENCHMARK_SECRET",
+    "legacyVariables": [
+      "PUBLISHER_PASSWORD_HASH",
+      "PUBLISHER_SESSION_SECRET",
+      "PUBLISHER_BENCHMARK_SECRET"
+    ],
+    "knownOtherProductionDeploymentIds": [
+      "dpl_ACA4zMN6LrKJKntb9a3ku2GDTkSX",
+      "dpl_7nM5qvcmZJufUJRg8pkPc286zvyF",
+      "dpl_E2DA3gkdyWZe5JBv8QUJspu3fcLm",
+      "dpl_DiEAW3eWMuUetjY2Z4gujpdQt17o"
+    ],
+    "deploymentInventoryLimit": "Refresh all deployments (including preview/older URLs) before cutover; do not equate alias redirect with old API revocation.",
+    "publicMainInspection": {
+      "sha": "b7d9bf5873ae153c7a1264ff64d9911eab00100f",
+      "publisherApiPresent": false,
+      "publisherPageRoutePresent": false,
+      "method": "git show/cat-file on existing object; no checkout changes"
+    },
+    "publicDeploymentMetadata": {
+      "deploymentId": "dpl_5Xccc4eV8gegA8QQqgG42m1PWfh9",
+      "project": "oneaddressr",
+      "target": "production",
+      "state": "READY",
+      "source": "cli",
+      "gitMetadata": null,
+      "note": "No matching source SHA supplied by connector. No public application/API route called. Inventory this project and old deployment URLs before cutover if they retain Publisher resources."
+    },
+    "completeVisibleDeploymentInventory": "legacy-deployments.json"
+  },
+  "environmentMetadata": {
+    "verifiedAt": "2026-09-28",
+    "method": "Vercel GET metadata decrypt=false; values discarded in memory; only names/targets/types saved",
+    "projects": {
+      "publisher": [
+        {
+          "key": "BLOB_READ_WRITE_TOKEN",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "DATABASE_URL",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "DATABASE_URL_UNPOOLED",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "NEON_PROJECT_ID",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "OPENAI_API_KEY",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "OPENAI_IMAGE_MODEL",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "OPENAI_IMAGE_QUALITY",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "OPENAI_TEXT_MODEL",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "PGDATABASE",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "PGHOST",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "PGHOST_UNPOOLED",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "PGPASSWORD",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "PGUSER",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_DATABASE",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_HOST",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_PASSWORD",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_PRISMA_URL",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_URL",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_URL_NO_SSL",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_URL_NON_POOLING",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "POSTGRES_USER",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "PUBLISHER_PASSWORD_HASH",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "PUBLISHER_SESSION_SECRET",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "PUBLISHER_TIMEZONE",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "VITE_PUBLISHER_STANDALONE",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        }
+      ],
+      "crm": [
+        {
+          "key": "CRM_INVITE_AUTH_KEY",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_PROJECT_ID",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_PROJECT_ID",
+          "target": [
+            "preview"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_PROJECT_NUMBER",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_PROJECT_NUMBER",
+          "target": [
+            "preview"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_SERVICE_ACCOUNT_EMAIL",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_SERVICE_ACCOUNT_EMAIL",
+          "target": [
+            "preview"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_WORKLOAD_IDENTITY_POOL_ID",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_WORKLOAD_IDENTITY_POOL_ID",
+          "target": [
+            "preview"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID",
+          "target": [
+            "preview"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_CLIENT_ID",
+          "target": [
+            "production",
+            "preview"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_CLIENT_SECRET",
+          "target": [
+            "preview",
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_DRIVE_DOCUMENTS_FOLDER_ID",
+          "target": [
+            "preview",
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_DRIVE_SHARED_DRIVE_ID",
+          "target": [
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_DRIVE_SHARED_DRIVE_ID",
+          "target": [
+            "preview"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_DRIVE_VENDOR_DOCUMENTS_FOLDER_ID",
+          "target": [
+            "production"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_DRIVE_VENDOR_DOCUMENTS_FOLDER_ID",
+          "target": [
+            "preview"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "GOOGLE_REFRESH_TOKEN",
+          "target": [
+            "production",
+            "preview"
+          ],
+          "type": "sensitive",
+          "gitBranch": null
+        },
+        {
+          "key": "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+          "target": [
+            "development",
+            "preview",
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        },
+        {
+          "key": "NEXT_PUBLIC_SUPABASE_URL",
+          "target": [
+            "development",
+            "preview",
+            "production"
+          ],
+          "type": "encrypted",
+          "gitBranch": null
+        }
+      ]
+    }
+  }
+}

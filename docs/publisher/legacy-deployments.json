@@ -1,0 +1,175 @@
+{
+  "verifiedAt": "2026-09-28T19:36:05.923Z",
+  "project": {
+    "id": "prj_KxwLLx2Im5NRgg8Dz3GIL2KRofaB",
+    "name": "oneaddressr-publisher",
+    "teamId": "team_LCAVB1UAPQQMXOJvQmMggq2G"
+  },
+  "method": "Vercel authenticated GET metadata only; every deployment detail checked; no application/API/media route or environment value requested.",
+  "pagination": {
+    "deployments": [
+      {
+        "count": 7,
+        "next": null
+      }
+    ],
+    "aliases": [
+      {
+        "count": 4,
+        "next": null
+      }
+    ],
+    "domains": [
+      {
+        "count": 2,
+        "next": null
+      }
+    ],
+    "previewFilterCheck": {
+      "count": 0,
+      "next": null
+    }
+  },
+  "completeVisibleInventory": true,
+  "deployments": [
+    {
+      "id": "dpl_H22CCheuwhwrqoKxfYc86exUjXEU",
+      "url": "oneaddressr-publisher-3eggrtaz6-oneaddress-projects.vercel.app",
+      "target": "production",
+      "state": "READY",
+      "created": 1788851223947,
+      "sha": "0ec3170d8012956350eb0ac4ba2c9231385b9ed7",
+      "aliases": [
+        "publisher.oneaddressriviera.com",
+        "oneaddressr-publisher.vercel.app",
+        "oneaddressr-publisher-oneaddress-projects.vercel.app",
+        "oneaddressr-publisher-git-publisher-stable-oneaddress-projects.vercel.app"
+      ]
+    },
+    {
+      "id": "dpl_ACA4zMN6LrKJKntb9a3ku2GDTkSX",
+      "url": "oneaddressr-publisher-nr1ho94b5-oneaddress-projects.vercel.app",
+      "target": "production",
+      "state": "READY",
+      "created": 1788822250997,
+      "sha": "c1e9aa5bb18f0891ec48281712b2380bafe6043e",
+      "aliases": [
+        "publisher.oneaddressriviera.com",
+        "oneaddressr-publisher.vercel.app",
+        "oneaddressr-publisher-oneaddress-projects.vercel.app"
+      ]
+    },
+    {
+      "id": "dpl_HB4oyXaGPzARN3uH6HVm3pksUJ2A",
+      "url": "oneaddressr-publisher-e7xuxoryi-oneaddress-projects.vercel.app",
+      "target": "production",
+      "state": "BLOCKED",
+      "created": 1788822196637,
+      "sha": "c1e9aa5bb18f0891ec48281712b2380bafe6043e",
+      "aliases": [
+        "oneaddressr-publisher-oneaddress-projects.vercel.app",
+        "oneaddressr-publisher-git-publisher-stable-oneaddress-projects.vercel.app"
+      ]
+    },
+    {
+      "id": "dpl_7nM5qvcmZJufUJRg8pkPc286zvyF",
+      "url": "oneaddressr-publisher-els6s60pw-oneaddress-projects.vercel.app",
+      "target": "production",
+      "state": "READY",
+      "created": 1788822097276,
+      "sha": "e459de251ab46073467e77cf1d2499e3d7586930",
+      "aliases": [
+        "publisher.oneaddressriviera.com",
+        "oneaddressr-publisher.vercel.app",
+        "oneaddressr-publisher-oneaddress-projects.vercel.app"
+      ]
+    },
+    {
+      "id": "dpl_A5Ze1FpyHVC9iAqHyyGUnBZnm6sh",
+      "url": "oneaddressr-publisher-9ck8vzzqp-oneaddress-projects.vercel.app",
+      "target": "production",
+      "state": "BLOCKED",
+      "created": 1788822025200,
+      "sha": "e459de251ab46073467e77cf1d2499e3d7586930",
+      "aliases": [
+        "oneaddressr-publisher-oneaddress-projects.vercel.app",
+        "oneaddressr-publisher-git-publisher-stable-oneaddress-projects.vercel.app"
+      ]
+    },
+    {
+      "id": "dpl_E2DA3gkdyWZe5JBv8QUJspu3fcLm",
+      "url": "oneaddressr-publisher-8k2n1wfnv-oneaddress-projects.vercel.app",
+      "target": "production",
+      "state": "READY",
+      "created": 1788810937242,
+      "sha": "1a9d11a9f8429f8e09bd8216b33680cb8fd59427",
+      "aliases": [
+        "publisher.oneaddressriviera.com",
+        "oneaddressr-publisher.vercel.app",
+        "oneaddressr-publisher-oneaddress-projects.vercel.app"
+      ]
+    },
+    {
+      "id": "dpl_DiEAW3eWMuUetjY2Z4gujpdQt17o",
+      "url": "oneaddressr-publisher-30jrb2zo8-oneaddress-projects.vercel.app",
+      "target": "production",
+      "state": "READY",
+      "created": 1788807434246,
+      "sha": "1a9d11a9f8429f8e09bd8216b33680cb8fd59427",
+      "aliases": [
+        "oneaddressr-publisher.vercel.app",
+        "oneaddressr-publisher-oneaddress-projects.vercel.app"
+      ]
+    }
+  ],
+  "aliases": [
+    {
+      "alias": "oneaddressr-publisher-git-publisher-stable-oneaddress-projects.vercel.app",
+      "deploymentId": "dpl_H22CCheuwhwrqoKxfYc86exUjXEU",
+      "url": "oneaddressr-publisher-3eggrtaz6-oneaddress-projects.vercel.app"
+    },
+    {
+      "alias": "publisher.oneaddressriviera.com",
+      "deploymentId": "dpl_H22CCheuwhwrqoKxfYc86exUjXEU",
+      "url": "oneaddressr-publisher-3eggrtaz6-oneaddress-projects.vercel.app"
+    },
+    {
+      "alias": "oneaddressr-publisher-oneaddress-projects.vercel.app",
+      "deploymentId": "dpl_H22CCheuwhwrqoKxfYc86exUjXEU",
+      "url": "oneaddressr-publisher-3eggrtaz6-oneaddress-projects.vercel.app"
+    },
+    {
+      "alias": "oneaddressr-publisher.vercel.app",
+      "deploymentId": "dpl_H22CCheuwhwrqoKxfYc86exUjXEU",
+      "url": "oneaddressr-publisher-3eggrtaz6-oneaddress-projects.vercel.app"
+    }
+  ],
+  "domains": [
+    {
+      "name": "publisher.oneaddressriviera.com",
+      "gitBranch": null,
+      "redirect": null
+    },
+    {
+      "name": "oneaddressr-publisher.vercel.app",
+      "gitBranch": null,
+      "redirect": null
+    }
+  ],
+  "automationMetadata": {
+    "cronFieldPresent": true,
+    "enabled": null,
+    "deploymentId": "dpl_H22CCheuwhwrqoKxfYc86exUjXEU",
+    "definitions": [],
+    "gitProvider": "github",
+    "productionBranch": "publisher/stable",
+    "deployHookCount": 0,
+    "externalAutomationInventory": "Not established by Vercel project metadata. GitHub/third-party/manual schedulers must be confirmed before cutover."
+  },
+  "limits": [
+    "Only deployments still visible to this account in this Publisher project are enumerated. Deleted or retained elsewhere deployment URLs cannot be ruled out.",
+    "Absence of Preview entries here does not establish that no old external URL can invoke shared credentials. Rotate/revoke underlying Publisher DB, Blob and provider credentials at coordinated cutover, including unknown legacy deployments.",
+    "Public-site project deployment history not inventoried in this file; do not modify public site or shared resources based only on this inventory.",
+    "Per-deployment alias lists are deployment metadata, not proof of current domain resolution; current alias mappings are listed separately in aliases."
+  ]
+}
