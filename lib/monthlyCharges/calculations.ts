@@ -1,5 +1,5 @@
 import { euroAmountToCents } from "../currency";
-import { getHouseTimeHours, isQuarterHourTime } from "../houseTracking";
+import { getHouseTimeHours } from "../houseTracking";
 import type {
   MonthlyChargeAttachment, MonthlyChargeSource, MonthlyChargesSnapshot,
   MonthlyInvoiceSource, MonthlyTimeSource
@@ -118,9 +118,6 @@ function hourAmount(entry: MonthlyTimeSource, issues: string[]): number | null {
   let end = Number(endTime.slice(0, 2)) * 60 + Number(endTime.slice(3));
   if (end < start) end += 24 * 60;
   if (pause > end - start) { issues.push("La pause dépasse la durée de l’intervention."); return null; }
-  if (!isQuarterHourTime(startTime) || !isQuarterHourTime(endTime)) {
-    issues.push("Horaires historiques hors quarts d’heure, conservés dans le calcul.");
-  }
   if (amountPrecisionIssue(entry.hourlyRate)) issues.push("Taux avec précision atypique ; coût arrondi au centime.");
   const rate = typeof entry.hourlyRate === "number" ? entry.hourlyRate : Number(String(entry.hourlyRate).replace(",", "."));
   const hours = getHouseTimeHours({ startTime, endTime, breakMinutes: pause });

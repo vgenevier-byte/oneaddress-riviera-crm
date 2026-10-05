@@ -111,16 +111,65 @@ test("zéro explicite est valide ; montant/taux manquant, invalide ou négatif n
   assert.ok(result.issues.every(entry => entry.amountCents === null));
 });
 
-test("durée nette, minuit et horaires historiques non quart d’heure réutilisent les conventions existantes", () => {
-  const state = snapshot([], [hours("midnight", { date: "2026-09-30", startTime: "22:00", endTime: "02:00", breakMinutes: 30, hourlyRate: 20 }), hours("legacy", { startTime: "08:07", endTime: "12:42", breakMinutes: 15, hourlyRate: 30 })]);
+test("horaires historiques valides à la minute : mêmes coûts, pause et minuit sans avertissement", () => {
+  const state = snapshot([], [
+    hours("midnight", { date: "2026-09-30", startTime: "22:00", endTime: "02:00", breakMinutes: 30, hourlyRate: 20 }),
+    hours("legacy", { startTime: "08:07", endTime: "12:42", breakMinutes: 15, hourlyRate: 30 }),
+    hours("minute-midnight", { date: "2026-09-30", startTime: "23:07", endTime: "01:42", breakMinutes: 15, hourlyRate: 20 }),
+    hours("minute-zero-duration", { startTime: "08:07", endTime: "08:07", hourlyRate: 20 }),
+    hours("minute-zero-rate", { startTime: "08:07", endTime: "12:42", breakMinutes: 15, hourlyRate: 0 })
+  ]);
+  const before = JSON.stringify(state);
   const result = buildMonthlyCharges(state, 2026, filter);
-  assert.equal(result.months[8].totalCents, 20000);
+  assert.equal(result.months[8].totalCents, 24667);
   assert.equal(result.months[9].totalCents, 0);
+  assert.equal(result.totalCents, 24667);
   assert.equal(result.entries.find(entry => entry.sourceId === "midnight")!.amountCents, 7000);
   assert.equal(result.entries.find(entry => entry.sourceId === "legacy")!.amountCents, 13000);
-  assert.match(result.issues[0].issues.join(" "), /hors quarts/);
+  assert.equal(result.entries.find(entry => entry.sourceId === "minute-midnight")!.amountCents, 4667);
+  assert.equal(result.entries.find(entry => entry.sourceId === "minute-zero-duration")!.amountCents, 0);
+  assert.equal(result.entries.find(entry => entry.sourceId === "minute-zero-rate")!.amountCents, 0);
+  assert.ok(result.entries.every(entry => entry.status === "included" && entry.issues.length === 0));
+  assert.deepEqual(result.issues, []);
+  assert.ok(result.entries.every(entry => entry.allocations.length === 1 && entry.allocations[0].month === "2026-09" && entry.allocations[0].origin === "Date d’intervention" && entry.allocations[0].amountCents === entry.amountCents));
+  const annual = csvRows(exportAnnualChargesCsv(result));
+  const detailed = csvRows(exportDetailedChargesCsv(result, {}, "2026-09"));
+  assert.equal(annual.at(-1)!.at(-1), "246,67");
+  assert.equal(annual.at(-1)![13], "246,67");
+  assert.equal(detailed.at(-1)![12], "246,67");
+  assert.deepEqual(detailed.slice(1, -1).map(row => [row[3], row[11], row[12], row[13]]), [
+    ["midnight", "70,00", "70,00", ""], ["legacy", "130,00", "130,00", ""],
+    ["minute-midnight", "46,67", "46,67", ""], ["minute-zero-duration", "0,00", "0,00", ""],
+    ["minute-zero-rate", "0,00", "0,00", ""]
+  ]);
+  assert.equal(JSON.stringify(state), before);
   for (const invalid of [{ startTime: "25:00" }, { breakMinutes: -1 }, { breakMinutes: 800 }, { breakMinutes: undefined }]) {
     assert.equal(buildMonthlyCharges(snapshot([], [hours("bad", invalid)]), 2026, filter).entries[0].status, "invalid");
+  }
+});
+
+test("les minutes valides ne masquent jamais une vraie anomalie, y compris taux atypique et date invalide cumulés", () => {
+  const cases = [
+    { overrides: { hourlyRate: 20.333 }, status: "included", amountCents: 8811, issues: ["Taux avec précision atypique ; coût arrondi au centime."] },
+    { overrides: { date: "2026-02-30" }, status: "invalid", amountCents: 13000, issues: ["Date d’intervention manquante ou invalide."] },
+    { overrides: { hourlyRate: 20.333, date: "2026-02-30" }, status: "invalid", amountCents: 8811, issues: ["Taux avec précision atypique ; coût arrondi au centime.", "Date d’intervention manquante ou invalide."] },
+    { overrides: { hourlyRate: undefined }, status: "invalid", amountCents: null, issues: ["Taux enregistré sur la ligne manquant ou invalide."] }
+  ] as const;
+  for (const example of cases) {
+    const state = snapshot([], [hours("minute-with-anomaly", { startTime: "08:07", endTime: "12:42", breakMinutes: 15, ...example.overrides })]);
+    const before = JSON.stringify(state);
+    const result = buildMonthlyCharges(state, 2026, filter);
+    const entry = result.entries[0];
+    assert.equal(entry.status, example.status);
+    assert.equal(entry.amountCents, example.amountCents);
+    assert.deepEqual(entry.issues, [...example.issues]);
+    assert.equal(result.issues.length, 1);
+    assert.equal(result.totalCents, example.status === "included" ? example.amountCents : 0);
+    assert.equal(entry.allocations.length, example.status === "included" ? 1 : 0);
+    const detailed = csvRows(exportDetailedChargesCsv(result));
+    assert.equal(detailed[1][13], example.issues.join(" · "));
+    assert.equal(detailed.at(-1)![12], example.status === "included" ? "88,11" : "0,00");
+    assert.equal(JSON.stringify(state), before);
   }
 });
 
