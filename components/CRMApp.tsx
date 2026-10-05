@@ -3423,7 +3423,8 @@ function HouseTrackingView({
   onAddTimeEntry,
   onDeleteTimeEntry,
   onAddPayment,
-  onDeletePayment
+  onDeletePayment,
+  focusEntryId
 }: {
   contacts: Contact[];
   houses: HouseTrackingHouse[];
@@ -3441,6 +3442,7 @@ function HouseTrackingView({
   onDeleteTimeEntry: (id: string) => void;
   onAddPayment: (payment: HousePayment) => void;
   onDeletePayment: (id: string) => void;
+  focusEntryId?: string;
 }) {
   const business = useBusinessPermissions();
   const today = new Date().toISOString().slice(0, 10);
@@ -3470,6 +3472,21 @@ function HouseTrackingView({
   const [houseSection, setHouseSection] = useState<"today" | "hours" | "payments" | "settings">("today");
   const [showArchivedWorkerPicker, setShowArchivedWorkerPicker] = useState(false);
   const [archivedWorkerSearch, setArchivedWorkerSearch] = useState("");
+  const [focusedEntry, setFocusedEntry] = useState<string | undefined>();
+  const sourceEntry = focusEntryId ? timeEntries.find(entry => entry.id === focusEntryId) : undefined;
+  if (sourceEntry && focusedEntry !== focusEntryId) {
+    setFocusedEntry(focusEntryId);
+    setDateRange({ start: sourceEntry.date, end: sourceEntry.date });
+    setHouseFilter("Tous");
+    setWorkerFilter("Tous");
+    setShowAllHoursHistory(true);
+    setHouseSection("hours");
+  }
+  useEffect(() => {
+    if (!focusedEntry) return;
+    const frame = window.requestAnimationFrame(() => document.getElementById(`house-time-${focusedEntry}`)?.scrollIntoView({ block: "center" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusedEntry]);
 
   if (hourDraft.workerId && !activeWorkers.some(worker => worker.id === hourDraft.workerId)) {
     const firstActiveWorker = activeWorkers[0];
@@ -4117,7 +4134,7 @@ function HouseTrackingView({
               {filteredEntries.filter((entry) => normalizeHouseDateValue(entry.date) === today && activeWorkerIds.has(entry.workerId)).length === 0 ? (
                 <p className="muted-line">Aucune heure saisie aujourd’hui.</p>
               ) : filteredEntries.filter((entry) => normalizeHouseDateValue(entry.date) === today && activeWorkerIds.has(entry.workerId)).slice(0, 6).map((entry) => (
-                <article className="mini-row house-compact-row" key={entry.id}>
+                <article className="mini-row house-compact-row" key={entry.id} id={`house-time-${entry.id}`}>
                   <div>
                     <strong>{entry.workerName}</strong>
                     <span>{entry.houseName} · {entry.startTime} à {entry.endTime}</span>
@@ -4186,7 +4203,7 @@ function HouseTrackingView({
             <h3>Heures saisies</h3>
             <div className="list-stack house-history-list">
               {filteredEntries.length === 0 ? <p className="muted-line">Aucune heure saisie.</p> : visibleHourEntries.map((entry) => (
-                <article className="mini-row house-compact-row" key={entry.id}>
+                <article className="mini-row house-compact-row" key={entry.id} id={`house-time-${entry.id}`}>
                   <div>
                     <strong>{entry.workerName}</strong>
                     {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge">Archivé</span>}
@@ -4512,7 +4529,8 @@ function VendorInvoicesView({
   onAdd,
   onUpdate,
   onDelete,
-  onOpenQuote
+  onOpenQuote,
+  focusInvoiceId
 }: {
   actor: string;
   onUpdateContact: (contact: Contact) => void;
@@ -4525,6 +4543,7 @@ function VendorInvoicesView({
   onUpdate: (invoice: VendorInvoice) => void;
   onDelete: (id: string) => void;
   onOpenQuote: (quoteId: string) => void;
+  focusInvoiceId?: string;
 }) {
   const business = useBusinessPermissions();
   const [bankContactId, setBankContactId] = useState("");
@@ -4543,6 +4562,11 @@ function VendorInvoicesView({
     mimeType: string;
     external: boolean;
   } | null>(null);
+  useEffect(() => {
+    if (!focusInvoiceId || !invoices.some(invoice => invoice.id === focusInvoiceId)) return;
+    const frame = window.requestAnimationFrame(() => document.getElementById(`vendor-invoice-${focusInvoiceId}`)?.scrollIntoView({ block: "center" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusInvoiceId, invoices]);
 
   useEffect(() => {
     return () => {
@@ -5595,7 +5619,7 @@ function DashboardQuickTile({
 
 export {createQuickEntryRecords, promptQuickEntryText};
 
-export default function CRMApp({ access, initialTab = "dashboard", onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; onExternalNavigate: (tab: UnifiedTab) => void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
   const beginHouseOperation = useScopedOperations("houseTracking");
   const currentAccessToken = useCommittedValue(sessionAccessToken);
   const identityLifetime = useRef(new AbortController());
@@ -8769,7 +8793,7 @@ function createQuoteDraftFromLead(lead: Lead) {
   return (
     <main className="crm-shell crm-readable-redesign" onChangeCapture={event=>{if((event.target as HTMLElement).closest("form"))setFormDirty(true);}} onSubmitCapture={()=>setFormDirty(false)}>
       <UnifiedNavigation access={access} active={activeTab} badges={sidebarBadgeCounts} onLogout={onLogout} onNavigate={tab => {
-        if (tab === "izord" || tab === "publisher" || tab === "admin") onExternalNavigate(tab); else setActiveTab(tab);
+        if (tab === "monthlyCharges" || tab === "izord" || tab === "publisher" || tab === "admin") onExternalNavigate(tab); else setActiveTab(tab);
       }} />
 
       <section className="content-panel">
@@ -9007,6 +9031,7 @@ function createQuoteDraftFromLead(lead: Lead) {
 
         {activeTab === "vendorInvoices" && (
           <VendorInvoicesView
+            focusInvoiceId={sourceFocus?.module === "vendorInvoices" ? sourceFocus.id : undefined}
             quotes={data.vendorQuotes || []}
             onDeleteOrphan={deleteOrphanVendorInvoice}
             actor={activeActor}
@@ -9023,6 +9048,7 @@ function createQuoteDraftFromLead(lead: Lead) {
 
         {activeTab === "houseTracking" && (
           <HouseTrackingView
+            focusEntryId={sourceFocus?.module === "houseTracking" ? sourceFocus.id : undefined}
             contacts={data.contacts}
             houses={(((data as any).houseTrackingHouses ?? []) as HouseTrackingHouse[])}
             workers={(((data as any).houseTrackingWorkers ?? []) as HouseTrackingWorker[])}

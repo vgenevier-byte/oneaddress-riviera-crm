@@ -21,6 +21,7 @@ import styles from "./AccessPortal.module.css";
 
 const CRMApp = dynamic(() => import("./CRMApp"), { ssr: false });
 const PublisherPage = dynamic(() => import("./publisher/PublisherPage"), { ssr: false });
+const MonthlyChargesWorkspace = dynamic(() => import("./monthlyCharges/MonthlyChargesWorkspace"), { ssr: false });
 const IzordGenerator = dynamic(() => import("./izord/IzordGenerator"), { ssr: false });
 type Membership = { workspace_id: "oar" | "izord"; role: string };
 type Access = { permissions?: AccessSnapshot; session: Session | null; memberships: Membership[]; loading: boolean; error: string; phase?: "verified" | "unavailable" | "denied" };
@@ -30,9 +31,10 @@ class AccessCheckFailure extends Error {
   constructor(readonly temporary: boolean, message: string) { super(message); }
 }
 
-export default function AccessPortal({ space }: { space: "oar" | "izord" | "publisher" | "choose" | "admin" }) {
+export default function AccessPortal({ space }: { space: "oar" | "izord" | "publisher" | "choose" | "admin" | "charges" }) {
   const [businessDraft,setBusinessDraft]=useState<{user:string;revision:number;module:ModuleId;value:Record<string,string>}|null>(null);
-  const [view,setView] = useState<UnifiedTab>(space === "izord" ? "izord" : space === "publisher" ? "publisher" : space === "admin" ? "admin" : "dashboard");
+  const [sourceFocus, setSourceFocus] = useState<{ module: "vendorInvoices" | "houseTracking"; id: string } | undefined>();
+  const [view,setView] = useState<UnifiedTab>(space === "charges" ? "monthlyCharges" : space === "izord" ? "izord" : space === "publisher" ? "publisher" : space === "admin" ? "admin" : "dashboard");
   const permissionsRef = useRef<string>("");
   const [invitation,setInvitation] = useState<string | null>(null);
   const [invitationReady,setInvitationReady] = useState(false);
@@ -70,6 +72,10 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     if(!alive)return;
     setInvitationReady(true);
     const requested=query.get("module");if(moduleItems.some(m=>m.tab===requested))setView(requested as UnifiedTab);
+    const prefix = requested === "vendorInvoices" ? "#vendor-invoice-" : requested === "houseTracking" ? "#house-time-" : null;
+    if (prefix && url.hash.startsWith(prefix)) {
+      try { setSourceFocus({ module: requested as "vendorInvoices" | "houseTracking", id: decodeURIComponent(url.hash.slice(prefix.length)) }); } catch { /* Invalid anchors do not open a record. */ }
+    }
   },0);return()=>{alive=false;window.clearTimeout(timer);}; },[]);
   const [cacheTransition, setCacheTransition] = useState<PersistentCRMCacheState | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -266,22 +272,27 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
   const permissions = access.permissions;
   const izord = access.memberships.find(m => m.workspace_id === "izord");
   const allowed = permissions ? moduleItems.filter(m=>readable(permissions,m.tab)) : [];
-  const selected = (view === "admin" ? permissions?.generalAdmin : permissions && readable(permissions,view)) ? view : allowed[0]?.tab ?? (permissions?.generalAdmin ? "admin" : null);
-  function navigate(tab:UnifiedTab) {
+  const chargesDenied = view === "monthlyCharges" && permissions && !readable(permissions, "monthlyCharges");
+  const selected = chargesDenied ? null : (view === "admin" ? permissions?.generalAdmin : permissions && readable(permissions,view)) ? view : allowed[0]?.tab ?? (permissions?.generalAdmin ? "admin" : null);
+  function navigate(tab:UnifiedTab, recordId?: string) {
     if(!confirmLeaving())return;
     stopGenerator(); setHasUnsavedChanges(false); setView(tab);
-    window.history.replaceState(null,"",tab === "izord" ? "/izord" : tab === "publisher" ? "/publisher" : tab === "admin" ? "/admin" : "/?module="+tab);
+    const focus = recordId && (tab === "vendorInvoices" || tab === "houseTracking") ? { module: tab, id: recordId } : undefined;
+    setSourceFocus(focus);
+    const hash = focus ? "#"+(tab === "vendorInvoices" ? "vendor-invoice-" : "house-time-")+encodeURIComponent(focus.id) : "";
+    window.history.replaceState(null,"",(tab === "monthlyCharges" ? "/charges" : tab === "izord" ? "/izord" : tab === "publisher" ? "/publisher" : tab === "admin" ? "/admin" : "/?module="+tab)+hash);
   }
   if(invitationReady && !access.loading && access.session && permissions && !access.error && !invitation && !invitationAccepted) {
     if(selected && selected!==view) return <SelectAllowed select={()=>setView(selected)} />;
-    if(selected && selected!=="izord" && selected!=="publisher" && selected!=="admin" && permissions.fullAccess) return <OperationProvider userId={access.session.user.id} access={permissions}><CRMApp key={access.session.user.id+":"+permissions.revision} access={permissions} initialTab={selected as CRMTab} onExternalNavigate={navigate} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email??"utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} /></OperationProvider>;
+    if(selected && selected!=="monthlyCharges" && selected!=="izord" && selected!=="publisher" && selected!=="admin" && permissions.fullAccess) return <OperationProvider userId={access.session.user.id} access={permissions}><CRMApp key={access.session.user.id+":"+permissions.revision} access={permissions} initialTab={selected as CRMTab} sourceFocus={sourceFocus} onExternalNavigate={navigate} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email??"utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} /></OperationProvider>;
     return <OperationProvider userId={access.session.user.id} access={permissions}><main className="crm-shell crm-readable-redesign"><UnifiedNavigation access={permissions} active={selected??"dashboard"} onNavigate={navigate} onLogout={logout}/><section className="content-panel">
       {message&&<p role="status">{message}</p>}
-      {!selected && <div className="module-workspace"><h1>Aucun accès autorisé</h1><p>Votre compte est connecté, mais aucun module ne lui est attribué. Contactez votre administrateur.</p><button onClick={logout}>Se déconnecter</button></div>}
+      {!selected && <div className="module-workspace"><h1>{chargesDenied ? "Charges mensuelles : accès refusé" : "Aucun accès autorisé"}</h1><p>{chargesDenied ? "Ce module n’est pas autorisé pour votre compte." : "Votre compte est connecté, mais aucun module ne lui est attribué. Contactez votre administrateur."}</p><button onClick={logout}>Se déconnecter</button></div>}
       {selected==="admin"&&<AccessAdministration key={access.session.user.id} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
       {selected==="izord"&&izord&&generatorHost&&<div className="module-workspace"><h1>IZORD Invest</h1><IzordGenerator key={generatorHost.key} role={permissions.modules.izord?.level==='read'?'reader':izord.role} canExport={Boolean(permissions.modules.izord?.sensitive.export)} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={setHasUnsavedChanges}/></div>}
       {selected==="publisher"&&permissions.modules.publisher&&<PublisherPage key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} grant={permissions.modules.publisher} accessRevision={permissions.revision} onUnsavedChange={setHasUnsavedChanges}/>}
-      {selected && selected!=="admin"&&selected!=="izord"&&selected!=="publisher"&&<ModuleWorkspace key={access.session.user.id+":"+permissions.revision+":"+selected} module={selected} access={permissions} onDirty={setHasUnsavedChanges} draft={businessDraft?.user===access.session.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===selected?businessDraft.value:undefined} onNavigate={(tab,value)=>{setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);navigate(tab);}}/>}
+      {selected==="monthlyCharges"&&<MonthlyChargesWorkspace key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onDirtyChange={setHasUnsavedChanges} onNavigateSource={(source, recordId)=>{ if (readable(permissions, source)) navigate(source, recordId); }}/>}
+      {selected && selected!=="monthlyCharges"&&selected!=="admin"&&selected!=="izord"&&selected!=="publisher"&&<ModuleWorkspace key={access.session.user.id+":"+permissions.revision+":"+selected} module={selected} sourceFocus={sourceFocus} access={permissions} onDirty={setHasUnsavedChanges} draft={businessDraft?.user===access.session.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===selected?businessDraft.value:undefined} onNavigate={(tab,value)=>{setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);navigate(tab);}}/>}
     </section></main></OperationProvider>;
   }
   return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>CRM privé</span></div><section className={styles.card}><h1>Connexion au CRM</h1>
