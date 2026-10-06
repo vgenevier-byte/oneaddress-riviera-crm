@@ -1,0 +1,13 @@
+.panel, .result, .folder { min-width: 0; overflow-wrap: anywhere; }
+.panel > button { margin-right: .6rem; margin-bottom: .5rem; }
+.result { margin-top: 1.2rem; }
+.result h3 { margin-top: 1.4rem; }
+.result li { margin-bottom: .6rem; }
+.folder { border-top: 1px solid #d9d9d9; margin-top: 1rem; padding-top: .3rem; }
+.table { width: 100%; overflow-x: auto; }
+.table table { width: 100%; min-width: 0; max-width: 100%; table-layout: fixed; border-collapse: collapse; }
+.table th, .table td { text-align: left; vertical-align: top; border-bottom: 1px solid #dedede; padding: .55rem; }
+.table th { white-space: normal; letter-spacing: .04em !important; }
+.table th:first-child { width: 40%; }
+.table small { display: block; }
+@media (max-width: 600px) { .table th, .table td { padding: .4rem; font-size: .9rem; } }

@@ -268,6 +268,17 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     broadcastCRMCacheReset();
     window.location.assign("/spaces");
   }
+  async function reconnectForDriveDiagnostic() {
+    if (!confirmLeaving()) return;
+    stopGenerator();
+    setBusinessDraft(null);
+    setHasUnsavedChanges(false);
+    setAccess(initial);
+    clearCRMCache();
+    await supabase.auth.signOut({ scope: "local" });
+    window.history.replaceState(null, "", "/admin");
+    window.location.reload();
+  }
   if (cacheTransition) return <CacheRecovery state={cacheTransition} />;
   const permissions = access.permissions;
   const izord = access.memberships.find(m => m.workspace_id === "izord");
@@ -288,7 +299,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     return <OperationProvider userId={access.session.user.id} access={permissions}><main className="crm-shell crm-readable-redesign"><UnifiedNavigation access={permissions} active={selected??"dashboard"} onNavigate={navigate} onLogout={logout}/><section className="content-panel">
       {message&&<p role="status">{message}</p>}
       {!selected && <div className="module-workspace"><h1>{chargesDenied ? "Charges mensuelles : accès refusé" : "Aucun accès autorisé"}</h1><p>{chargesDenied ? "Ce module n’est pas autorisé pour votre compte." : "Votre compte est connecté, mais aucun module ne lui est attribué. Contactez votre administrateur."}</p><button onClick={logout}>Se déconnecter</button></div>}
-      {selected==="admin"&&<AccessAdministration key={access.session.user.id} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
+      {selected==="admin"&&<AccessAdministration key={access.session.user.id} userId={access.session.user.id} access={permissions} onReconnect={reconnectForDriveDiagnostic} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
       {selected==="izord"&&izord&&generatorHost&&<div className="module-workspace"><h1>IZORD Invest</h1><IzordGenerator key={generatorHost.key} role={permissions.modules.izord?.level==='read'?'reader':izord.role} canExport={Boolean(permissions.modules.izord?.sensitive.export)} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={setHasUnsavedChanges}/></div>}
       {selected==="publisher"&&permissions.modules.publisher&&<PublisherPage key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} grant={permissions.modules.publisher} accessRevision={permissions.revision} onUnsavedChange={setHasUnsavedChanges}/>}
       {selected==="monthlyCharges"&&<MonthlyChargesWorkspace key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onDirtyChange={setHasUnsavedChanges} onNavigateSource={(source, recordId)=>{ if (readable(permissions, source)) navigate(source, recordId); }}/>}
