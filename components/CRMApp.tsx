@@ -14,7 +14,7 @@ import { VendorInvoiceDuplicateDialog } from "./VendorFinanceDialogs";
 import VendorQuotesView from "./VendorQuotesView";
 import MobileCRMHeader from "./MobileCRMHeader";
 import UnifiedNavigation, { type UnifiedTab } from "./UnifiedNavigation";
-import type { AccessSnapshot } from "@/lib/access/modules";
+import { readable, type AccessSnapshot } from "@/lib/access/modules";
 import { type MobileSecondaryAction } from "./MobileMoreMenu";
 import { VendorBankAccounts, VendorInvoicePayment, VendorBankContactDialog } from "./VendorBanking";
 import {
@@ -479,19 +479,19 @@ function normalizeHouseTrackingWorker(value: unknown): HouseTrackingWorker | nul
   if (!value || typeof value !== "object") return null;
 
   const raw = value as Record<string, unknown>;
+  // Keep existing references until confirmed cleanup; never recreate cleared keys.
+  const existingDocumentReferences = Object.fromEntries(Object.entries(raw).filter(([key]) =>
+    key.startsWith("document") || ["storagePath", "fileName", "uploadedAt"].includes(key)));
   const hourlyRate = raw.hourlyRate == null || String(raw.hourlyRate).trim() === ""
     ? undefined : Number(String(raw.hourlyRate).replace(",", "."));
 
   return {
+    ...existingDocumentReferences,
     id: String(raw.id || makeId("worker")),
     contactId: String(raw.contactId || ""),
     contactName: String(raw.contactName || "Intervenant à compléter"),
     role: String(raw.role || "Intervenant"),
     hourlyRate: hourlyRate !== undefined && Number.isFinite(hourlyRate) ? hourlyRate : undefined,
-    documentUrl: String(raw.documentUrl || ""),
-    documentStoragePath: String(raw.documentStoragePath || raw.storagePath || ""),
-    documentFileName: String(raw.documentFileName || raw.fileName || ""),
-    documentUploadedAt: String(raw.documentUploadedAt || raw.uploadedAt || ""),
     status: raw.status === "Inactif" ? "Inactif" : "Actif",
     notes: String(raw.notes || ""),
     createdAt: String(raw.createdAt || new Date().toISOString()),
@@ -3436,6 +3436,8 @@ function DocumentsView({
 }
 
 function HouseTrackingView({
+  access,
+  onOpenContact,
   contacts,
   houses,
   workers,
@@ -3454,6 +3456,8 @@ function HouseTrackingView({
   onDeletePayment,
   focusEntryId
 }: {
+  access?: AccessSnapshot;
+  onOpenContact?: (contactId: string) => void;
   contacts: Contact[];
   houses: HouseTrackingHouse[];
   workers: HouseTrackingWorker[];
@@ -3496,7 +3500,6 @@ function HouseTrackingView({
   const hourConfirmation = useConfirmedForm(business?.markDirty);
   const [showAllHoursHistory, setShowAllHoursHistory] = useState(false);
   const [showAllPaymentsHistory, setShowAllPaymentsHistory] = useState(false);
-  const [uploadingWorkerDocument, setUploadingWorkerDocument] = useState(false);
   const [houseSection, setHouseSection] = useState<"today" | "hours" | "payments" | "settings">("today");
   const [showArchivedWorkerPicker, setShowArchivedWorkerPicker] = useState(false);
   const [archivedWorkerSearch, setArchivedWorkerSearch] = useState("");
@@ -3798,62 +3801,6 @@ function HouseTrackingView({
     event.currentTarget.reset();
   }
 
-  async function uploadHouseWorkerDocument(file: File, workerId: string) {
-    if (business) return {documentStoragePath:await business.upload("houseTrackingWorkers",workerId,file),documentFileName:file.name,documentUploadedAt:new Date().toISOString()};
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-
-    if (userError || !userData.user) {
-      throw new Error("Utilisateur Supabase non connecté.");
-    }
-
-    const safeName = file.name
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-zA-Z0-9._-]+/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "") || "document";
-
-    const storagePath = `${SHARED_WORKSPACE_ID}/house-workers/${workerId}/${Date.now()}-${safeName}`;
-
-    const { error } = await supabase.storage
-      .from(CRM_DOCUMENTS_BUCKET)
-      .upload(storagePath, file, {
-        cacheControl: "3600",
-        upsert: true
-      });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
-    return {
-      documentStoragePath: storagePath,
-      documentFileName: file.name,
-      documentUploadedAt: new Date().toISOString()
-    };
-  }
-
-  async function downloadHouseWorkerDocument(worker: HouseTrackingWorker) {
-    if (business) return business.download(worker.documentStoragePath || "",worker.documentFileName || "document");
-    if (!worker.documentStoragePath) return;
-
-    const { data: fileData, error } = await supabase.storage
-      .from(CRM_DOCUMENTS_BUCKET)
-      .download(worker.documentStoragePath);
-
-    if (error || !fileData) {
-      window.alert(`Téléchargement impossible : ${error?.message || "fichier introuvable"}`);
-      return;
-    }
-
-    const url = URL.createObjectURL(fileData);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = worker.documentFileName || `${worker.contactName || "intervenant"}-document`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
   async function submitWorker(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -3867,33 +3814,12 @@ function HouseTrackingView({
     if (rate === null) return window.alert("Saisissez un taux horaire valide, avec au maximum deux décimales (0 est accepté).");
 
     const workerId = makeId("worker");
-    const file = form.get("documentFile");
-    let uploadedDocument: Partial<HouseTrackingWorker> = {};
-
-    if (file instanceof File && file.size > 0) {
-      try {
-        setUploadingWorkerDocument(true);
-        uploadedDocument = await uploadHouseWorkerDocument(file, workerId);
-        if (business) await business.check();
-      } catch (error) {
-        window.alert(`Document non chargé dans Supabase Storage : ${error instanceof Error ? error.message : "erreur inconnue"}`);
-        setUploadingWorkerDocument(false);
-        return;
-      } finally {
-        setUploadingWorkerDocument(false);
-      }
-    }
-
     onAddWorker({
       id: workerId,
       contactId: contact.id,
       contactName: getHouseContactDisplayName(contact),
       role: contact.kind === "Membre de l’organisation" ? contact.organizationFunction || contact.kind : contact.supplierCategory || contact.kind || "Prestataire",
       hourlyRate: rate,
-      documentUrl: "",
-      documentStoragePath: uploadedDocument.documentStoragePath || "",
-      documentFileName: uploadedDocument.documentFileName || "",
-      documentUploadedAt: uploadedDocument.documentUploadedAt || "",
       status: "Actif",
       notes: String(form.get("notes") ?? "").trim(),
       createdAt: new Date().toISOString()
@@ -4358,15 +4284,10 @@ function HouseTrackingView({
               <BusinessLabel>Taux horaire
                 <input name="hourlyRate" type="text" inputMode="decimal" required placeholder="Ex : 18,50" />
               </BusinessLabel>
-              <BusinessLabel>Document
-                <input name="documentFile" type="file" />
-              </BusinessLabel>
               <BusinessLabel>Notes
                 <textarea name="notes" placeholder="Disponibilités, conditions, préférences..." />
               </BusinessLabel>
-              <BusinessButton permission="write" className="primary-button" type="submit" disabled={uploadingWorkerDocument}>
-                {uploadingWorkerDocument ? "Chargement..." : "Ajouter l’intervenant"}
-              </BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="submit">Ajouter l’intervenant</BusinessButton>
             </BusinessForm>
 
             {editingWorkerId && onUpdateWorker && (() => {
@@ -4388,9 +4309,8 @@ function HouseTrackingView({
                     <div>
                       <strong>{worker.contactName}</strong>
                       <span>{worker.role} · {worker.hourlyRate == null ? "Tarif non renseigné" : `${currency.format(worker.hourlyRate)}/h`}</span>
-                      {worker.documentFileName && <span>Document : {worker.documentFileName}</span>}
-                      {worker.documentStoragePath && (
-                        <BusinessButton permission="export" className="secondary-link" type="button" onClick={() => void downloadHouseWorkerDocument(worker)}>Télécharger document</BusinessButton>
+                      {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
+                        <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)}>Ouvrir la fiche contact</button>
                       )}
                     </div>
                     <div className="house-worker-actions">
@@ -4398,7 +4318,7 @@ function HouseTrackingView({
                       <BusinessButton permission="write"
                         className="secondary-button"
                         type="button"
-                        onClick={() => window.confirm(`Archiver ${worker.contactName} ?\n\nSa fiche, ses documents, ses heures et ses paiements seront intégralement conservés.`) && onArchiveWorker(worker.id)}
+                        onClick={() => window.confirm(`Archiver ${worker.contactName} ?\n\nSa fiche, ses heures et ses paiements seront intégralement conservés.`) && onArchiveWorker(worker.id)}
                       >
                         Archiver
                       </BusinessButton>
@@ -4431,9 +4351,8 @@ function HouseTrackingView({
                         <span>{worker.role} · {worker.hourlyRate == null ? "Tarif non renseigné" : `${currency.format(worker.hourlyRate)}/h`}</span>
                         <span>{history.timeEntries} ligne(s) · {formatHours(history.hours)} · {history.payments} paiement(s) · {currency.format(history.paid)} payé</span>
                         <span>Coût {currency.format(history.due)} · Delta {formatHouseBalanceLabel(history.balance)}</span>
-                        {worker.documentFileName && <span>Document : {worker.documentFileName}</span>}
-                        {worker.documentStoragePath && (
-                          <BusinessButton permission="export" className="secondary-link" type="button" onClick={() => void downloadHouseWorkerDocument(worker)}>Télécharger document</BusinessButton>
+                        {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
+                          <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)}>Ouvrir la fiche contact</button>
                         )}
                       </div>
                       <div className="house-worker-actions">
@@ -5665,6 +5584,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   });
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
+  const [focusContactId, setFocusContactId] = useState<string | undefined>();
   const [, setMobileMoreOpen] = useState(false);
 
 
@@ -5849,10 +5769,12 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
 
   function setActiveTab(tab: Tab) {
-    if ((hasUnsavedChanges || formDirty) && tab !== activeTab && !window.confirm("Une saisie est en cours. Quitter ce module ?")) return;
+    if ((hasUnsavedChanges || formDirty) && tab !== activeTab && !window.confirm("Une saisie est en cours. Quitter ce module ?")) return false;
     setFormDirty(false);
+    setFocusContactId(undefined);
     setQuery("");
     setActiveTabState(tab);
+    return true;
   }
 
   useEffect(() => {
@@ -9035,7 +8957,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "contacts" && (
-          <ContactsView access={access} actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={data.tasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
+          <ContactsView access={access} focusContactId={focusContactId} actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={data.tasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
 
@@ -9128,6 +9050,10 @@ function createQuoteDraftFromLead(lead: Lead) {
 
         {activeTab === "houseTracking" && (
           <HouseTrackingView
+            access={access}
+            onOpenContact={contactId => {
+              if (readable(access, "contacts") && setActiveTab("contacts")) setFocusContactId(contactId);
+            }}
             focusEntryId={sourceFocus?.module === "houseTracking" ? sourceFocus.id : undefined}
             contacts={data.contacts}
             houses={(((data as any).houseTrackingHouses ?? []) as HouseTrackingHouse[])}
@@ -11858,6 +11784,7 @@ function StatCard({ label, value, caption }: { label: string; value: string; cap
 
 function ContactsView({
   access,
+  focusContactId,
   actor,
   contacts,
   leads,
@@ -11869,6 +11796,7 @@ function ContactsView({
   onCreateTask
 }: {
   access?: AccessSnapshot;
+  focusContactId?: string;
   actor: string;
   contacts: Contact[];
   leads: Lead[];
@@ -11887,7 +11815,7 @@ function ContactsView({
   const [contactFilter, setContactFilter] = useState("Tous");
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("Toutes");
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(() => contacts.find(contact => contact.id === focusContactId) ?? null);
   const [newContactKind, setNewContactKind] = useState<ContactKind>("Client");
   const [editingContactKind, setEditingContactKind] = useState<ContactKind>("Client");
 
