@@ -18,6 +18,7 @@ import { bindCRMCache, clearCRMCache, inspectPersistentCRMCache, isPersistentCRM
   CRM_CACHE_CHANGED, CRM_CACHE_RESET_KEY, CRM_CACHE_CHANNEL,
   type PersistentCRMCacheState, type CRMCacheRecovery } from "@/lib/access/crmCache";
 import styles from "./AccessPortal.module.css";
+import PasswordInput from "./PasswordInput";
 
 const CRMApp = dynamic(() => import("./CRMApp"), { ssr: false });
 const PublisherPage = dynamic(() => import("./publisher/PublisherPage"), { ssr: false });
@@ -46,6 +47,11 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
   const [access, setAccess] = useState<Access>(initial);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [passwordDisplayReset, setPasswordDisplayReset] = useState(0);
+  const [passwordRecovery, setPasswordRecovery] = useState<{ userId: string } | null>(null);
+  const passwordRecoveryRef = useRef<{ userId: string } | null>(null);
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const recoverySubmitting = useRef(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(()=>{ let alive=true; const timer=window.setTimeout(async()=>{
@@ -208,6 +214,12 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     }
     // Defer Supabase calls outside the synchronous auth event callback.
     const subscription = supabase.auth.onAuthStateChange((event, session) => {
+      if (passwordRecoveryRef.current && passwordRecoveryRef.current.userId !== session?.user.id) {
+        passwordRecoveryRef.current = null;
+        setPasswordRecovery(null);
+        setRecoveryPassword("");
+        setPasswordDisplayReset(value => value + 1);
+      }
       if (previousUser !== undefined && previousUser !== (session?.user.id ?? null)) {
         // Invalidate pending membership checks and cached writes in this auth event.
         generation++;
@@ -216,13 +228,14 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
         setAccess(initial);
       }
       window.setTimeout(() => { if (alive) void check(session); }, 0);
-      if (event === "PASSWORD_RECOVERY") window.setTimeout(async () => {
-        if (!alive) return;
-        const nextPassword = window.prompt("Choisis ton nouveau mot de passe :");
-        if (!nextPassword || nextPassword.length < 8) { setMessage("Le mot de passe doit contenir au moins 8 caractères."); return; }
-        const { error } = await supabase.auth.updateUser({ password: nextPassword });
-        setMessage(error ? "Mot de passe non modifié." : "Mot de passe enregistré.");
-      }, 300);
+      if (event === "PASSWORD_RECOVERY" && alive && session) {
+        const recovery = { userId: session.user.id };
+        passwordRecoveryRef.current = recovery;
+        setPasswordRecovery(recovery);
+        setRecoveryPassword("");
+        setPasswordDisplayReset(value => value + 1);
+        setMessage("");
+      }
     }).data.subscription;
     const refresh = () => {
       if (!alive || cacheBlocked()) return;
@@ -279,7 +292,59 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     window.history.replaceState(null, "", "/admin");
     window.location.reload();
   }
+  async function saveRecoveryPassword() {
+    setPasswordDisplayReset(value => value + 1);
+    const recovery = passwordRecoveryRef.current;
+    if (!recovery || recoverySubmitting.current) return;
+    if (recoveryPassword.length < 8) {
+      setMessage("Le mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    recoverySubmitting.current = true;
+    setBusy(true);
+    setMessage("");
+    try {
+      // Keep the form bound to the recovery account while checks are in flight.
+      const { data, error } = await supabase.auth.getSession();
+      if (passwordRecoveryRef.current !== recovery) return;
+      if (error || !data.session || data.session.user.id !== recovery.userId) {
+        setMessage("Session non valide. Rouvrez votre lien de récupération.");
+        return;
+      }
+      const verified = await supabase.auth.getUser(data.session.access_token);
+      if (passwordRecoveryRef.current !== recovery) return;
+      if (verified.error || verified.data.user?.id !== recovery.userId) {
+        setMessage("Session non vérifiée. Réessayez ou rouvrez votre lien de récupération.");
+        return;
+      }
+      const changed = await supabase.auth.updateUser({ password: recoveryPassword });
+      if (passwordRecoveryRef.current !== recovery) return;
+      if (changed.error) {
+        setMessage("Mot de passe non modifié. Réessayez.");
+        return;
+      }
+      passwordRecoveryRef.current = null;
+      setPasswordRecovery(null);
+      setRecoveryPassword("");
+      setMessage("Mot de passe enregistré.");
+    } catch {
+      if (passwordRecoveryRef.current === recovery) setMessage("Mot de passe non modifié. Réessayez.");
+    } finally {
+      recoverySubmitting.current = false;
+      setBusy(false);
+    }
+  }
   if (cacheTransition) return <CacheRecovery state={cacheTransition} />;
+  if (passwordRecovery) return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>CRM privé</span></div><section className={styles.card}>
+    <h1>Réinitialiser le mot de passe</h1>
+    <p>Choisissez un nouveau mot de passe d’au moins 8 caractères.</p>
+    <form className={styles.form} onInvalidCapture={() => setPasswordDisplayReset(value => value + 1)} onSubmit={event => { event.preventDefault(); void saveRecoveryPassword(); }}>
+      <label>Nouveau mot de passe<PasswordInput resetKey={passwordDisplayReset} name="password" autoComplete="new-password" minLength={8} required value={recoveryPassword} onChange={event => setRecoveryPassword(event.target.value)} disabled={busy} /></label>
+      <button type="submit" disabled={busy || access.loading || access.session?.user.id !== passwordRecovery.userId}>Enregistrer le mot de passe</button>
+      <button type="button" className={styles.secondary} disabled={busy} onClick={() => { passwordRecoveryRef.current = null; setPasswordRecovery(null); setRecoveryPassword(""); setPasswordDisplayReset(value => value + 1); setMessage(""); }}>Annuler</button>
+    </form>
+    {message && <p role="status">{message}</p>}
+  </section></main>;
   const permissions = access.permissions;
   const izord = access.memberships.find(m => m.workspace_id === "izord");
   const allowed = permissions ? moduleItems.filter(m=>readable(permissions,m.tab)) : [];
@@ -307,9 +372,9 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     </section></main></OperationProvider>;
   }
   return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>CRM privé</span></div><section className={styles.card}><h1>Connexion au CRM</h1>
-    {(access.loading||!invitationReady)?<p role="status">Vérification des accès…</p>:!access.session?<><p>Connectez-vous avec votre compte individuel.</p><form className={styles.form} onSubmit={async e=>{e.preventDefault();setBusy(true);setMessage("");try{const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)setMessage("Connexion impossible. Vérifiez vos identifiants.");}catch{setMessage("Connexion indisponible.");}finally{setBusy(false);}}}><label>Email<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Mot de passe<input type="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Se connecter</button></form></>:<>
-      <p>{access.session.user.email}</p>{(invitation||invitationAccepted)?<>{invitationPasswordError&&<p role="alert">Invitation acceptée. Mot de passe non enregistré : choisissez un autre mot de passe ou réessayez.</p>}{invitationSetup&&<label>Choisissez un mot de passe<input type="password" autoComplete="new-password" minLength={8} value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy||invitationError||(invitationSetup&&password.length<8)} onClick={async()=>{
-        setBusy(true);setMessage('');
+    {(access.loading||!invitationReady)?<p role="status">Vérification des accès…</p>:!access.session?<><p>Connectez-vous avec votre compte individuel.</p><form className={styles.form} onInvalidCapture={() => setPasswordDisplayReset(value => value + 1)} onSubmit={async e=>{e.preventDefault();setPasswordDisplayReset(value=>value+1);setBusy(true);setMessage("");try{const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)setMessage("Connexion impossible. Vérifiez vos identifiants.");}catch{setMessage("Connexion indisponible.");}finally{setBusy(false);}}}><label>Email<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Mot de passe<PasswordInput resetKey={"login:"+passwordDisplayReset} name="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Se connecter</button></form></>:<>
+      <p>{access.session.user.email}</p>{(invitation||invitationAccepted)?<>{invitationPasswordError&&<p role="alert">Invitation acceptée. Mot de passe non enregistré : choisissez un autre mot de passe ou réessayez.</p>}{invitationSetup&&<label>Choisissez un mot de passe<PasswordInput resetKey={"invitation:"+passwordDisplayReset} name="password" autoComplete="new-password" minLength={8} value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy||invitationError||(invitationSetup&&password.length<8)} onClick={async()=>{
+        setPasswordDisplayReset(value=>value+1);setBusy(true);setMessage('');
         try{
           if(!invitationAccepted){
             const r=await supabase.rpc('crm_invite_accept',{p_token:invitation});
