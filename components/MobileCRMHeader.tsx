@@ -134,6 +134,7 @@ export default function MobileCRMHeader({
               <label className="mobile-actor-field">
                 <span>Actions par</span>
                 <select value={activeActor} onChange={(event) => onActorChange(event.target.value)}>
+                  <option value="">Non renseigné</option>
                   {actors.map((actor) => <option key={actor}>{actor}</option>)}
                 </select>
               </label>

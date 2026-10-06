@@ -123,8 +123,8 @@ const contactLevels = ["Standard", "VIP", "Ultra VIP"] as const;
 const contactLanguages = ["Français", "Anglais", "Italien", "Autre"] as const;
 const contactRelationshipStatuses = ["Prospect", "Actif", "Dormant", "Prestataire"] as const;
 const supplierCategories = ["Chauffeur", "Chef", "Sécurité", "Conciergerie", "Paysagiste", "Gestion nuisibles", "Pisciniste", "Femme de ménage", "Nounou", "Artisan rénovation", "Technicien volets", "Lavage voiture", "Garage / mécanicien", "Jardinier", "Peinture", "Électricité", "Plomberie", "Autre"] as const;
-const crmActors = ["Matteo", "Vincent"] as const;
-type CRMActor = typeof crmActors[number];
+const crmActors = ["Vincent"] as const;
+type CRMActor = typeof crmActors[number] | "";
 
 const emptyData: CRMData = {
   contacts: [],
@@ -592,7 +592,7 @@ type ActionTrackedItem = {
 };
 
 function isCRMActor(value: string | null): value is CRMActor {
-  return value === "Matteo" || value === "Vincent";
+  return value === "Vincent";
 }
 
 function stampCreated<T extends object>(item: T, actor: string): T {
@@ -2842,7 +2842,7 @@ function DocumentsView({
   onDelete
 }: {
   documents: CRMDocument[];
-  activeActor: "Matteo" | "Vincent";
+  activeActor: CRMActor;
   onAdd: (crmDocument: CRMDocument) => void;
   onUpdate: (crmDocument: CRMDocument) => void;
   onDelete: (id: string) => void;
@@ -2985,7 +2985,7 @@ function DocumentsView({
     event.preventDefault();
 
     if (!canManageDocuments) {
-      window.alert("Seuls Matteo et Vincent peuvent créer des dossiers.");
+      window.alert("La création de dossiers est réservée aux comptes autorisés.");
       return;
     }
 
@@ -3051,7 +3051,7 @@ function DocumentsView({
     if (!selectedFiles.length) return;
 
     if (!canManageDocuments) {
-      window.alert("Seuls Matteo et Vincent peuvent importer des documents.");
+      window.alert("L’import de documents est réservé aux comptes autorisés.");
       return;
     }
 
@@ -3331,7 +3331,7 @@ function DocumentsView({
         <h3>{editingDocument ? "Modifier document" : "Créer un dossier"}</h3>
         <p className="document-storage-note">Structure simple : dossiers uniquement. Les anciennes catégories sont supprimées.</p>
 
-        {!canManageDocuments && <p className="muted-line">Lecture seule. Seuls Matteo et Vincent peuvent modifier les documents.</p>}
+        {!canManageDocuments && <p className="muted-line">Lecture seule. La modification des documents est réservée aux comptes autorisés.</p>}
 
         {canManageDocuments && !editingDocument && (
           <>
@@ -5632,7 +5632,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   const [formDirty, setFormDirty] = useState(false);
   const [activeActor, setActiveActor] = useState<CRMActor>(() => {
     const savedActor = crmCache.getItem(ACTOR_STORAGE_KEY);
-    return isCRMActor(savedActor) ? savedActor : "Matteo";
+    return isCRMActor(savedActor) ? savedActor : "";
   });
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
@@ -5881,20 +5881,16 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
             ? "Vincent"
             : null;
 
-      if (!lockedActor) return;
+      // Keep the existing account binding, but never restore a retired actor.
+      if (!isCRMActor(lockedActor)) return;
 
-      setActiveActor(lockedActor as "Matteo" | "Vincent");
+      setActiveActor(lockedActor);
       crmCache.setItem(ACTOR_STORAGE_KEY, lockedActor);
 
       const enforce = () => {
-        const selects = Array.from(document.querySelectorAll("select")) as HTMLSelectElement[];
+        const selects = Array.from(document.querySelectorAll<HTMLSelectElement>(".crm-actor-select-label select, .mobile-actor-field select"));
 
         selects.forEach((select) => {
-          const options = Array.from(select.options).map((option) => `${option.value} ${option.textContent || ""}`.toLowerCase());
-          const isActorSelect = options.some((option) => option.includes("matteo")) && options.some((option) => option.includes("vincent"));
-
-          if (!isActorSelect) return;
-
           select.value = lockedActor;
           select.disabled = true;
           select.setAttribute("aria-disabled", "true");
@@ -8213,7 +8209,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
     const task: Task = stampCreated({
       id: makeId("t"),
       title: String(form.get("title") ?? "").trim(),
-      owner: String(form.get("owner") ?? "").trim() || activeActor,
+      owner: String(form.get("owner") ?? "").trim(),
       status: String(form.get("status") ?? "À faire") as TaskStatus,
       dueDate: String(form.get("dueDate") ?? ""),
       linkedTo: String(form.get("linkedTo") ?? "").trim(),
@@ -8828,6 +8824,7 @@ function createQuoteDraftFromLead(lead: Lead) {
             <label className="actor-select-label crm-actor-select-label">
               <span>Actions par</span>
               <select value={activeActor} onChange={(event) => setActiveActor(event.target.value as CRMActor)}>
+                <option value="">Non renseigné</option>
                 {crmActors.map((actor) => <option key={actor}>{actor}</option>)}
               </select>
             </label>
@@ -13840,7 +13837,7 @@ function TasksView({
 
         <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
           <BusinessLabel>Titre<input name="title" placeholder="Envoyer proposition" defaultValue={prefilledTitle || ""} /></BusinessLabel>
-          <BusinessLabel>Responsable<input name="owner" placeholder="Matteo" /></BusinessLabel>
+          <BusinessLabel>Responsable<input name="owner" placeholder="Nom du responsable" /></BusinessLabel>
 
           <BusinessLabel>Statut
             <select name="status">
