@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "actualNextProxy": true,
+  "actualLocalJWT": true,
+  "actualStorageBytes": true,
+  "results": [
+    {
+      "name": "Owner and enabled depositor proxy read actual private Storage bytes with no-store and no signed/public URL",
+      "passed": true
+    },
+    {
+      "name": "Anonymous, forged-session, unshared collaborator and malformed targets disclose no metadata or bytes",
+      "passed": true
+    },
+    {
+      "name": "Permission Export is separate from preview and applies on the real proxy after explicit share and revocation",
+      "passed": true
+    }
+  ]
+}

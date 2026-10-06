@@ -1,0 +1,37 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "path": "docs/publisher/REVIEW.md",
+      "unchanged": true
+    },
+    {
+      "path": "docs/publisher/integration.diff",
+      "unchanged": true
+    },
+    {
+      "path": "GOOGLE_DRIVE_WIF_SETUP.local.md",
+      "unchanged": true
+    },
+    {
+      "path": "supabase/migrations/20261006104615_targeted_document_sharing.sql",
+      "unchanged": true
+    },
+    {
+      "path": "supabase/migrations/20261006115701_document_drive_trash.sql",
+      "unchanged": true
+    },
+    {
+      "path": "components/UnifiedNavigation.tsx",
+      "unchanged": true
+    },
+    {
+      "path": "lib/monthlyCharges/calculations.ts",
+      "unchanged": true
+    },
+    {
+      "path": "lib/server/invitations.ts",
+      "unchanged": true
+    }
+  ]
+}

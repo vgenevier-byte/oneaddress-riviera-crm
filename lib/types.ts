@@ -1,4 +1,4 @@
-export type ContactKind = "Client" | "Propriétaire" | "Prestataire";
+export type ContactKind = "Client" | "Propriétaire" | "Prestataire" | "Membre de l’organisation";
 export type SupplierCategory = string;
 export type SupplierQuality = "Standard" | "Premium" | "Très premium";
 export type SupplierReliability = "À tester" | "Fiable" | "Très fiable" | "À éviter";
@@ -58,6 +58,7 @@ export type Contact = {
   civility?: "M" | "MME" | "";
   companyName?: string;
   kind: ContactKind;
+  organizationFunction?: string;
   email: string;
   phone: string;
   city: string;

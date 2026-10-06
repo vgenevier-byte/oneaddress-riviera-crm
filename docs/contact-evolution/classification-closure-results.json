@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "actualLocalAuth": true,
+  "newNonbankClassifyDenied": true,
+  "newNonbankUploadDenied": true,
+  "existingBusinessSameAssociationPreserved": true,
+  "bankingUploadPreserved": true,
+  "unsharedMetadataHidden": true,
+  "transactionRolledBack": true
+}

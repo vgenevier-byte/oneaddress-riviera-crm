@@ -17,7 +17,7 @@ export function mergeContactUpdate(contact: Contact, update: Partial<Contact>): 
 export function getContactFormUpdate(values: Contact, changedFields: Iterable<string>): Partial<Contact> {
   const fields = new Set(changedFields);
   if (fields.has("supplierCategoryCustom")) fields.add("supplierCategory");
-  if (fields.has("kind")) {
+  if (fields.has("kind") && values.kind !== "Membre de l’organisation") {
     fields.add("relationshipStatus");
     // A retained category would still classify a Client/Propriétaire as a supplier.
     if (values.kind !== "Prestataire") fields.add("supplierCategory");

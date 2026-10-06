@@ -63,6 +63,8 @@ export function getVendorContactProfession(contact: Contact) {
 export function isEligibleVendorContact(contact: Contact) {
   const searchableContact = toSearchableContact(contact);
   const kind = normalizeVendorContactSearch(searchableContact.kind || searchableContact.type);
+  // The explicit member classification wins over preserved supplier history.
+  if (kind === normalizeVendorContactSearch("Membre de l’organisation")) return false;
   const relationshipStatus = normalizeVendorContactSearch(searchableContact.relationshipStatus);
   const hasVendorDetails = Boolean(
     getVendorContactProfession(contact) ||
@@ -76,6 +78,11 @@ export function isEligibleVendorContact(contact: Contact) {
     kind === "proprietaire" ||
     hasVendorDetails
   );
+}
+
+// Historical bank records remain manageable after a business reclassification.
+export function isEligibleVendorBankContact(contact: Contact) {
+  return isEligibleVendorContact(contact) || Boolean(contact.supplierBankAccounts?.length);
 }
 
 function includesQuery(value: string | undefined, query: string) {

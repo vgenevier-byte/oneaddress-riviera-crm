@@ -5,7 +5,7 @@ import type { FolderRegistry } from "../../_folderRegistry";
 import { createFolderRegistry } from "../../../../../lib/server/driveRegistrySupabase";
 import { resolveVendorFolder } from "../../_vendorFolders";
 import type { Contact } from "../../../../../lib/types";
-import { isEligibleVendorContact, getVendorBusinessName } from "../../../../../lib/vendorContacts";
+import { isEligibleVendorBankContact, getVendorBusinessName } from "../../../../../lib/vendorContacts";
 
 type DriveFetch = ReturnType<typeof createGoogleDriveFetch>;
 async function loadContact(request: Request, id: string): Promise<Contact | undefined> {
@@ -15,7 +15,7 @@ async function loadContact(request: Request, id: string): Promise<Contact | unde
   });
   const { data, error } = await client.from("crm_workspace_state").select("payload").eq("workspace_id", "oneaddress-riviera").single();
   if (error) throw new DriveRouteError("Contact CRM inaccessible.", 403);
-  return (data?.payload?.contacts as Contact[] | undefined)?.find(c => c.id === id && isEligibleVendorContact(c));
+  return (data?.payload?.contacts as Contact[] | undefined)?.find(c => c.id === id && isEligibleVendorBankContact(c));
 }
 export function createVendorBankUploadHandler(deps: { requireUser?: typeof requireAuthenticatedCRMUser; loadContact?: typeof loadContact; fetchDrive?: DriveFetch; registry?: FolderRegistry } = {}) {
   return async (request: Request) => {

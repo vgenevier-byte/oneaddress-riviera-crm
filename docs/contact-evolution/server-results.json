@@ -1,0 +1,43 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "member create/edit/reload owner and contributor, invalid enum and unknown patches denied",
+      "passed": true
+    },
+    {
+      "name": "supplier to member preserves exact identity, residual supplier/bank fields, histories, monthly sources and rules",
+      "passed": true
+    },
+    {
+      "name": "multiple and later contact uploads, duplicate filename unique bytes, author/date server, reserve and confirmation idempotent",
+      "passed": true
+    },
+    {
+      "name": "failed upload, conflict and cancellation preserve confirmed successes and never duplicate retries",
+      "passed": true
+    },
+    {
+      "name": "private metadata/list/count/export/Storage/direct-RPC and legacy bypasses deny unshared collaborator, including contributor",
+      "passed": true
+    },
+    {
+      "name": "explicit sharing requires both modules; read/write/delete/export remain distinct; same token revocation and session loss immediately deny",
+      "passed": true
+    },
+    {
+      "name": "explicit replacement preserves original and grants; individual withdrawal retains bytes, rejects stale revision and stops every read",
+      "passed": true
+    },
+    {
+      "name": "contact deletion and stale full save cannot orphan retained files; eight original shares and every original business row preserved",
+      "passed": true
+    }
+  ],
+  "actualLocalAuth": true,
+  "actualLocalStorage": true,
+  "externalGoogleCalls": 0,
+  "productionVerified": false,
+  "originalPayloadHash": "aa8e6f3e57d80bdce14f63fa9f80476d64a4f4ff47549e020218dacbdfe96363",
+  "retainedFictionalFiles": true
+}

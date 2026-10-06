@@ -22,8 +22,13 @@
         "enum": [
           "Client",
           "Propriétaire",
-          "Prestataire"
+          "Prestataire",
+          "Membre de l’organisation"
         ]
+      },
+      "organizationFunction": {
+        "type": "string",
+        "label": "Fonction"
       },
       "email": {
         "type": "string",

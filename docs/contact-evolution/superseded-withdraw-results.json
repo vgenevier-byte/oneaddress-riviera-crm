@@ -1,0 +1,121 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "owner-contact: explicit superseded withdrawal through contacts retains new version, other pieces and all shares",
+      "passed": true
+    },
+    {
+      "name": "depositor-contact: explicit superseded withdrawal through contacts retains new version, other pieces and all shares",
+      "passed": true
+    },
+    {
+      "name": "owner-documents: explicit superseded withdrawal through documents retains new version, other pieces and all shares",
+      "passed": true
+    },
+    {
+      "name": "depositor-documents: explicit superseded withdrawal through documents retains new version, other pieces and all shares",
+      "passed": true
+    },
+    {
+      "name": "shared-recipient contacts: no withdrawal button and actual RPC denial despite shared Delete or author contribution",
+      "passed": true
+    },
+    {
+      "name": "shared-recipient documents: no withdrawal button and actual RPC denial despite shared Delete or author contribution",
+      "passed": true
+    },
+    {
+      "name": "author-without-delete contacts: no withdrawal button and actual RPC denial despite shared Delete or author contribution",
+      "passed": true
+    },
+    {
+      "name": "author-without-delete documents: no withdrawal button and actual RPC denial despite shared Delete or author contribution",
+      "passed": true
+    },
+    {
+      "name": "shared-recipient: stale superseded withdrawal and replacement both reject without reopening modifications",
+      "passed": true
+    },
+    {
+      "name": "author-without-delete: stale superseded withdrawal and replacement both reject without reopening modifications",
+      "passed": true
+    }
+  ],
+  "staleConflicts": [
+    {
+      "case": "shared-recipient",
+      "httpStatus": 500,
+      "sqlCode": "40001",
+      "message": "revision_conflict"
+    },
+    {
+      "case": "author-without-delete",
+      "httpStatus": 500,
+      "sqlCode": "40001",
+      "message": "revision_conflict"
+    }
+  ],
+  "cases": [
+    {
+      "key": "owner-contact",
+      "actor": "owner",
+      "surface": "contacts",
+      "denial": false,
+      "contactId": "superseded-owner-contact-ce0c7d3f-4dc7-4bc5-9bb3-61454f58e5a0",
+      "oldResource": "contact-private/169f3a4f-b51f-40a4-8b3b-d40d501abc49",
+      "newResource": "contact-private/31a0d7c7-3e92-4d84-a0b9-83699d9bdea3"
+    },
+    {
+      "key": "depositor-contact",
+      "actor": "depositor",
+      "surface": "contacts",
+      "denial": false,
+      "contactId": "superseded-depositor-contact-d99279b9-fa6f-4be5-85fa-d1b22d10fe20",
+      "oldResource": "contact-private/5a0fd50e-8047-4772-a36c-8e3691fa7f30",
+      "newResource": "contact-private/948c70a9-58b7-4fa2-b600-3d3495c8b017"
+    },
+    {
+      "key": "owner-documents",
+      "actor": "owner",
+      "surface": "documents",
+      "denial": false,
+      "contactId": "superseded-owner-documents-0992c99c-6177-4a8d-8fa4-d7f988478cfb",
+      "oldResource": "contact-private/9e1fb7e0-a8f3-4585-8a54-4b82398e8e5d",
+      "newResource": "contact-private/4dc60936-14ec-4dff-a669-379ff38e04d2"
+    },
+    {
+      "key": "depositor-documents",
+      "actor": "depositor",
+      "surface": "documents",
+      "denial": false,
+      "contactId": "superseded-depositor-documents-1113b482-da22-4286-8870-480e93f9936a",
+      "oldResource": "contact-private/9050c8a8-805d-47f3-bbfc-efde6de98e9c",
+      "newResource": "contact-private/6760f358-33a7-48c4-b477-3c84e34c60db"
+    },
+    {
+      "key": "shared-recipient",
+      "actor": "recipient",
+      "surface": "both",
+      "denial": true,
+      "contactId": "superseded-shared-recipient-a501be96-dfc5-4c25-9866-e3e828205a8f",
+      "oldResource": "contact-private/a4ccb19f-d073-451b-879b-dfe07983df46",
+      "newResource": "contact-private/373a4f23-7368-495b-bd9a-3734f4a145e5"
+    },
+    {
+      "key": "author-without-delete",
+      "actor": "noDeleteAuthor",
+      "surface": "both",
+      "denial": true,
+      "contactId": "superseded-author-without-delete-b7125b0e-2c23-4547-913d-ccce3af0fb65",
+      "oldResource": "contact-private/4a2a2051-f160-46ee-8fba-c85f78348465",
+      "newResource": "contact-private/11f00d81-aea6-4a95-8695-30a2ce7cd5c7"
+    }
+  ],
+  "actualLocalAuth": true,
+  "actualLocalStorage": true,
+  "actualBrowser": true,
+  "existingFixtureUnchanged": true,
+  "existingUsersGrantsScopesSharesExactlyPreserved": true,
+  "productionVerified": false
+}

@@ -8119,6 +8119,23 @@ main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) f
   white-space: nowrap !important;
 }
 
+.contacts-workspace .contacts-toolbar-stable-metrics .contact-organization-metric span {
+  white-space: normal !important;
+  letter-spacing: .06em !important;
+}
+
+@media (max-width: 640px) {
+  .contacts-workspace .contacts-toolbar-stable-metrics {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    width: 100% !important;
+  }
+  .contacts-workspace .contacts-toolbar-stable-metrics > div {
+    width: auto !important;
+    min-width: 0 !important;
+  }
+}
+
 .contacts-workspace .contacts-toolbar-stable-metrics strong {
   display: block !important;
   margin-top: 7px !important;

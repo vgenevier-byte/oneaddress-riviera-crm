@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-06",
+  "headUnchanged": "5c646b9195f4863e5a3e7e0e9c3a4bbf4a01a521",
+  "unitTests": {
+    "contactsBank": 24,
+    "documents": 10,
+    "passed": true,
+    "verificationStage": "Initial delivery; not rerun for superseded withdrawal correction"
+  },
+  "typescript": {
+    "command": "tsc --noEmit --incremental false",
+    "exitCode": 0
+  },
+  "lint": {
+    "command": "npm run lint",
+    "exitCode": 0,
+    "errors": 0,
+    "existingWarnings": 2
+  },
+  "build": {
+    "isolated": true,
+    "passed": true,
+    "demoReady": true,
+    "currentSourceHashes": [
+      {
+        "path": "app/globals.css",
+        "matchesBuild": true
+      },
+      {
+        "path": "components/CRMApp.tsx",
+        "matchesBuild": true
+      },
+      {
+        "path": "components/ModuleWorkspace.tsx",
+        "matchesBuild": true
+      },
+      {
+        "path": "components/ScopedDocuments.tsx",
+        "matchesBuild": true
+      },
+      {
+        "path": "components/ContactDocuments.tsx",
+        "matchesBuild": true
+      },
+      {
+        "path": "components/ContactDocuments.module.css",
+        "matchesBuild": true
+      },
+      {
+        "path": "lib/access/collections.json",
+        "matchesBuild": true
+      },
+      {
+        "path": "lib/contactDocuments.ts",
+        "matchesBuild": true
+      },
+      {
+        "path": "lib/contactEditing.ts",
+        "matchesBuild": true
+      },
+      {
+        "path": "lib/types.ts",
+        "matchesBuild": true
+      },
+      {
+        "path": "lib/vendorContacts.ts",
+        "matchesBuild": true
+      },
+      {
+        "path": "app/api/contact-documents/file/route.ts",
+        "matchesBuild": true
+      },
+      {
+        "path": "app/api/contact-documents/file/handler.ts",
+        "matchesBuild": true
+      },
+      {
+        "path": "app/api/drive/vendor-bank-accounts/upload/handler.ts",
+        "matchesBuild": true
+      }
+    ]
+  },
+  "targetedDiffCheck": {
+    "exitCode": 0,
+    "newSourceFiles": 15,
+    "newSourceFilesPassed": true
+  },
+  "globalDiffCheck": {
+    "onlyPreexistingIssue": "docs/publisher/integration.diff:10063 trailing whitespace"
+  },
+  "shares": {
+    "originalMarketingWindowCount": 8,
+    "originalSharesActive": true,
+    "otherPreexistingFictionalSharesRetained": true
+  },
+  "preservedSources": true,
+  "independentSecurityReview": "No actionable issue; static review only",
+  "commits": 0,
+  "pushes": 0,
+  "deployments": 0,
+  "remoteMutations": 0,
+  "paidCalls": 0,
+  "newArchives": 0,
+  "diff": {
+    "path": "docs/contact-evolution/implementation.diff",
+    "newImplementationAndTestFiles": 15,
+    "bytes": 256272,
+    "excludesPreexistingPublisherChanges": true
+  },
+  "supersededWithdrawalCorrection": {
+    "sourcePaths": [
+      "supabase/migrations/20261006143754_contact_team_private_documents.sql",
+      "components/ContactDocuments.tsx"
+    ],
+    "typescriptExit": 0,
+    "lintExit": 0,
+    "existingLintWarnings": 2,
+    "isolatedBuildPassed": true,
+    "agentBrowserSmokePassed": true,
+    "localProjectionApplied": true,
+    "catalogueRowsSharesAndFunctionAclUnchangedOnApplication": true,
+    "productionMigrationsModified": 0,
+    "onlyTwoIntendedSourceChanges": true,
+    "targetedChecksPassed": 10,
+    "passed": true,
+    "evidence": "superseded-withdraw-results.json",
+    "originalUsersRightsSharesAndDocumentsPreserved": true,
+    "visualBothSurfacesPassed": true
+  },
+  "publicationPreparation": {
+    "authorized": true,
+    "baseSha": "5c646b9195f4863e5a3e7e0e9c3a4bbf4a01a521",
+    "supabaseProject": "jcmnwvlmysecrahupfkk",
+    "backup": {
+      "path": "/Users/vg/Library/Application Support/OARcrm/Backups/20261006T155248Z-contacts",
+      "file": "/Users/vg/Library/Application Support/OARcrm/Backups/20261006T155248Z-contacts/contacts-pre-migration.json",
+      "bytes": 215170,
+      "sha256": "97cf2d64b828e8e66b9273e647375d1ecdd54109047c3fc2abd32aede3a8658b",
+      "verified": true,
+      "directoryMode": "700",
+      "fileMode": "600"
+    },
+    "preMigrationBaselineGroups": 12,
+    "preMigrationShares": 8,
+    "repositoryIdentity": 1257372770,
+    "productionKeyMetadataVerified": true,
+    "simulationVariablesInProduction": false,
+    "finalArtifacts": {
+      "supabase/migrations/20261006143754_contact_team_private_documents.sql": "9a76e072f62c21235cf2d50eca1807b349ac025d0e22c5f3becff2756176eb43",
+      "docs/contact-evolution/implementation.diff": "8e7d2d7f8a061739dcaddd5da528cf30d2b42b6e87a07f94b7a128fd9c2050c8",
+      "docs/contact-evolution/superseded-withdraw-results.json": "9f3ecc600da792cfea8b4cb58d1b9254b1cea1b0ad90d976d6e81ea4d68ebd0a"
+    }
+  }
+}

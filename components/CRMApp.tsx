@@ -6,6 +6,7 @@ import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import HouseWorkerEditor from "./HouseWorkerEditor";
 import QuickRepliesView from "./QuickRepliesView";
 import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
+import ContactDocuments, { ContactDocumentLibrary } from "./ContactDocuments";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
 import SearchableBusinessContactPicker from "./SearchableBusinessContactPicker";
 import vendorFinanceStyles from "./VendorFinanceDialogs.module.css";
@@ -119,7 +120,7 @@ const vehicleStatuses: VehicleStatus[] = ["Disponible", "En location", "En maint
 const boatStatuses: BoatStatus[] = ["Disponible", "En charter", "En maintenance", "Vendu"];
 const taskStatuses: TaskStatus[] = ["À faire", "En cours", "Terminé"];
 
-const contactKinds: ContactKind[] = ["Client", "Propriétaire", "Prestataire"];
+const contactKinds: ContactKind[] = ["Client", "Propriétaire", "Prestataire", "Membre de l’organisation"];
 const contactLevels = ["Standard", "VIP", "Ultra VIP"] as const;
 const contactLanguages = ["Français", "Anglais", "Italien", "Autre"] as const;
 const contactRelationshipStatuses = ["Prospect", "Actif", "Dormant", "Prestataire"] as const;
@@ -148,7 +149,7 @@ const emptyData: CRMData = {
 
 
 function isSupplierContact(contact: Contact) {
-  return contact.kind === "Prestataire" || Boolean(contact.supplierCategory);
+  return contact.kind !== "Membre de l’organisation" && (contact.kind === "Prestataire" || Boolean(contact.supplierCategory));
 }
 
 function getContactSupplierCategory(contact: Contact) {
@@ -677,6 +678,7 @@ function contactToSupabaseRow(contact: Contact, userId: string) {
     civility: contact.civility || "",
     company_name: contact.companyName || "",
     kind: contact.kind || "Client",
+    organization_function: contact.organizationFunction || "",
     client_level: contact.clientLevel || "Standard",
     preferred_language: contact.preferredLanguage || "Français",
     relationship_status: contact.relationshipStatus || "Prospect",
@@ -700,7 +702,8 @@ function contactFromSupabaseRow(row: any): Contact {
     firstName: String(row.first_name || ""),
     civility: String(row.civility || "") as Contact["civility"],
     companyName: String(row.company_name || ""),
-    kind: (() => { const rawKind = String(row.kind || "Client"); return rawKind === "Partenaire" || rawKind === "Prestataire" ? "Prestataire" : rawKind === "Propriétaire" ? "Propriétaire" : "Client"; })() as ContactKind,
+    kind: (() => { const rawKind = String(row.kind || "Client"); return rawKind === "Membre de l’organisation" ? rawKind : rawKind === "Partenaire" || rawKind === "Prestataire" ? "Prestataire" : rawKind === "Propriétaire" ? "Propriétaire" : "Client"; })() as ContactKind,
+    organizationFunction: String(row.organization_function || ""),
     clientLevel: String(row.client_level || "Standard") as Contact["clientLevel"],
     preferredLanguage: String(row.preferred_language || "Français") as Contact["preferredLanguage"],
     relationshipStatus: String(row.relationship_status || "Prospect") as Contact["relationshipStatus"],
@@ -849,7 +852,7 @@ function exportCRMAsCsv(data: CRMData) {
   const sections = [
     {
       title: "CONTACTS",
-      headers: ["Nom", "Type", "Niveau client", "Langue", "Relation", "Email", "Téléphone", "Ville", "Adresse postale", "Budget", "Source", "Préférences", "Notes importantes", "Notes"],
+      headers: ["Nom", "Type", "Niveau client", "Langue", "Relation", "Email", "Téléphone", "Ville", "Adresse postale", "Budget", "Source", "Préférences", "Notes importantes", "Notes", "Fonction"],
       rows: data.contacts.map((contact) => [
         contact.name,
         contact.kind,
@@ -864,7 +867,8 @@ function exportCRMAsCsv(data: CRMData) {
         contact.source,
         contact.preferences ?? "",
         contact.importantNotes ?? "",
-        contact.notes
+        contact.notes,
+        contact.organizationFunction ?? ""
       ])
     },
     {
@@ -3624,6 +3628,7 @@ function HouseTrackingView({
       contact.name,
       [contact.firstName, contact.name].filter(Boolean).join(" "),
       contact.companyName || "",
+      contact.organizationFunction || "",
       contact.email || "",
       contact.phone || ""
     ].map((value) => normalizeContactSearchValue(String(value || "")));
@@ -3883,7 +3888,7 @@ function HouseTrackingView({
       id: workerId,
       contactId: contact.id,
       contactName: getHouseContactDisplayName(contact),
-      role: contact.supplierCategory || contact.kind || "Prestataire",
+      role: contact.kind === "Membre de l’organisation" ? contact.organizationFunction || contact.kind : contact.supplierCategory || contact.kind || "Prestataire",
       hourlyRate: rate,
       documentUrl: "",
       documentStoragePath: uploadedDocument.documentStoragePath || "",
@@ -6516,7 +6521,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   }, [data]);
 
   const filteredContacts = useMemo(() => {
-    return data.contacts.filter((contact) => searchMatch(query, [contact.name, contact.firstName ?? "", contact.companyName ?? "", contact.kind, contact.email, contact.phone, contact.city, contact.postalAddress ?? "", contact.supplierCategory ?? "", contact.supplierZone ?? "", contact.supplierReliability ?? ""]));
+    return data.contacts.filter((contact) => searchMatch(query, [contact.name, contact.firstName ?? "", contact.companyName ?? "", contact.kind, contact.email, contact.phone, contact.city, contact.postalAddress ?? "", contact.organizationFunction ?? "", contact.supplierCategory ?? "", contact.supplierZone ?? "", contact.supplierReliability ?? ""]));
   }, [data.contacts, query]);
 
   const filteredLeads = useMemo(() => {
@@ -6697,7 +6702,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     const type = choice.trim();
 
     const examples: Record<string, string> = {
-      "1": "Nom | Type | Niveau client | Langue préférée | Relation | Email | Téléphone | Ville | Adresse postale | Budget | Source | Préférences | Notes importantes | Notes",
+      "1": "Nom | Type | Niveau client | Langue préférée | Relation | Email | Téléphone | Ville | Adresse postale | Budget | Source | Préférences | Notes importantes | Notes | Fonction (facultative)",
       "2": "Catégorie | Contact | Actif proposé | Début réservation | Fin réservation | Valeur | Statut | Priorité | Date réponse | Prochaine action | Notes internes",
       "3": "Nom | Type | Ville | Prix | Statut | Propriétaire | Notes",
       "4": "Nom | Marque | Modèle | Ville | Prix/jour | Statut | Propriétaire | Notes",
@@ -6802,13 +6807,15 @@ const toneRank: Record<ActionNotification["tone"], number> = {
           source,
           preferences,
           importantNotes,
-          notes
+          notes,
+          organizationFunction
         ] = parts;
 
         return {
           id: crypto.randomUUID(),
           name: cleanImportValue(name),
           kind: cleanImportValue(kind) || "Client",
+          organizationFunction: cleanImportValue(organizationFunction),
           clientLevel: cleanImportValue(clientLevel) || "Standard",
           preferredLanguage: cleanImportValue(preferredLanguage) || "Français",
           relationshipStatus: cleanImportValue(relationshipStatus) || "Prospect",
@@ -8099,6 +8106,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       civility: String(form.get("civility") ?? "") as Contact["civility"],
       companyName: String(form.get("companyName") ?? "").trim(),
       kind: contactKind,
+      organizationFunction: contactKind === "Membre de l’organisation" ? String(form.get("organizationFunction") ?? "").trim() : "",
       email: String(form.get("email") ?? "").trim(),
       phone: String(form.get("phone") ?? "").trim(),
       city: String(form.get("city") ?? "").trim(),
@@ -9027,7 +9035,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "contacts" && (
-          <ContactsView actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={data.tasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
+          <ContactsView access={access} actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={data.tasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
 
@@ -9056,7 +9064,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "documents" && (
-          <DocumentsView
+          <><DocumentsView
             documents={(((data as any).documents ?? []) as CRMDocument[])}
             activeActor={activeActor}
             onAdd={addCRMDocument}
@@ -9064,7 +9072,7 @@ function createQuoteDraftFromLead(lead: Lead) {
             onTrash={trashCRMDocument}
             canTrash={access.fullAccess || (access.modules.documents?.level === "contribute" && Boolean(access.modules.documents.sensitive.delete))}
             sessionUserId={sessionUserId}
-          />
+          /><ContactDocumentLibrary access={access}/></>
         )}
 {activeTab === "quotes" && (
           <QuotesView
@@ -11849,6 +11857,7 @@ function StatCard({ label, value, caption }: { label: string; value: string; cap
 }
 
 function ContactsView({
+  access,
   actor,
   contacts,
   leads,
@@ -11859,6 +11868,7 @@ function ContactsView({
   onCreateLead,
   onCreateTask
 }: {
+  access?: AccessSnapshot;
   actor: string;
   contacts: Contact[];
   leads: Lead[];
@@ -11881,7 +11891,7 @@ function ContactsView({
   const [newContactKind, setNewContactKind] = useState<ContactKind>("Client");
   const [editingContactKind, setEditingContactKind] = useState<ContactKind>("Client");
 
-  const filterOptions = ["Tous", "Clients", "Prestataires", "Propriétaires"];
+  const filterOptions = ["Tous", "Clients", "Prestataires", "Propriétaires", "Membres de l’organisation"];
   const nonSupplierRelationshipStatuses = contactRelationshipStatuses.filter((status) => status !== "Prestataire");
   const supplierProfessionOptions = useMemo(() => {
     const legacyAssetCategories = new Set(["Villa", "Voiture", "Bateau"]);
@@ -11901,7 +11911,7 @@ function ContactsView({
 
   function normalizeKind(value: unknown): ContactKind {
     const raw = String(value || "Client");
-    return raw === "Partenaire" || raw === "Prestataire" ? "Prestataire" : raw === "Propriétaire" ? "Propriétaire" : "Client";
+    return raw === "Membre de l’organisation" ? raw : raw === "Partenaire" || raw === "Prestataire" ? "Prestataire" : raw === "Propriétaire" ? "Propriétaire" : "Client";
   }
 
   function normalizeContactLookupKey(value?: string | number | null) {
@@ -11934,7 +11944,8 @@ function ContactsView({
       contactFilter === "Tous" ||
       (contactFilter === "Clients" && contact.kind === "Client" && !supplier) ||
       (contactFilter === "Prestataires" && supplier) ||
-      (contactFilter === "Propriétaires" && contact.kind === "Propriétaire");
+      (contactFilter === "Propriétaires" && contact.kind === "Propriétaire") ||
+      (contactFilter === "Membres de l’organisation" && contact.kind === "Membre de l’organisation");
 
     const matchesSupplierCategory = supplierCategoryFilter === "Toutes" || getContactSupplierCategory(contact) === supplierCategoryFilter;
 
@@ -11944,6 +11955,7 @@ function ContactsView({
   const clientCount = contacts.filter((contact) => contact.kind === "Client" && !isSupplierContact(contact)).length;
   const supplierCount = contacts.filter(isSupplierContact).length;
   const ownerCount = contacts.filter((contact) => contact.kind === "Propriétaire").length;
+  const memberCount = contacts.filter((contact) => contact.kind === "Membre de l’organisation").length;
 
   function submitEdit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -11954,6 +11966,7 @@ function ContactsView({
 
     const nextKind = normalizeKind(form.get("kind"));
     const isPrestataire = nextKind === "Prestataire";
+    const isOrganizationMember = nextKind === "Membre de l’organisation";
 
     const updatedContact: Contact = {
       ...editingContact,
@@ -11962,26 +11975,27 @@ function ContactsView({
       civility: String(form.get("civility") ?? "") as Contact["civility"],
       companyName: String(form.get("companyName") ?? "").trim(),
       kind: nextKind,
+      organizationFunction: form.has("organizationFunction") ? String(form.get("organizationFunction") ?? "").trim() : editingContact.organizationFunction,
       email: String(form.get("email") ?? "").trim(),
       phone: String(form.get("phone") ?? "").trim(),
       city: String(form.get("city") ?? "").trim(),
       postalAddress: readPostalAddress(form, editingContact.postalAddress),
-      budget: safeNumber(form.get("budget")),
+      budget: form.has("budget") ? safeNumber(form.get("budget")) : editingContact.budget,
       source: String(form.get("source") ?? "").trim(),
       notes: String(form.get("notes") ?? "").trim(),
       clientLevel: String(form.get("clientLevel") ?? getContactClientLevel(editingContact)) as NonNullable<Contact["clientLevel"]>,
       preferredLanguage: String(form.get("preferredLanguage") ?? getContactPreferredLanguage(editingContact)) as NonNullable<Contact["preferredLanguage"]>,
-      relationshipStatus: (isPrestataire ? "Prestataire" : String(form.get("relationshipStatus") ?? getContactRelationshipStatus(editingContact) ?? "Prospect")) as NonNullable<Contact["relationshipStatus"]>,
-      preferences: String(form.get("preferences") ?? "").trim(),
-      importantNotes: String(form.get("importantNotes") ?? "").trim(),
-      supplierCategory: (isPrestataire ? getSupplierCategoryFromForm(form) : "") as Contact["supplierCategory"],
-      supplierContactName: isPrestataire ? String(form.get("supplierContactName") ?? "").trim() : "",
-      supplierZone: isPrestataire ? String(form.get("supplierZone") ?? "").trim() : "",
-      supplierQuality: (isPrestataire ? String(form.get("supplierQuality") ?? "Standard") : "Standard") as Contact["supplierQuality"],
-      supplierReliability: (isPrestataire ? String(form.get("supplierReliability") ?? "À tester") : "") as Contact["supplierReliability"],
-      supplierPriceNotes: isPrestataire ? String(form.get("supplierPriceNotes") ?? "").trim() : "",
-      supplierCommissionNotes: isPrestataire ? String(form.get("supplierCommissionNotes") ?? "").trim() : "",
-      supplierStatus: (isPrestataire ? String(form.get("supplierStatus") ?? "Actif") : "") as Contact["supplierStatus"]
+      relationshipStatus: (isOrganizationMember ? editingContact.relationshipStatus : isPrestataire ? "Prestataire" : String(form.get("relationshipStatus") ?? getContactRelationshipStatus(editingContact) ?? "Prospect")) as NonNullable<Contact["relationshipStatus"]>,
+      preferences: form.has("preferences") ? String(form.get("preferences") ?? "").trim() : editingContact.preferences,
+      importantNotes: form.has("importantNotes") ? String(form.get("importantNotes") ?? "").trim() : editingContact.importantNotes,
+      supplierCategory: (isOrganizationMember ? editingContact.supplierCategory : isPrestataire ? getSupplierCategoryFromForm(form) : "") as Contact["supplierCategory"],
+      supplierContactName: isOrganizationMember ? editingContact.supplierContactName : isPrestataire ? String(form.get("supplierContactName") ?? "").trim() : "",
+      supplierZone: isOrganizationMember ? editingContact.supplierZone : isPrestataire ? String(form.get("supplierZone") ?? "").trim() : "",
+      supplierQuality: (isOrganizationMember ? editingContact.supplierQuality : isPrestataire ? String(form.get("supplierQuality") ?? "Standard") : "Standard") as Contact["supplierQuality"],
+      supplierReliability: (isOrganizationMember ? editingContact.supplierReliability : isPrestataire ? String(form.get("supplierReliability") ?? "À tester") : "") as Contact["supplierReliability"],
+      supplierPriceNotes: isOrganizationMember ? editingContact.supplierPriceNotes : isPrestataire ? String(form.get("supplierPriceNotes") ?? "").trim() : "",
+      supplierCommissionNotes: isOrganizationMember ? editingContact.supplierCommissionNotes : isPrestataire ? String(form.get("supplierCommissionNotes") ?? "").trim() : "",
+      supplierStatus: (isOrganizationMember ? editingContact.supplierStatus : isPrestataire ? String(form.get("supplierStatus") ?? "Actif") : "") as Contact["supplierStatus"]
     };
 
     const update = getContactFormUpdate(updatedContact, changedContactFields.current);
@@ -12017,13 +12031,14 @@ function ContactsView({
               <strong>{visibleContacts.length}</strong>
               <span>contact{visibleContacts.length > 1 ? "s" : ""}</span>
             </div>
-            <p className="muted-line">Clients, prestataires et propriétaires. Lecture rapide, action uniquement si nécessaire.</p>
+            <p className="muted-line">Clients, prestataires, propriétaires et membres de l’organisation. Lecture rapide, action uniquement si nécessaire.</p>
           </div>
 
           <div className="contacts-toolbar-stable-metrics" aria-label="Synthèse contacts">
             <div><span>Clients</span><strong>{clientCount}</strong></div>
             <div><span>Prestataires</span><strong>{supplierCount}</strong></div>
             <div><span>Propriétaires</span><strong>{ownerCount}</strong></div>
+            <div className="contact-organization-metric"><span>Membres de l’organisation</span><strong>{memberCount}</strong></div>
           </div>
         </div>
 
@@ -12081,6 +12096,8 @@ function ContactsView({
                       <p className="muted-line">
                         Fiabilité : {contact.supplierReliability || "À tester"} · Statut : {contact.supplierStatus || "Actif"}
                       </p>
+                    ) : contact.kind === "Membre de l’organisation" ? (
+                      <p className="muted-line">Fonction : {contact.organizationFunction || "Non renseignée"}</p>
                     ) : (
                       <p className="muted-line">
                         {getContactClientLevel(contact)} · {getContactRelationshipStatus(contact)} · {getContactLeads(contact).length} lead{getContactLeads(contact).length > 1 ? "s" : ""}
@@ -12148,7 +12165,11 @@ function ContactsView({
             <BusinessLabel>Ville / zone<input name="city" placeholder="Cannes, Monaco..." /></BusinessLabel>
             <BusinessLabel>Source<input name="source" placeholder="Site, recommandation, réseau..." /></BusinessLabel>
 
-            {newContactKind !== "Prestataire" && (
+            {newContactKind === "Membre de l’organisation" && (
+              <BusinessLabel>Fonction<input name="organizationFunction" placeholder="Fonction dans l’organisation" /></BusinessLabel>
+            )}
+
+            {newContactKind !== "Prestataire" && newContactKind !== "Membre de l’organisation" && (
               <>
                 <BusinessLabel>Relation
                   <select name="relationshipStatus" defaultValue="Prospect">
@@ -12249,7 +12270,9 @@ function ContactsView({
               <div><span>Ville / zone</span><strong>{selectedContact.city || getContactSupplierZone(selectedContact) || "Non renseignée"}</strong></div>
               <div><span>Action</span><strong>{getActionMetaLabel(selectedContact)}</strong></div>
 
-              {isSupplierContact(selectedContact) ? (
+              {selectedContact.kind === "Membre de l’organisation" ? (
+                <div><span>Fonction</span><strong>{selectedContact.organizationFunction || "Non renseignée"}</strong></div>
+              ) : isSupplierContact(selectedContact) ? (
                 <>
                   <div><span>Profession</span><strong>{getContactSupplierCategory(selectedContact)}</strong></div>
                   <div><span>Fiabilité</span><strong>{selectedContact.supplierReliability || "À tester"}</strong></div>
@@ -12270,7 +12293,7 @@ function ContactsView({
               <div className="full"><span>Notes</span><p>{selectedContact.notes || "Aucune note."}</p></div>
             </div>
 
-            {!business && isSupplierContact(selectedContact) && <VendorBankAccounts contact={contacts.find(c => c.id === selectedContact.id) || selectedContact} actor={actor} onUpdate={onUpdate} />}
+            {!business && (isSupplierContact(selectedContact) || Boolean(selectedContact.supplierBankAccounts?.length)) && <VendorBankAccounts contact={contacts.find(c => c.id === selectedContact.id) || selectedContact} actor={actor} onUpdate={onUpdate} />}
 
             {!isSupplierContact(selectedContact) && (
               <div className="contact-related-section">
@@ -12287,6 +12310,8 @@ function ContactsView({
                 </div>
               </div>
             )}
+
+            {access && <ContactDocuments key={selectedContact.id} contactId={selectedContact.id} access={access}/>}
 
             <div className="confirm-actions">
               <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedContact(null)}>Fermer</BusinessButton>
@@ -12333,7 +12358,11 @@ function ContactsView({
               <BusinessLabel>Ville / zone<input name="city" defaultValue={editingContact.city} /></BusinessLabel>
               <BusinessLabel>Source<input name="source" defaultValue={editingContact.source} /></BusinessLabel>
 
-              {editingContactKind !== "Prestataire" && (
+              {editingContactKind === "Membre de l’organisation" && (
+                <BusinessLabel>Fonction<input name="organizationFunction" defaultValue={editingContact.organizationFunction ?? ""} placeholder="Fonction dans l’organisation" /></BusinessLabel>
+              )}
+
+              {editingContactKind !== "Prestataire" && editingContactKind !== "Membre de l’organisation" && (
                 <>
                   <BusinessLabel>Relation
                     <select name="relationshipStatus" defaultValue={getContactRelationshipStatus(editingContact) === "Prestataire" ? "Prospect" : getContactRelationshipStatus(editingContact)}>

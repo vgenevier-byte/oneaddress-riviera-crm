@@ -1,0 +1,38 @@
+{
+  "passed": true,
+  "environment": "real fictional local Auth/RPC/Storage/browser",
+  "results": [
+    {
+      "name": "Multiple homonymous personal imports distinguish confirmation and failure; retry does not duplicate successes",
+      "passed": true
+    },
+    {
+      "name": "Later addition, reload, cancellation of selection, and desktop preview/download use real bytes",
+      "passed": true
+    },
+    {
+      "name": "Explicit replacement preserves the previous bytes; individual retirement retains the file",
+      "passed": true
+    },
+    {
+      "name": "Unauthorized collaborators see no personal file names, metadata, counters or direct bytes",
+      "passed": true
+    },
+    {
+      "name": "Explicit sharing is read only; preview closes after revocation and new direct calls fail",
+      "passed": true
+    },
+    {
+      "name": "Mobile contact documents render without horizontal overflow and retain the same private catalogue",
+      "passed": true
+    },
+    {
+      "name": "Cancellation during a real upload retains confirmed documents and permits explicit resumption",
+      "passed": true
+    },
+    {
+      "name": "A concurrent catalogue addition yields a visible conflict and the same draft can be retried once",
+      "passed": true
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "results": [
+    {
+      "name": "owner 1440px: create, edit, filter, details, reload and optional Function",
+      "passed": true
+    },
+    {
+      "name": "owner 390px: create, edit, filter, details, reload and optional Function",
+      "passed": true
+    },
+    {
+      "name": "depositor 1440px: create, edit, filter, details, reload and optional Function",
+      "passed": true
+    },
+    {
+      "name": "depositor 390px: create, edit, filter, details, reload and optional Function",
+      "passed": true
+    },
+    {
+      "name": "Prestataire → member: same ID, historical links/banks/amounts/Charges and vendor historical selection",
+      "passed": true
+    }
+  ],
+  "createdIds": [
+    "c-19d2f824",
+    "c-2fa17e00",
+    "1e6a7ab6-daf2-4973-8d93-a46782ce0a43",
+    "8820cb96-5f8a-4de0-af4b-5d8f4b756836"
+  ],
+  "auth": "real local Auth",
+  "writes": "fictitious disposable bench only",
+  "remoteAccess": false
+}

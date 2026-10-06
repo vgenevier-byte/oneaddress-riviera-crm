@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "actualLocalAuth": true,
+  "actualLocalStorageBytes": true,
+  "unauthorizedNoByteRead": true,
+  "revocationDuringActualBytesBlocksResponse": true
+}

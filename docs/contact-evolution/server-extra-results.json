@@ -1,0 +1,178 @@
+{
+  "ownerRawValidation": true,
+  "ownerRawOmittedHistoricalFieldsPreserved": true,
+  "transactionRolledBack": true,
+  "privateFunctionACLReviewed": true,
+  "functions": [
+    {
+      "nspname": "app_private",
+      "proname": "contact_document_allowed",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "contact_document_contact_exists",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "contact_document_json",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "contact_document_session",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "contact_documents_revision",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "guard_contact_classification",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "guard_contact_document_references",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "guard_contact_document_scope",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": false
+    },
+    {
+      "nspname": "app_private",
+      "proname": "is_contact_document",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_contact_document_begin",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_contact_document_cancel",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_contact_document_complete",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_contact_document_file",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_contact_document_replace",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_contact_document_withdraw",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_contact_documents",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    },
+    {
+      "nspname": "public",
+      "proname": "crm_share_contact_document",
+      "prosecdef": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "auth": true
+    }
+  ]
+}
