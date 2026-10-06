@@ -235,9 +235,11 @@ async function verifySupabaseAccessToken(token: string, resource: string | null 
     .eq("user_id", data.user.id).eq("workspace_id", "oar").eq("status", "active").maybeSingle();
   if (membershipError) throw new DriveRouteError("Vérification des accès indisponible.", 503);
   if (!membership) throw new DriveRouteError("Accès OAR non autorisé.", 403);
-  const { data: fullAccess, error: moduleError } = await supabase.rpc("crm_authorize_drive", { p_resource: resource, p_download: download });
+  const { data: allowed, error: moduleError } = await supabase.rpc("crm_authorize_drive", { p_resource: resource, p_write: false, p_download: download });
   if (moduleError) throw new DriveRouteError("Vérification des droits indisponible.", 503);
-  if (!fullAccess) throw new DriveRouteError("Ce parcours Drive global exige un accès complet. Utilisez les documents classés de votre module.", 403);
+  if (!allowed) throw new DriveRouteError(resource
+    ? "Accès à ce document ou téléchargement non autorisé."
+    : "Ce parcours Drive global exige un accès complet. Utilisez les documents classés de votre module.", 403);
 
   return {
     id: data.user.id,
