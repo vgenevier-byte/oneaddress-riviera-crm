@@ -28,7 +28,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import Image from "next/image";
 
-import { isCompletedTaskStatus, maintainCompletedTasks } from "@/lib/taskMaintenance";
+import { isCompletedTaskStatus } from "@/lib/taskMaintenance";
+import TasksWorkspace from "./TasksWorkspace";
+import { useTaskApi, useTaskProjection, taskPermissions, taskForBusinessView } from "@/lib/tasks/client";
+import { parisCivilDate, isCivilDate, TaskRequestLedger, effectiveTaskLeadId } from "@/lib/tasks/domain";
 import { crmCache } from "@/lib/access/crmCache";
 import { useCommittedValue } from "@/lib/access/useCommittedValue";
 import { WorkspaceSyncGuard, workspaceFingerprint } from "@/lib/access/workspaceSync";
@@ -118,7 +121,6 @@ const leadStatuses: LeadStatus[] = ["Nouveau", "Contacté", "Devis", "Négociati
 const propertyStatuses: PropertyStatus[] = ["Disponible", "Mandat en cours", "Loué", "Vendu"];
 const vehicleStatuses: VehicleStatus[] = ["Disponible", "En location", "En maintenance", "Vendu"];
 const boatStatuses: BoatStatus[] = ["Disponible", "En charter", "En maintenance", "Vendu"];
-const taskStatuses: TaskStatus[] = ["À faire", "En cours", "Terminé"];
 
 const contactKinds: ContactKind[] = ["Client", "Propriétaire", "Prestataire", "Membre de l’organisation"];
 const contactLevels = ["Standard", "VIP", "Ultra VIP"] as const;
@@ -318,7 +320,7 @@ function normalizeSharedCRMData(payload: any): CRMData {
     properties: Array.isArray(payload?.properties) ? payload.properties : [],
     vehicles: Array.isArray(payload?.vehicles) ? payload.vehicles : [],
     boats: Array.isArray(payload?.boats) ? payload.boats : [],
-    tasks: Array.isArray(payload?.tasks) ? payload.tasks : [],
+    tasks: [], // Canonical Tasks cannot be restored from a workspace snapshot.
     suppliers: [],
     planningEntries: Array.isArray(payload?.planningEntries) ? payload.planningEntries : [],
     quotes: Array.isArray(payload?.quotes)
@@ -932,13 +934,23 @@ function exportCRMAsCsv(data: CRMData) {
     },
     {
       title: "TÂCHES",
-      headers: ["Titre", "Responsable", "Statut", "Date", "Lead lié"],
+      headers: ["ID", "Titre", "Responsables", "Statut", "Date limite", "Priorité", "Notes", "Créée par", "Compte créateur", "Créée le", "Terminée le", "Lead lié", "Contact lié", "Gestionnaire de reprise", "Compte gestionnaire"],
       rows: data.tasks.map((task) => [
+        task.id,
         task.title,
         task.owner,
         task.status,
         task.dueDate,
-        task.linkedTo
+        task.priority || "normal",
+        task.notes || "",
+        task.createdByLabel || "",
+        task.createdBy || "",
+        task.createdAt || "",
+        task.completedAt || "",
+        effectiveTaskLeadId(task),
+        task.contactId || "",
+        task.managerLabel || "",
+        task.managerId || ""
       ])
     },
     {
@@ -5569,6 +5581,13 @@ export {createQuickEntryRecords, promptQuickEntryText};
 
 export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
   const beginHouseOperation = useScopedOperations("houseTracking");
+  const taskApi = useTaskApi();
+  const taskStatusRequests = useRef(new TaskRequestLedger());
+  const pendingTaskStatus = useRef(new Set<string>());
+  const taskSessionKey = sessionUserId + ":" + access.revision;
+  const taskRights = taskPermissions(access);
+  const taskProjection = useTaskProjection(taskApi, taskSessionKey, taskRights.read);
+  const visibleTasks = useMemo(() => taskProjection.tasks.map(taskForBusinessView), [taskProjection.tasks]);
   const currentAccessToken = useCommittedValue(sessionAccessToken);
   const identityLifetime = useRef(new AbortController());
   useEffect(() => {
@@ -5657,25 +5676,23 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   const [leadDraftContactName, setLeadDraftContactName] = useState("");
   const [taskDraftLeadId, setTaskDraftLeadId] = useState("");
   const [taskDraftTitle, setTaskDraftTitle] = useState("");
+  const [taskDraftContactId, setTaskDraftContactId] = useState("");
   const [quoteDraftFromLead, setQuoteDraftFromLead] = useState<QuoteLeadDraft | null>(null);
   const [query, setQuery] = useState("");
   const [initialLocalState] = useState(() => {
     try {
       const raw = crmCache.getItem(STORAGE_KEY);
       const payload = raw ? normalizeSharedCRMData(JSON.parse(raw)) : emptyData;
-      return { data: { ...payload, tasks: maintainCompletedTasks(payload.tasks, Date.now()) }, unreadable: false };
+      return { data: { ...payload, tasks: [] }, unreadable: false };
     } catch {
       return { data: emptyData, unreadable: true };
     }
   });
   const [data, setDataState] = useState<CRMData>(initialLocalState.data);
   const setData = useCallback((update: SetStateAction<CRMData>) => {
-    const now = Date.now();
     setDataState(current => {
       const next = typeof update === "function" ? update(current) : update;
-      if (next.tasks === current.tasks) return next;
-      const tasks = maintainCompletedTasks(next.tasks, now);
-      return tasks === next.tasks ? next : { ...next, tasks };
+      return next.tasks.length ? { ...next, tasks: [] } : next;
     });
   }, []);
   const currentBusinessData = useCommittedValue(data);
@@ -6152,10 +6169,10 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       .filter((lead) => lead.status !== "Perdu")
       .reduce((sum, lead) => sum + lead.value, 0);
     const won = data.leads.filter((lead) => lead.status === "Gagné").reduce((sum, lead) => sum + lead.value, 0);
-    const openTasks = data.tasks.filter((task) => task.status !== "Terminé").length;
+    const openTasks = visibleTasks.filter((task) => task.status !== "Terminé").length;
     const availableProperties = data.properties.filter((property) => property.status === "Disponible").length;
     return { pipeline, won, openTasks, availableProperties };
-  }, [data]);
+  }, [data, visibleTasks]);
 
 
   const actionNotifications = useMemo(() => {
@@ -6180,10 +6197,12 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       return Math.max(total - paid, 0);
     }
 
-    data.tasks
+    visibleTasks
       .filter((task) => task.status !== "Terminé")
       .forEach((task) => {
-        const days = daysUntil(task.dueDate);
+        const days = task.dueDate && isCivilDate(task.dueDate)
+          ? Math.round((Date.parse(task.dueDate + "T00:00:00Z") - Date.parse(parisCivilDate() + "T00:00:00Z")) / 86400000)
+          : null;
 
         if (days === null) {
           items.push({
@@ -6440,7 +6459,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     return items
       .sort((first, second) => toneRank[first.tone] - toneRank[second.tone])
       .slice(0, 20);
-  }, [data]);
+  }, [data, visibleTasks]);
 
   const filteredContacts = useMemo(() => {
     return data.contacts.filter((contact) => searchMatch(query, [contact.name, contact.firstName ?? "", contact.companyName ?? "", contact.kind, contact.email, contact.phone, contact.city, contact.postalAddress ?? "", contact.organizationFunction ?? "", contact.supplierCategory ?? "", contact.supplierZone ?? "", contact.supplierReliability ?? ""]));
@@ -6461,20 +6480,6 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   const filteredBoats = useMemo(() => {
     return (data.boats ?? []).filter((boat) => searchMatch(query, [boat.name, boat.port, boat.type, boat.owner, boat.status]));
   }, [data.boats, query]);
-
-  const filteredTasks = useMemo(() => {
-    const matchingTasks = data.tasks.filter((task) => {
-      const linkedLead = data.leads.find((lead) => lead.id === task.linkedTo);
-      const linkedLeadLabel = linkedLead ? `${linkedLead.category} ${linkedLead.contactName}` : task.linkedTo;
-
-      return searchMatch(query, [task.title, task.owner, task.status, linkedLeadLabel]);
-    });
-
-    return [
-      ...sortByUrgency(matchingTasks.filter((task) => task.status !== "Terminé")),
-      ...sortByUrgency(matchingTasks.filter((task) => task.status === "Terminé"))
-    ];
-  }, [data.tasks, data.leads, query]);
 
   function handleNotificationAction(notification?: ActionNotification) {
     const target = notification ?? actionNotifications[0];
@@ -7581,9 +7586,22 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     window.alert("Sauvegarde Supabase créée.");
   }
 
-  function exportJson() {
+  async function exportCsv() {
+    try {
+      const exportedTasks = taskRights.export ? (await taskApi.export!()).map(taskForBusinessView) : [];
+      exportCRMAsCsv({ ...data, tasks: exportedTasks });
+      notify("Export CSV téléchargé.");
+    } catch { notify("Export Tâches refusé ou indisponible.", "warning"); }
+  }
+
+  async function exportJson() {
+    let exportedTasks: Task[] = [];
+    try {
+      if (taskRights.export) exportedTasks = (await taskApi.export!()).map(taskForBusinessView);
+    } catch { notify("Export Tâches refusé ou indisponible.", "warning"); return; }
     const exportPayload = {
       ...data,
+      tasks: exportedTasks,
       quotes: mergeQuoteRequests((data as any).quotes ?? [], loadSavedQuotes())
     };
 
@@ -8206,26 +8224,6 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
     notify("Bateau mis à jour.");
   }
 
-  function addTask(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const task: Task = stampCreated({
-      id: makeId("t"),
-      title: String(form.get("title") ?? "").trim(),
-      owner: String(form.get("owner") ?? "").trim(),
-      status: String(form.get("status") ?? "À faire") as TaskStatus,
-      dueDate: String(form.get("dueDate") ?? ""),
-      linkedTo: String(form.get("linkedTo") ?? "").trim(),
-      completedAt: isCompletedTaskStatus(String(form.get("status") ?? "À faire")) ? new Date().toISOString() : ""
-    }, activeActor) as Task;
-    if (!task.title) return notify("Ajoutez au minimum un titre de tâche.", "warning");
-    setData((current) => ({ ...current, tasks: [task, ...current.tasks] }));
-    event.currentTarget.reset();
-    setTaskDraftLeadId("");
-    setTaskDraftTitle("");
-    notify("Tâche ajoutée.");
-  }
-
   function addPlanningEntry(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -8522,6 +8520,7 @@ function createQuoteDraftFromLead(lead: Lead) {
 
 
   function createTaskDraftFromFollowUp(recommendation: FollowUpRecommendation) {
+    setTaskDraftContactId("");
     setTaskDraftLeadId(recommendation.leadId ?? "");
     setTaskDraftTitle(recommendation.title);
     setActiveTab("tasks");
@@ -8537,50 +8536,19 @@ function createQuoteDraftFromLead(lead: Lead) {
   }
 
 
-  function updateTask(updatedTask: Task) {
-    const taskToSave = isCompletedTaskStatus(updatedTask.status)
-      ? {
-          ...updatedTask,
-          completedAt: updatedTask.completedAt || new Date().toISOString()
-        }
-      : {
-          ...updatedTask,
-          completedAt: ""
-        };
-
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((task) =>
-        task.id === updatedTask.id ? stampUpdated(taskToSave, activeActor) as Task : task
-      )
-    }));
-
-    notify("Tâche mise à jour.");
-  }
-
-  function updateTaskStatus(id: string, status: TaskStatus) {
-    const nowIso = new Date().toISOString();
-
-    setData((current) => ({
-      ...current,
-      tasks: current.tasks.map((task) => {
-        if (task.id !== id) return task;
-
-        const nextTask = isCompletedTaskStatus(status)
-          ? {
-              ...task,
-              status,
-              completedAt: task.completedAt || nowIso
-            }
-          : {
-              ...task,
-              status,
-              completedAt: ""
-            };
-
-        return stampUpdated(nextTask, activeActor) as Task;
-      })
-    }));
+  async function updateTaskStatus(id: string, status: TaskStatus) {
+    const task = taskProjection.tasks.find(row => row.id === id);
+    if (!task || pendingTaskStatus.current.has(id)) return;
+    pendingTaskStatus.current.add(id);
+    try {
+      await taskApi.mutate(taskStatusRequests.current.prepare(id, task.revision, { status }));
+      taskStatusRequests.current.confirmed(id);
+      await taskProjection.refresh();
+      notify("Statut de la tâche confirmé.");
+    } catch (error) {
+      await taskProjection.refresh();
+      notify(error instanceof Error ? error.message : "Modification non confirmée.", "warning");
+    } finally { pendingTaskStatus.current.delete(id); }
   }
 
   function updateContact(updatedContact: Pick<Contact, "id"> & Partial<Contact>) {
@@ -8644,12 +8612,6 @@ function createQuoteDraftFromLead(lead: Lead) {
     notify("Bateau supprimé.");
   }
 
-  function deleteTask(id: string) {
-    setData((current) => ({ ...current, tasks: current.tasks.filter((task) => task.id !== id) }));
-    notify("Tâche supprimée.");
-  }
-
-
   function handleImportJson(event: React.ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
     const file = input.files?.[0];
@@ -8675,7 +8637,7 @@ function createQuoteDraftFromLead(lead: Lead) {
           throw new Error("Format JSON invalide.");
         }
 
-        const knownKeys = ["contacts", "leads", "properties", "vehicles", "boats", "tasks", "suppliers", "quotes", "vendorQuotes", "vendorInvoices", "houseTrackingHouses", "houseTrackingWorkers", "houseTimeEntries", "housePayments"];
+        const knownKeys = ["contacts", "leads", "properties", "vehicles", "boats", "suppliers", "quotes", "vendorQuotes", "vendorInvoices", "houseTrackingHouses", "houseTrackingWorkers", "houseTimeEntries", "housePayments"];
         const hasKnownData = knownKeys.some((key) => Array.isArray((parsed as Record<string, unknown>)[key]));
 
         if (!hasKnownData) {
@@ -8684,7 +8646,8 @@ function createQuoteDraftFromLead(lead: Lead) {
 
         const nextData = {
           ...data,
-          ...(parsed as Partial<CRMData>)
+          ...(parsed as Partial<CRMData>),
+          tasks: []
         } as CRMData;
 
         setData(nextData);
@@ -8716,7 +8679,7 @@ function createQuoteDraftFromLead(lead: Lead) {
     return status !== "Gagné" && status !== "Perdu";
   }).length;
 
-  const sidebarTaskCount = (data.tasks ?? []).filter((task) => {
+  const sidebarTaskCount = (visibleTasks ?? []).filter((task) => {
     return !isCompletedTaskStatus(task.status);
   }).length;
 
@@ -8773,8 +8736,7 @@ function createQuoteDraftFromLead(lead: Lead) {
     {
       label: "Export CSV",
       onClick: () => {
-        exportCRMAsCsv(data);
-        notify("Export CSV téléchargé.");
+        void exportCsv();
       }
     },
     { label: "Déconnexion", onClick: onLogout, tone: "danger" }
@@ -8841,8 +8803,7 @@ function createQuoteDraftFromLead(lead: Lead) {
                 <button type="button" onClick={reloadSharedWorkspaceFromCloud}>Recharger cloud</button>
                 <button type="button" onClick={forceSaveSharedWorkspaceNow}>Forcer synchro</button>
                 <button type="button" onClick={() => {
-                  exportCRMAsCsv(data);
-                  notify("Export CSV téléchargé.");
+                  void exportCsv();
                 }}>Export CSV</button>
               </div>
             </details>
@@ -8929,7 +8890,7 @@ function createQuoteDraftFromLead(lead: Lead) {
           <>
             <Dashboard
               stats={stats}
-              data={data}
+              data={{ ...data, tasks: visibleTasks }}
               onLeadStatusChange={updateLeadStatus}
               onTaskStatusChange={updateTaskStatus}
               onStartMessage={openQuickEntryPrompt}
@@ -8949,7 +8910,7 @@ function createQuoteDraftFromLead(lead: Lead) {
 
             <FollowUpsPanel
               leads={data.leads}
-              tasks={data.tasks}
+              tasks={visibleTasks}
               quotes={mergeQuoteRequests((data as any).quotes ?? [], loadSavedQuotes())}
               onCreateTask={createTaskDraftFromFollowUp}
             />
@@ -8957,7 +8918,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "contacts" && (
-          <ContactsView access={access} focusContactId={focusContactId} actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={data.tasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
+          <ContactsView access={access} focusContactId={focusContactId} actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
 
@@ -8969,7 +8930,8 @@ function createQuoteDraftFromLead(lead: Lead) {
                   }, 120);
 
                   notify(`Lead prêt pour ${contactName}.`);
-                }} onCreateTask={(contactName) => {
+                }} onCreateTask={(contactName, contactId) => {
+                  setTaskDraftContactId(contactId || "");
                   setTaskDraftLeadId("");
                   setTaskDraftTitle(`Relancer ${contactName}`);
                   setActiveTab("tasks");
@@ -9091,7 +9053,8 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "leads" && (
-          <LeadsView leads={filteredLeads} contacts={data.contacts} tasks={data.tasks} quotes={mergeQuoteRequests((data as any).quotes ?? [], loadSavedQuotes())} properties={data.properties} vehicles={data.vehicles ?? []} boats={data.boats ?? []} preselectedContactName={leadDraftContactName} onAdd={addLead} onUpdate={updateLead} onStatusChange={updateLeadStatus} onDelete={deleteLead} onCreateQuote={createQuoteDraftFromLead} onCreateTask={(lead: Lead) => {
+          <LeadsView leads={filteredLeads} contacts={data.contacts} tasks={visibleTasks} quotes={mergeQuoteRequests((data as any).quotes ?? [], loadSavedQuotes())} properties={data.properties} vehicles={data.vehicles ?? []} boats={data.boats ?? []} preselectedContactName={leadDraftContactName} onAdd={addLead} onUpdate={updateLead} onStatusChange={updateLeadStatus} onDelete={deleteLead} onCreateQuote={createQuoteDraftFromLead} onCreateTask={(lead: Lead) => {
+                  setTaskDraftContactId("");
                   setTaskDraftLeadId(lead.id);
                   setTaskDraftTitle(lead.nextAction || `Relancer ${lead.contactName}`);
                   setActiveTab("tasks");
@@ -9120,7 +9083,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "tasks" && (
-          <TasksView tasks={filteredTasks} leads={data.leads} preselectedLeadId={taskDraftLeadId} prefilledTitle={taskDraftTitle} onAdd={addTask} onUpdate={updateTask} onStatusChange={updateTaskStatus} onDelete={deleteTask} />
+          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={{ leads: data.leads.map(lead => ({ id: lead.id, label: `${lead.category} · ${lead.contactName}` })), contacts: data.contacts.map(contact => ({ id: contact.id, label: contact.name })) }} />
         )}
       </section>
 
@@ -11172,8 +11135,8 @@ function FollowUpsPanel({
 
     const openTaskLeadIds = new Set(
       tasks
-        .filter((task) => task.status !== "Terminé" && task.linkedTo)
-        .map((task) => task.linkedTo)
+        .filter((task) => task.status !== "Terminé" && effectiveTaskLeadId(task))
+        .map(effectiveTaskLeadId)
     );
 
     leads.forEach((lead) => {
@@ -11805,7 +11768,7 @@ function ContactsView({
   onUpdate: (contact: Pick<Contact, "id"> & Partial<Contact>) => FormSave;
   onDelete: (id: string) => void;
   onCreateLead: (contactName: string) => void;
-  onCreateTask: (contactName: string) => void;
+  onCreateTask: (contactName: string, contactId?: string) => void;
 }) {
   const business = useBusinessPermissions();
   const creation = useConfirmedForm(business?.markDirty);
@@ -11863,7 +11826,7 @@ function ContactsView({
     const contactLeads = getContactLeads(contact);
     const leadIds = new Set(contactLeads.map((lead) => lead.id));
 
-    return tasks.filter((task) => leadIds.has(task.linkedTo));
+    return tasks.filter((task) => task.contactId === contact.id || leadIds.has(effectiveTaskLeadId(task)));
   }
 
   const visibleContacts = contacts.filter((contact) => {
@@ -12244,7 +12207,7 @@ function ContactsView({
             <div className="confirm-actions">
               <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedContact(null)}>Fermer</BusinessButton>
               <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); setSelectedContact(null); onCreateLead(name); }}>Créer un lead</BusinessButton>
-              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = selectedContact.name; setSelectedContact(null); onCreateTask(name); }}>Créer une tâche</BusinessButton>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = selectedContact.name; const id = selectedContact.id; setSelectedContact(null); onCreateTask(name, id); }}>Créer une tâche</BusinessButton>
               <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedContact)}>Modifier</BusinessButton>
             </div>
           </div>
@@ -12481,7 +12444,7 @@ function LeadsView({
   }
 
   function getLeadTasks(lead: Lead) {
-    return tasks.filter((task) => task.linkedTo === lead.id);
+    return tasks.filter((task) => effectiveTaskLeadId(task) === lead.id);
   }
 
   function openEdit(lead: Lead) {
@@ -13699,253 +13662,10 @@ function BoatsView({
 }
 
 
-function TasksView({
-  tasks,
-  leads,
-  preselectedLeadId,
-  prefilledTitle,
-  onAdd,
-  onUpdate,
-  onStatusChange,
-  onDelete
-}: {
-  tasks: Task[];
-  leads: Lead[];
-  preselectedLeadId?: string;
-  prefilledTitle?: string;
-  onAdd: (event: React.FormEvent<HTMLFormElement>) => void;
-  onUpdate: (task: Task) => void;
-  onStatusChange: (id: string, status: TaskStatus) => void;
-  onDelete: (id: string) => void;
-}) {
-  const business = useBusinessPermissions();
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-
-  function getLinkedLeadLabel(linkedTo: string) {
-    if (!linkedTo) return "Aucun lead lié";
-
-    const lead = leads.find((item) => item.id === linkedTo);
-
-    if (!lead) return linkedTo;
-
-    return `${lead.category} • ${lead.contactName}`;
-  }
-
-  function submitEdit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!editingTask) return;
-
-    const form = new FormData(event.currentTarget);
-
-    const updatedTask: Task = {
-      ...editingTask,
-      title: String(form.get("title") ?? "").trim(),
-      owner: String(form.get("owner") ?? "").trim(),
-      status: String(form.get("status") ?? "À faire") as TaskStatus,
-      dueDate: String(form.get("dueDate") ?? ""),
-      linkedTo: String(form.get("linkedTo") ?? "").trim(),
-      completedAt: isCompletedTaskStatus(String(form.get("status") ?? "À faire")) ? editingTask.completedAt || new Date().toISOString() : ""
-    };
-
-    if (!updatedTask.title) return;
-
-    onUpdate(updatedTask);
-    setEditingTask(null);
-  }
-
-  function openEdit(task: Task) {
-    setEditingTask(task);
-
-    setTimeout(() => {
-      document.getElementById("task-edit-panel")?.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-      });
-    }, 50);
-  }
-
-  return (
-    <div className="two-columns wide-left">
-      <section className="card">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Suivi</p>
-            <h3>{tasks.length} tâche{tasks.length > 1 ? "s" : ""}</h3>
-          </div>
-        </div>
-
-        {tasks.length === 0 ? (
-          <div className="empty-state">
-            <h3>Aucune tâche pour le moment</h3>
-            <p>Ajoutez une tâche depuis un lead, un contact, ou utilisez le formulaire de création.</p>
-          </div>
-        ) : (
-          <div className="pipeline-grid task-pipeline-grid">
-            {taskStatuses.map((status) => {
-              const columnTasks = tasks.filter((task) => task.status === status);
-
-              return (
-                <div className="pipeline-column task-column" key={status}>
-                  <div className="pipeline-title">
-                    <strong>{status}</strong>
-                    <span>{columnTasks.length}</span>
-                  </div>
-
-                  <div className="list-stack oar-contact-list-stack">
-                    {columnTasks.length === 0 ? (
-                      <p className="muted-line">Aucune tâche.</p>
-                    ) : (
-                      columnTasks.map((task) => {
-                        const linkedLead = leads.find((lead) => lead.id === task.linkedTo);
-
-                        return (
-                          <article className={`task-row ${isCompletedTaskStatus(task.status) ? "task-row-completed" : ""}`} key={task.id} data-notification-target={`task-${task.id}`}>
-                            <div>
-                              <strong>{task.title}</strong>
-                              <small>
-                                {task.owner || "Responsable non renseigné"} ·{" "}
-                                <span className={`due-label ${getDueStatus(task.dueDate)}`}>
-                                  {getDueLabel(task.dueDate)}
-                                </span>
-                              </small>
-
-                              {linkedLead && (
-                                <small>
-                                  Lead lié : {linkedLead.category} · {linkedLead.contactName}
-                                </small>
-                              )}
-
-                              <ActionMeta item={task} />
-
-                              {isCompletedTaskStatus(task.status) && (
-                                <small className="task-completed-hint">Disparaît automatiquement après 3 jours</small>
-                              )}
-
-                              <BusinessButton permission="write"
-                                className="task-edit-button"
-                                type="button"
-                                onClick={() => openEdit(task)}
-                              >
-                                Modifier
-                              </BusinessButton>
-                            </div>
-
-                            <div className="task-actions">
-                              <BusinessSelect value={task.status} onChange={(event) => onStatusChange(task.id, event.target.value as TaskStatus)}>
-                                {taskStatuses.map((option) => <option key={option}>{option}</option>)}
-                              </BusinessSelect>
-
-                              <BusinessButton permission="remove"
-                                className="icon-button"
-                                type="button"
-                                onClick={() => {
-                                  const confirmed = window.confirm(`Supprimer la tâche "${task.title}" ?`);
-
-                                  if (confirmed) {
-                                    onDelete(task.id);
-                                  }
-                                }}
-                                aria-label="Supprimer"
-                              >
-                                ×
-                              </BusinessButton>
-                            </div>
-                          </article>
-                        );
-                      })
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      <section id="task-create-form" className="card form-card">
-        <p className="eyebrow">Nouvelle</p>
-        <h3>Ajouter une tâche</h3>
-
-        <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
-          <BusinessLabel>Titre<input name="title" placeholder="Envoyer proposition" defaultValue={prefilledTitle || ""} /></BusinessLabel>
-          <BusinessLabel>Responsable<input name="owner" placeholder="Nom du responsable" /></BusinessLabel>
-
-          <BusinessLabel>Statut
-            <select name="status">
-              {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-            </select>
-          </BusinessLabel>
-
-          <BusinessLabel>Date<input name="dueDate" type="date" /></BusinessLabel>
-
-          <BusinessLabel className="full">Lead lié
-            <select name="linkedTo" defaultValue={preselectedLeadId || ""}>
-              <option value="">Aucun lead lié</option>
-              {leads.map((lead) => (
-                <option key={lead.id} value={lead.id}>
-                  {lead.category} • {lead.contactName}
-                </option>
-              ))}
-            </select>
-          </BusinessLabel>
-
-          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
-        </BusinessForm>
-      </section>
-
-      {editingTask && (
-        <div className="confirm-backdrop">
-          <div id="task-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Modification</p>
-            <h3>Modifier la tâche</h3>
-            <ActionMeta item={editingTask} />
-
-            <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <BusinessLabel>Titre<input name="title" defaultValue={editingTask.title} /></BusinessLabel>
-              <BusinessLabel>Responsable<input name="owner" defaultValue={editingTask.owner} /></BusinessLabel>
-
-              <BusinessLabel>Statut
-                <select name="status" defaultValue={editingTask.status}>
-                  {taskStatuses.map((status) => <option key={status}>{status}</option>)}
-                </select>
-              </BusinessLabel>
-
-              <BusinessLabel>Date<input name="dueDate" type="date" defaultValue={editingTask.dueDate} /></BusinessLabel>
-
-              <BusinessLabel className="full">Lead lié
-                <select name="linkedTo" defaultValue={editingTask.linkedTo}>
-                  <option value="">Aucun lead lié</option>
-                  {leads.map((lead) => (
-                    <option key={lead.id} value={lead.id}>
-                      {lead.category} • {lead.contactName}
-                    </option>
-                  ))}
-                </select>
-              </BusinessLabel>
-
-              <div className="confirm-actions full">
-                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingTask(null)}>
-                  Annuler
-                </BusinessButton>
-
-                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
-                  Enregistrer
-                </BusinessButton>
-              </div>
-            </BusinessForm>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-
 function Badge({ children }: { children: React.ReactNode }) {
   return <span className="badge">{children}</span>;
 }
 
 // Shared business views: importing these never mounts CRMApp or its global persistence.
-export { QuotesView, BookingsView, HouseTrackingView, VendorInvoicesView, ContactsView, LeadsView, PropertiesView, VehiclesView, BoatsView, TasksView, PlanningView, Dashboard, createDraftQuoteFromLead, safeNumber, parseAssetKey, normalizePlanningCategory, getPlanningCategoryFromAssetType, isValidPlanningDate, planningDateValue, getQuoteStatus, getQuoteTotal };
+export { QuotesView, BookingsView, HouseTrackingView, VendorInvoicesView, ContactsView, LeadsView, PropertiesView, VehiclesView, BoatsView, PlanningView, Dashboard, createDraftQuoteFromLead, safeNumber, parseAssetKey, normalizePlanningCategory, getPlanningCategoryFromAssetType, isValidPlanningDate, planningDateValue, getQuoteStatus, getQuoteTotal };
 export type { QuoteRequest };

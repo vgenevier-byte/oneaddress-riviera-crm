@@ -160,7 +160,16 @@ export type Task = {
   owner: string;
   status: TaskStatus;
   dueDate: string;
+  notes?: string;
+  priority?: "normal" | "important" | "urgent";
+  createdByLabel?: string;
+  managerId?: string | null;
+  managerLabel?: string | null;
+  managerActive?: boolean;
+  createdAt?: string | null;
   linkedTo: string;
+  contactId?: string;
+  leadId?: string;
   createdBy?: string;
   updatedBy?: string;
   updatedAt?: string;
