@@ -22,6 +22,9 @@ export type DriveResourceMetadata = {
   driveId: string;
   webViewLink?: string;
   size?: string;
+  trashed?: boolean;
+  explicitlyTrashed?: boolean;
+  capabilities?: { canTrash?: boolean };
 };
 
 export type SharedDriveMetadata = {
@@ -212,7 +215,7 @@ export function createGoogleDriveFetch(
   });
 }
 
-async function verifySupabaseAccessToken(token: string, resource: string | null = null, download = false): Promise<AuthenticatedCRMUser | null> {
+async function verifySupabaseAccessToken(token: string, resource: string | null = null, download = false, write = false): Promise<AuthenticatedCRMUser | null> {
   const supabase = createClient(
     requireServerEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireServerEnv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
@@ -235,7 +238,7 @@ async function verifySupabaseAccessToken(token: string, resource: string | null 
     .eq("user_id", data.user.id).eq("workspace_id", "oar").eq("status", "active").maybeSingle();
   if (membershipError) throw new DriveRouteError("Vérification des accès indisponible.", 503);
   if (!membership) throw new DriveRouteError("Accès OAR non autorisé.", 403);
-  const { data: allowed, error: moduleError } = await supabase.rpc("crm_authorize_drive", { p_resource: resource, p_write: false, p_download: download });
+  const { data: allowed, error: moduleError } = await supabase.rpc("crm_authorize_drive", { p_resource: resource, p_write: write, p_download: download });
   if (moduleError) throw new DriveRouteError("Vérification des droits indisponible.", 503);
   if (!allowed) throw new DriveRouteError(resource
     ? "Accès à ce document ou téléchargement non autorisé."
@@ -282,6 +285,15 @@ export function escapeDriveQuery(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
+// Creation cannot add new children to a folder whose trash operation has started.
+export async function requireWritableDriveParent(request: Request, parentId: string) {
+  const token = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
+  if (!token) throw new DriveRouteError("Authentification CRM requise.", 401);
+  if (!await verifySupabaseAccessToken(token, parentId, false, true)) {
+    throw new DriveRouteError("Écriture dans ce dossier non autorisée.", 403);
+  }
+}
+
 function getGoogleErrorMessage(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
   const error = (payload as { error?: { message?: unknown } }).error;
@@ -300,7 +312,7 @@ export async function getDriveResourceMetadata(
     throw new DriveRouteError("fileId manquant.", 400);
   }
 
-  const fields = "id,name,mimeType,parents,driveId,webViewLink,size";
+  const fields = "id,name,mimeType,parents,driveId,webViewLink,size,trashed,explicitlyTrashed,capabilities(canTrash)";
   const response = await fetchDrive(
     `${GOOGLE_DRIVE_API_BASE}/files/${encodeURIComponent(id)}?supportsAllDrives=true&fields=${encodeURIComponent(fields)}`,
     { method: "GET" }
@@ -323,7 +335,10 @@ export async function getDriveResourceMetadata(
     parents: Array.isArray(metadata.parents) ? metadata.parents.map(String) : [],
     driveId: String(metadata.driveId || ""),
     webViewLink: metadata.webViewLink ? String(metadata.webViewLink) : undefined,
-    size: metadata.size ? String(metadata.size) : undefined
+    size: metadata.size ? String(metadata.size) : undefined,
+    trashed: metadata.trashed,
+    explicitlyTrashed: metadata.explicitlyTrashed,
+    capabilities: metadata.capabilities
   } satisfies DriveResourceMetadata;
 }
 
@@ -375,6 +390,7 @@ export async function assertAllowedDriveResource(
 }
 
 export function assertDriveFolder(metadata: DriveResourceMetadata) {
+  if (metadata.trashed) throw new DriveRouteError("Ce dossier est dans la corbeille et ne peut plus recevoir de contenu.", 410);
   if (metadata.mimeType !== DRIVE_FOLDER_MIME_TYPE) {
     throw new DriveRouteError("Le parent Google Drive doit être un dossier autorisé.", 400);
   }

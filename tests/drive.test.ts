@@ -332,34 +332,22 @@ test("la réponse du diagnostic ne contient ni clé privée, ni token, ni creden
   }
 });
 
-test("la suppression Drive est authentifiée, validée puis désactivée en 409", async () => {
-  let validatedFileId = "";
-  const handler = createDeleteDriveHandler({
-    requireUser: async () => ({ id: "crm-user", email: "vg@oneaddressriviera.com" }),
-    assertAllowedResource: async (fileId) => {
-      validatedFileId = fileId;
-      return {
-        id: fileId,
-        name: "Document",
-        mimeType: "application/pdf",
-        parents: ["documents-root"],
-        driveId: "shared-drive"
-      };
-    }
-  });
+test("la mise à la corbeille exige une session CRM avant tout accès Drive", async () => {
+  const handler = createDeleteDriveHandler();
   const response = await handler(new Request("http://localhost/api/drive/delete", {
     method: "POST",
-    headers: {
-      authorization: "Bearer valid-token",
-      "content-type": "application/json"
-    },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify({ fileId: "historical-pdf" })
   }));
 
-  assert.equal(validatedFileId, "historical-pdf");
-  assert.equal(response.status, 409);
+  assert.equal(response.status, 401);
   assert.deepEqual(await response.json(), {
     ok: false,
-    error: "Suppression Drive désactivée : utilisez l’archivage."
+    error: "Authentification CRM requise."
   });
+});
+
+test("un dossier Drive déjà dans la corbeille ne peut plus recevoir de fichier ou sous-dossier", () => {
+  assert.throws(() => assertDriveFolder({ ...driveFolder("fictional-trashed-folder", "Dossier fictif", ["documents-root"]), trashed: true }),
+    (error: unknown) => error instanceof DriveRouteError && error.status === 410);
 });

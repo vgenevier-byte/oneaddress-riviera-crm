@@ -7,6 +7,7 @@ import {
   getDocumentsRootFolderId,
   jsonError,
   requireAuthenticatedCRMUser,
+  requireWritableDriveParent,
   sanitizeDriveName
 } from "../_utils";
 
@@ -16,11 +17,12 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     await requireAuthenticatedCRMUser(request);
-    const fetchDrive = createGoogleDriveFetch();
 
     const body = await request.json().catch(() => ({}));
     const documentsRootFolderId = getDocumentsRootFolderId();
     const parentDriveFolderId = String(body.parentDriveFolderId || documentsRootFolderId).trim();
+    await requireWritableDriveParent(request, parentDriveFolderId);
+    const fetchDrive = createGoogleDriveFetch();
     const parentFolder = await assertAllowedDriveResource(parentDriveFolderId, { fetchDrive, allowedRootIds: [documentsRootFolderId] });
     assertDriveFolder(parentFolder);
     const name = sanitizeDriveName(body.name, "Nouveau dossier");

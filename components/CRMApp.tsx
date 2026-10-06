@@ -33,6 +33,7 @@ import { useCommittedValue } from "@/lib/access/useCommittedValue";
 import { WorkspaceSyncGuard, workspaceFingerprint } from "@/lib/access/workspaceSync";
 import { supabase } from "@/lib/supabase";
 import { fetchDriveAPI } from "@/lib/driveClient";
+import { mergeDocumentTrashCompletion } from "@/lib/documentTrashClient";
 import type {
   CRMData,
   Contact,
@@ -2839,13 +2840,17 @@ function DocumentsView({
   activeActor,
   onAdd,
   onUpdate,
-  onDelete
+  onTrash,
+  canTrash,
+  sessionUserId
 }: {
   documents: CRMDocument[];
   activeActor: CRMActor;
   onAdd: (crmDocument: CRMDocument) => void;
   onUpdate: (crmDocument: CRMDocument) => void;
-  onDelete: (id: string) => void;
+  onTrash: (crmDocument: CRMDocument, operationId: string) => Promise<void>;
+  canTrash: boolean;
+  sessionUserId: string;
 }) {
   const [currentFolderId, setCurrentFolderId] = useState("");
   const [folderName, setFolderName] = useState("");
@@ -2857,6 +2862,9 @@ function DocumentsView({
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [trashingDocumentId, setTrashingDocumentId] = useState("");
+  const trashInFlight = useRef(false);
+  const [trashMessage, setTrashMessage] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -3119,42 +3127,56 @@ function DocumentsView({
     }
   }
 
-  async function deleteDriveBackedDocument(crmDocument: CRMDocument) {
+  async function trashDriveBackedDocument(crmDocument: CRMDocument) {
+    if (!canTrash || !canManageDocuments || trashInFlight.current) return;
+    const driveId = crmDocument.isFolder ? crmDocument.driveFolderId : crmDocument.driveFileId;
+    if (!driveId) {
+      setTrashMessage("Mise à la corbeille refusée : identifiant Google Drive absent.");
+      return;
+    }
+    if (editingDocument?.id === crmDocument.id) {
+      setTrashMessage("Terminez ou annulez la modification de ce document avant de le mettre à la corbeille. Votre saisie est conservée.");
+      return;
+    }
     if (crmDocument.isFolder) {
       const hasChildren = documents.some((item) => (item.folderId || item.parentFolderId || "") === crmDocument.id);
       if (hasChildren) {
-        window.alert("Ce dossier contient encore des éléments. Déplacez ou supprimez son contenu avant de supprimer le dossier.");
+        setTrashMessage("Ce dossier contient encore des éléments. Déplacez-les ou mettez-les à la corbeille avant de reprendre. Les sous-dossiers doivent aussi être retirés.");
         return;
       }
     }
-
-    const message = crmDocument.isFolder
-      ? "Supprimer ce dossier du CRM et de Google Drive ?"
-      : "Supprimer ce document du CRM et de Google Drive ?";
-
+    const parentId = crmDocument.folderId || crmDocument.parentFolderId || "";
+    const parent = folders.find((folder) => folder.id === parentId);
+    const parentLabel = parent?.title || (parentId ? crmDocument.location || parentId : "CRM Documents");
+    const name = crmDocument.fileName || crmDocument.title;
+    const message = `Mettre ${crmDocument.isFolder ? "le dossier" : "le fichier"} « ${name} » à la corbeille Google Drive ?\n\nDossier : ${parentLabel}\n\nGoogle supprime automatiquement les éléments de sa corbeille après 30 jours.${crmDocument.isFolder ? "\nLe serveur vérifiera que ce dossier est vide dans le CRM et dans Drive, y compris les sous-dossiers." : ""}`;
     if (!window.confirm(message)) return;
 
-    const driveId = crmDocument.isFolder ? crmDocument.driveFolderId : crmDocument.driveFileId;
-
-    if (driveId) {
-      try {
-        const response = await fetchDriveAPI("/api/drive/delete", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ fileId: driveId })
-        });
-
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          throw new Error(payload.error || "Suppression Drive impossible.");
-        }
-      } catch (error) {
-        window.alert(error instanceof Error ? error.message : "Suppression Google Drive impossible.");
-        return;
+    const storageKey = `oneaddress-documents-trash:${sessionUserId}:${crmDocument.id}`;
+    const identity = { documentId: crmDocument.id, fileId: driveId, parentFolderId: parentId, parentDriveFolderId: crmDocument.driveParentFolderId || (!crmDocument.isFolder ? crmDocument.driveFolderId : "") || "" };
+    trashInFlight.current = true;
+    setTrashingDocumentId(crmDocument.id);
+    setTrashMessage("");
+    try {
+      const raw = window.sessionStorage.getItem(storageKey);
+      const previous = raw ? JSON.parse(raw) : null;
+      if (previous && (typeof previous.operationId !== "string" || Object.entries(identity).some(([key, value]) => previous[key] !== value))) {
+        throw new Error("Une mise à la corbeille non confirmée concerne un autre rattachement. Rechargez les données et vérifiez ce document avant de reprendre.");
       }
+      const operationId = previous?.operationId || crypto.randomUUID();
+      // Persist the exact operation before the request so a lost response or a
+      // reload resumes that operation with the same resource and attachment.
+      window.sessionStorage.setItem(storageKey, JSON.stringify({ ...identity, operationId }));
+      await onTrash(crmDocument, operationId);
+      window.sessionStorage.removeItem(storageKey);
+      if (previewDocument?.id === crmDocument.id) closeDrivePreview();
+      setTrashMessage(`${crmDocument.isFolder ? "Dossier" : "Fichier"} « ${name} » mis à la corbeille. Google le supprime automatiquement après 30 jours.`);
+    } catch (error) {
+      setTrashMessage(`${error instanceof Error ? error.message : "Mise à la corbeille non confirmée."} La fiche est conservée. Réessayez le même bouton pour reprendre la même opération.`);
+    } finally {
+      trashInFlight.current = false;
+      setTrashingDocumentId("");
     }
-
-    onDelete(crmDocument.id);
   }
 
   function submitDocumentMetadata(event: React.FormEvent<HTMLFormElement>) {
@@ -3253,7 +3275,7 @@ function DocumentsView({
                 <div className="item-actions contact-row-actions oar-contact-actions">
                   <button className="primary-button compact-button" type="button" onClick={() => setCurrentFolderId(folder.id)}>Ouvrir</button>
                   {folder.driveWebViewLink && <a className="secondary-button compact-button" href={folder.driveWebViewLink} target="_blank" rel="noreferrer">Drive</a>}
-                  {canManageDocuments && <button className="danger-link compact-danger" type="button" onClick={() => void deleteDriveBackedDocument(folder)}>Supprimer</button>}
+                  {canManageDocuments && canTrash && folder.driveFolderId && <button className="danger-link compact-danger" type="button" disabled={Boolean(trashingDocumentId)} onClick={() => void trashDriveBackedDocument(folder)}>{trashingDocumentId === folder.id ? "Mise à la corbeille…" : "Mettre à la corbeille"}</button>}
                 </div>
               </article>
             ))}
@@ -3303,6 +3325,7 @@ function DocumentsView({
                         <button
                           className="secondary-button compact-button"
                           type="button"
+                          disabled={trashingDocumentId === crmDocument.id}
                           onClick={() => {
                             setEditingDocument(crmDocument);
                             window.setTimeout(() => {
@@ -3313,9 +3336,9 @@ function DocumentsView({
                           Modifier
                         </button>
 
-                        <button className="danger-link compact-danger" type="button" onClick={() => void deleteDriveBackedDocument(crmDocument)}>
-                          Supprimer
-                        </button>
+                        {canTrash && hasDriveFile && <button className="danger-link compact-danger" type="button" disabled={Boolean(trashingDocumentId)} onClick={() => void trashDriveBackedDocument(crmDocument)}>
+                          {trashingDocumentId === crmDocument.id ? "Mise à la corbeille…" : "Mettre à la corbeille"}
+                        </button>}
                       </>
                     )}
                   </div>
@@ -3324,6 +3347,7 @@ function DocumentsView({
             })}
           </div>
         )}
+        {trashMessage && <p role="status">{trashMessage}</p>}
       </section>
 
       <section className="card form-card documents-form-card">
@@ -6178,6 +6202,12 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   }, [sessionUserId, acceptSharedWorkspace, writeSharedWorkspace, currentAccessToken, setData]);
 
   useEffect(() => {
+    // A queued local edit may conflict when a trash completion is rebased.
+    // Keep that draft visible and make the stopped autosave explicit.
+    if (workspaceSync.current.conflicted) {
+      showWorkspaceConflict();
+      return;
+    }
     if (!sharedWorkspaceReady || !workspaceSync.current.dirty(data) || workspaceSync.current.conflicted) return;
     if (failedSaveFingerprint.current === workspaceFingerprint(data)) return;
     const controller = new AbortController();
@@ -6188,7 +6218,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       void writeSharedWorkspace(data, controller.signal, token);
     }, 900);
     return () => { controller.abort(); window.clearTimeout(timer); };
-  }, [data, sharedWorkspaceReady, sessionUserId, workspaceSyncEpoch, writeSharedWorkspace, currentAccessToken]);
+  }, [data, sharedWorkspaceReady, sessionUserId, workspaceSyncEpoch, writeSharedWorkspace, currentAccessToken, showWorkspaceConflict]);
 
   const stats = useMemo(() => {
     const pipeline = data.leads
@@ -7816,13 +7846,56 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     notify("Document mis à jour.");
   }
 
-  function deleteCRMDocument(id: string) {
-    setData((current) => ({
-      ...current,
-      documents: (((current as any).documents ?? []) as CRMDocument[]).filter((crmDocument) => crmDocument.id !== id)
-    }));
-
-    notify("Document supprimé.");
+  async function trashCRMDocument(crmDocument: CRMDocument, operationId: string) {
+    const before = currentBusinessData.current;
+    if (!sharedWorkspaceReady || workspaceBusy.current || workspaceSync.current.dirty(before)) {
+      throw new Error("Attendez la synchronisation des modifications en cours, puis réessayez. Votre saisie est conservée.");
+    }
+    const write = workspaceSync.current.prepare(before);
+    if (!write) throw new Error("Conflit de révision. Votre saisie est conservée ; rechargez les données avant de reprendre.");
+    const fileId = crmDocument.isFolder ? crmDocument.driveFolderId : crmDocument.driveFileId;
+    const parentFolderId = crmDocument.folderId || crmDocument.parentFolderId || "";
+    const parentDriveFolderId = crmDocument.driveParentFolderId || (!crmDocument.isFolder ? crmDocument.driveFolderId : "") || "";
+    workspaceBusy.current = true;
+    try {
+      const response = await fetchDriveAPI("/api/drive/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        signal: identityLifetime.current.signal,
+        body: JSON.stringify({ operationId, documentId: crmDocument.id, fileId, parentFolderId, parentDriveFolderId, revision: write.revision })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Mise à la corbeille non confirmée.");
+      if (identityLifetime.current.signal.aborted) throw new Error("La session a changé ; reprenez depuis le compte initial.");
+      // The durable server journal may adopt an earlier operation for these
+      // exact identifiers after a lost response in another tab or session.
+      const validOperationId = typeof result.operation_id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(result.operation_id);
+      if (result.completed !== true || result.status !== "completed" || !validOperationId || result.record_id !== crmDocument.id || result.resource_id !== fileId || result.parent_record_id !== parentFolderId || result.parent_resource_id !== parentDriveFolderId || !result.workspace_revision || !result.workspace_payload || !Array.isArray(result.workspace_payload.documents) || result.workspace_payload.documents.some((item: { id?: string }) => item.id === crmDocument.id)) {
+        throw new Error("La confirmation complète de cette ressource est absente. Aucune fiche locale n’a été retirée.");
+      }
+      const acknowledged = normalizeSharedCRMData(result.workspace_payload);
+      const latest = currentBusinessData.current;
+      const merged = mergeDocumentTrashCompletion(before, latest, acknowledged, crmDocument.id);
+      workspaceSync.current.load(acknowledged, result.workspace_revision);
+      setAcceptedWorkspaceFingerprint(workspaceFingerprint(acknowledged));
+      failedSaveFingerprint.current = null;
+      setSharedWorkspaceUpdatedAt(result.workspace_revision);
+      setData(current => {
+        const completion = mergeDocumentTrashCompletion(before, current, acknowledged, crmDocument.id);
+        if (completion.conflicted) workspaceSync.current.conflict();
+        return completion.data;
+      });
+      if (merged.conflicted) showWorkspaceConflict();
+      else {
+        setSharedWorkspaceStatus("connected");
+        setSharedWorkspaceMessage("Mise à la corbeille confirmée et base partagée synchronisée.");
+      }
+      // Form drafts are independent from the committed workspace and stay intact.
+      notify(`${crmDocument.isFolder ? "Dossier" : "Fichier"} mis à la corbeille.`);
+    } finally {
+      workspaceBusy.current = false;
+      if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
+    }
   }
 
 
@@ -8988,7 +9061,9 @@ function createQuoteDraftFromLead(lead: Lead) {
             activeActor={activeActor}
             onAdd={addCRMDocument}
             onUpdate={updateCRMDocument}
-            onDelete={deleteCRMDocument}
+            onTrash={trashCRMDocument}
+            canTrash={access.fullAccess || (access.modules.documents?.level === "contribute" && Boolean(access.modules.documents.sensitive.delete))}
+            sessionUserId={sessionUserId}
           />
         )}
 {activeTab === "quotes" && (

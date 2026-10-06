@@ -51,6 +51,7 @@ export function createDriveFileHandler(dependencies: FileRouteDependencies = {})
 
       const fetchDrive = createFetchDrive();
       const metadata = await assertAllowedDriveResource(fileId, { fetchDrive });
+      if (metadata.trashed) return jsonError("Ce document est dans la corbeille et ne peut plus être consulté depuis le CRM.", 410);
       const mediaResponse = await fetchDrive(
         `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`,
         { method: "GET" }

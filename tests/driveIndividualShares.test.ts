@@ -22,7 +22,7 @@ function fixture(t: TestContext) {
     process.env[key] = value;
     t.after(() => { if (old === undefined) delete process.env[key]; else process.env[key] = old; });
   }
-  const state = { active: true, documents: true, export: true, shared: true, owner: false };
+  const state = { active: true, documents: true, export: true, shared: true, owner: false, trashed: false, writableParent: true };
   const authorizations: Array<{ p_resource: string | null; p_download: boolean; p_write: boolean }> = [];
   const driveRequests: string[] = [];
   let driveClients = 0;
@@ -36,7 +36,7 @@ function fixture(t: TestContext) {
     assert.equal(url.pathname, "/rest/v1/rpc/crm_authorize_drive");
     const args = JSON.parse(String(init?.body));
     authorizations.push(args);
-    const allowed = state.active && (state.owner || (
+    const allowed = state.active && ((state.owner && (!args.p_write || state.writableParent)) || (
       state.documents && state.shared && sharedIds.includes(args.p_resource) &&
       !args.p_write && (!args.p_download || state.export)
     ));
@@ -55,6 +55,7 @@ function fixture(t: TestContext) {
         id, name: "Document fictif échantillon.pdf", mimeType: "application/pdf",
         parents: [id === "fictional-business-file" ? "fictional-business-root" : "fictional-documents-root"],
         driveId: id === "fictional-outside-drive" ? "another-fictional-drive" : "fictional-shared-drive",
+        trashed: state.trashed,
         webViewLink: `https://drive.google.com/file/d/${id}/view`
       });
     };
@@ -117,6 +118,64 @@ test("retrait Export bloque attachment tout en conservant la consultation autori
   assert.equal(f.clients(), 2);
 });
 
+test("un fichier partagé dans la corbeille n'est plus consultable ni téléchargeable depuis le CRM", async t => {
+  const f = fixture(t);
+  f.state.trashed = true;
+  for (const download of [false, true]) {
+    const response = await f.handler(f.request(sharedIds[0], download));
+    assert.equal(response.status, 410);
+    assert.match((await response.json()).error, /corbeille/);
+  }
+  assert.equal(f.driveRequests.filter(url => url.includes("alt=media")).length, 0);
+});
+
+test("les huit partages de consultation et téléchargement n'autorisent aucune mise à la corbeille", async t => {
+  const f = fixture(t);
+  for (const id of sharedIds) {
+    const response = await deletePOST(new Request("http://localhost/api/drive/delete", {
+      method: "POST",
+      headers: { authorization: "Bearer fictional-current-session", "content-type": "application/json" },
+      body: JSON.stringify({
+        operationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", documentId: `crm-${id}`,
+        fileId: id, parentFolderId: "", parentDriveFolderId: "fictional-documents-root", revision: "fictional-revision"
+      })
+    }));
+    assert.equal(response.status, 403);
+  }
+  assert.deepEqual(f.authorizations, sharedIds.map(() => ({ p_resource: null, p_write: false, p_download: false })));
+  assert.equal(f.clients(), 0);
+  assert.equal(f.driveRequests.length, 0);
+});
+
+for (const path of ["folders", "upload"]) {
+  test(`parent avec mise à la corbeille engagée : ${path} refusé avant tout client Google`, async t => {
+    const f = fixture(t);
+    f.state.owner = true;
+    f.state.writableParent = false;
+    let body: BodyInit;
+    const headers: Record<string, string> = {authorization: "Bearer fictional-current-session"};
+    if (path === "folders") {
+      headers["content-type"] = "application/json";
+      body = JSON.stringify({parentDriveFolderId: "fictional-pending-folder", name: "Dossier fictif interdit"});
+    } else {
+      const form = new FormData();
+      form.append("parentDriveFolderId", "fictional-pending-folder");
+      form.append("file", new File(["Fictional bytes"], "fictional.txt"));
+      body = form;
+    }
+    const response = await (path === "folders" ? foldersPOST : uploadPOST)(new Request(`http://localhost/api/drive/${path}`, {
+      method: "POST", headers, body
+    }));
+    assert.equal(response.status, 403);
+    assert.deepEqual(f.authorizations, [
+      {p_resource: null, p_write: false, p_download: false},
+      {p_resource: "fictional-pending-folder", p_write: true, p_download: false}
+    ]);
+    assert.equal(f.clients(), 0);
+    assert.equal(f.driveRequests.length, 0);
+  });
+}
+
 test("propriétaire conserve les documents métier et la validation des racines Drive", async t => {
   const f = fixture(t);
   f.state.owner = true;
@@ -128,7 +187,7 @@ test("propriétaire conserve les documents métier et la validation des racines 
 
 for (const [path, handler, method] of [
   ["diagnostic", diagnosticGET, "GET"], ["folders", foldersPOST, "POST"],
-  ["upload", uploadPOST, "POST"], ["delete", deletePOST, "POST"],
+  ["upload", uploadPOST, "POST"],
   ["vendor-bank-accounts/upload", bankPOST, "POST"]
 ] as const) {
   test(`un partage Documents ne donne aucun accès global ni écriture via ${path}`, async t => {

@@ -7,6 +7,7 @@ import {
   getDocumentsRootFolderId,
   jsonError,
   requireAuthenticatedCRMUser,
+  requireWritableDriveParent,
   sanitizeDriveName
 } from "../_utils";
 
@@ -16,7 +17,6 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     await requireAuthenticatedCRMUser(request);
-    const fetchDrive = createGoogleDriveFetch();
 
     const form = await request.formData();
     const file = form.get("file");
@@ -27,6 +27,8 @@ export async function POST(request: Request) {
 
     const documentsRootFolderId = getDocumentsRootFolderId();
     const parentDriveFolderId = String(form.get("parentDriveFolderId") || documentsRootFolderId).trim();
+    await requireWritableDriveParent(request, parentDriveFolderId);
+    const fetchDrive = createGoogleDriveFetch();
     const parentFolder = await assertAllowedDriveResource(parentDriveFolderId, { fetchDrive, allowedRootIds: [documentsRootFolderId] });
     assertDriveFolder(parentFolder);
     const requestedName = sanitizeDriveName(form.get("title") || file.name, file.name || "Document CRM");
