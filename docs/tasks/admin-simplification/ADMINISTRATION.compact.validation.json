@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "4 events: complete latest three, conditional toggle and no identity panel",
+      "passed": true
+    }
+  ],
+  "candidateBaseSHA": "39aa89811258c2ff8438dc2bd49ed54f5fb58ea7",
+  "sourceRoot": "/private/tmp/oar-tasks-admin-candidate",
+  "actualLocalAuth": true,
+  "actualAdminUsersRPC": true,
+  "actualAccessSnapshotRPC": true,
+  "historyRepliesSimulated": true,
+  "simulatedFaults": [
+    "history page 503",
+    "delayed history page",
+    "invitation HTTP503 intercepted before transport"
+  ],
+  "businessWrites": 0,
+  "actualInvitationTransportCalls": 0,
+  "googleCalls": 0,
+  "productionCalls": 0,
+  "physicalDevice": false
+}

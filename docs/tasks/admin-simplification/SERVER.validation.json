@@ -1,0 +1,130 @@
+{
+  "passed": true,
+  "results": [
+    {
+      "name": "new function ACL, exact body and existing permission boundaries",
+      "passed": true
+    },
+    {
+      "name": "0, 1, 3 and 4 event page boundaries with stable ID ordering",
+      "passed": true
+    },
+    {
+      "name": "more than 100 events, complete pages and exclusion of later concurrent inserts",
+      "passed": true
+    },
+    {
+      "name": "invalid limits and incomplete, nonpositive or impossible cursors rejected",
+      "passed": true
+    },
+    {
+      "name": "bigint event and cursor identifiers remain precise decimal strings",
+      "passed": true
+    },
+    {
+      "name": "real Auth signout and expired, inactive, banned or anonymous sessions rejected",
+      "passed": true
+    },
+    {
+      "name": "history reads preserve data and permissions; private Tasks remain participant-only",
+      "passed": true
+    }
+  ],
+  "actualLocalAuth": true,
+  "actualLocalRpc": true,
+  "disposableLoopbackOnly": true,
+  "productionQueries": 0,
+  "externalCalls": 0,
+  "cleanupComplete": true,
+  "migrationFile": "supabase/migrations/20261007171153_tasks_admin_history_pagination.sql",
+  "migrationSha256": "3237c9e14136828c33f6ab5a2beb8cbfc4180f55c5f835170dd7e0a42b5ccc5e",
+  "preserved": {
+    "public.crm_workspace_state": {
+      "rows": 1,
+      "sha256": "d1d47f1768f576e4425591e122683121a10ef8691bf752603477d1e334f399ca",
+      "unchanged": true
+    },
+    "public.crm_backups": {
+      "rows": 1,
+      "sha256": "292c21ffa88b029634cb45857927c93aa22db2a41ad38f779baa1e54e863be14",
+      "unchanged": true
+    },
+    "public.crm_tasks": {
+      "rows": 1,
+      "sha256": "861e92c21cfd4aef4dc4a088f706624afeacb1fc7893666a7b207a07c9ad3ccc",
+      "unchanged": true
+    },
+    "public.crm_document_scopes": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "unchanged": true
+    },
+    "public.crm_document_shares": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "unchanged": true
+    },
+    "public.crm_permission_events": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "unchanged": true
+    },
+    "app_private.task_transition_backup": {
+      "rows": 4,
+      "sha256": "32e2109f290fca6f9d11d99c31777f41c452b92b1a62d545977082d7c6025372",
+      "unchanged": true
+    },
+    "app_private.task_legacy_archive": {
+      "rows": 8,
+      "sha256": "265efc53c017cb077b7ed8b6891be96d1e5ce0dd2c6d9cc3070e4dcd8ddb6e2e",
+      "unchanged": true
+    },
+    "app_private.task_records": {
+      "rows": 22,
+      "sha256": "88b627b120e90a2070d0e8b3744e587ae555ca9283225799d88f36ab31af9969",
+      "unchanged": true
+    },
+    "app_private.task_assignments": {
+      "rows": 22,
+      "sha256": "f12c6c7a501aecb5464b0a143f7f9dbcea12c3863552bbf42038e24fcc830c7f",
+      "unchanged": true
+    },
+    "app_private.task_events": {
+      "rows": 42,
+      "sha256": "f6565d84975b7451d2f46fb420a989a650ce600f377c93dc46110da85d69f31a",
+      "unchanged": true
+    },
+    "app_private.task_requests": {
+      "rows": 42,
+      "sha256": "e16e02bf2ab7da68088122e023f73fe6b5c3abd8f425ea58ffeb8a20132e806e",
+      "unchanged": true
+    },
+    "app_private.task_identity_links": {
+      "rows": 9,
+      "sha256": "37fd917d463071021760ee39a17275ced1af613e458f6c494d2c50067d54c21b",
+      "unchanged": true
+    },
+    "public.crm_access_profiles": {
+      "rows": 50,
+      "sha256": "8e807d4b18efe34c08ea15987f0f2eeb7a17fa4f13fb7c2c71f2992961904400",
+      "unchanged": true
+    },
+    "public.crm_module_grants": {
+      "rows": 93,
+      "sha256": "fdf3e97885c27603f4c358389160b8fc569a677e94ad35c8f82367eded1170e2",
+      "unchanged": true
+    },
+    "public.app_memberships": {
+      "rows": 49,
+      "sha256": "06df6ed5ce7ee8525dc824a7ed6aedd5ece55ef3192d4880813d6c900495f079",
+      "unchanged": true
+    },
+    "public.crm_access_invitations": {
+      "rows": 6,
+      "sha256": "95d01839f27cc7d8b6870a9176b2a66a51a1c654ed3cb56b7e4b58955ceeecaa",
+      "unchanged": true
+    }
+  },
+  "existingFunctionDefinitionsAndAclsUnchanged": true,
+  "existingPoliciesUnchanged": true
+}

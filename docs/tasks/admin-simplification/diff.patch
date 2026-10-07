@@ -1,0 +1,237 @@
+diff --git a/components/AccessAdministration.tsx b/components/AccessAdministration.tsx
+index 3d05a20..59fae3f 100644
+--- a/components/AccessAdministration.tsx
++++ b/components/AccessAdministration.tsx
+@@ -2,2 +2,2 @@
+-import { useEffect, useState } from "react";
+-import TaskIdentityAdministration from "./TaskIdentityAdministration";
++import { useCallback, useEffect, useRef, useState } from "react";
++import AdminHistory from "@/lib/access/AdminHistory";
+@@ -9 +9 @@ type User = { id:string; email:string; confirmed:boolean; active:boolean; genera
+-type AdminData = {invitations:{id:string;email:string;expires_at:string}[];users:User[];projects:{id:string;title:string}[];history:{id:number;action:string;actor_id:string;subject_id:string;created_at:string}[]};
++type AdminData = {invitations:{id:string;email:string;expires_at:string}[];users:User[];projects:{id:string;title:string}[]};
+@@ -11 +10,0 @@ export default function AccessAdministration({onDirty,onSaved,userId,access,onRe
+- const [taskDirty,setTaskDirty]=useState(false);
+@@ -12,0 +12,2 @@ export default function AccessAdministration({onDirty,onSaved,userId,access,onRe
++ const loadRequest=useRef({sequence:0});
++ const [historyReload,setHistoryReload]=useState(0);
+@@ -14,3 +15,4 @@ export default function AccessAdministration({onDirty,onSaved,userId,access,onRe
+- async function load(){try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_admin_users'));if(r.error)throw r.error;setData(r.data);}catch(e){if(!isCancelled(e))setMessage('Lecture des accès indisponible.');}}
+- useEffect(()=>{void begin().then(op=>op.run(()=>op.client.rpc('crm_admin_users'))).then(r=>{if(r.error)setMessage('Lecture des accès indisponible.');else setData(r.data);}).catch(e=>{if(!isCancelled(e))setMessage('Lecture des accès indisponible.');});},[begin]);
+- useEffect(()=>{onDirty(dirty||taskDirty);return()=>onDirty(false);},[dirty,taskDirty,onDirty]);
++ const load=useCallback(async()=>{const lease=loadRequest.current,sequence=++lease.sequence;try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_admin_users'));if(sequence!==lease.sequence)return;if(r.error)throw r.error;setData(r.data);}catch(e){if(sequence===lease.sequence&&!isCancelled(e))setMessage('Lecture des accès indisponible.');}},[begin]);
++ async function reload(){setHistoryReload(value=>value+1);await load();}
++ useEffect(()=>{const lease=loadRequest.current,sequence=lease.sequence;void Promise.resolve().then(()=>{if(sequence===lease.sequence)void load();});return()=>{lease.sequence++;};},[load]);
++ useEffect(()=>{onDirty(dirty);return()=>onDirty(false);},[dirty,onDirty]);
+@@ -18 +20 @@ export default function AccessAdministration({onDirty,onSaved,userId,access,onRe
+- async function save(){if(!edit)return;setBusy(true);try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_admin_save',{p_user:edit.id,p_revision:edit.revision,p_active:edit.active,p_general_admin:edit.generalAdmin,p_grants:edit.modules,p_izord_role:edit.izordRole,p_assignments:edit.assignments}));if(r.error)throw r.error;setDirty(false);setEdit({...edit,revision:r.data});setMessage('Droits enregistrés et confirmés par le serveur.');await op.check();onSaved();await load();}catch(e){if(!isCancelled(e))setMessage('Enregistrement refusé ou conflit de révision. Rechargez avant de confirmer.');}finally{setBusy(false);}}
++ async function save(){if(!edit)return;setBusy(true);try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_admin_save',{p_user:edit.id,p_revision:edit.revision,p_active:edit.active,p_general_admin:edit.generalAdmin,p_grants:edit.modules,p_izord_role:edit.izordRole,p_assignments:edit.assignments}));if(r.error)throw r.error;setDirty(false);setEdit({...edit,revision:r.data});setMessage('Droits enregistrés et confirmés par le serveur.');await op.check();onSaved();await reload();}catch(e){if(!isCancelled(e))setMessage('Enregistrement refusé ou conflit de révision. Rechargez avant de confirmer.');}finally{setBusy(false);}}
+@@ -24,2 +26,2 @@ export default function AccessAdministration({onDirty,onSaved,userId,access,onRe
+- {edit.id==='invitation'?<button disabled={busy||!inviteEmail} onClick={async()=>{setBusy(true);try{const op=await begin();const r=await op.run(()=>fetch('/api/access/invite',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+op.token},signal:op.signal,body:JSON.stringify({email:inviteEmail,grants:edit.modules,izordRole:edit.izordRole,assignments:edit.assignments})}));const result=await op.run(()=>r.json());setMessage(r.ok?'Invitation remise au transport. Aucun droit actif avant acceptation.':result.error);if(r.ok){setDirty(false);await op.check();await load();}}catch(e){if(!isCancelled(e))setMessage('Envoi non confirmé. Consultez les invitations en attente.');}finally{setBusy(false);}}}>Envoyer l’invitation</button>:<button disabled={busy||!dirty} onClick={save}>{busy?'Enregistrement…':'Enregistrer'}</button>}<button onClick={()=>{setEdit(null);setDirty(false);void load();}}>Annuler et recharger</button>
+- </section>}</div><TaskIdentityAdministration onDirty={setTaskDirty}/><section className="panel"><h2>Invitations en attente</h2>{data?.invitations?.map(i=><p key={i.id}>{i.email} · expire le {new Date(i.expires_at).toLocaleString('fr-FR')} <button onClick={async()=>{if(!window.confirm('Révoquer cette invitation ?'))return;try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_invite_revoke',{p_id:i.id}));if(r.error)throw r.error;setMessage('Révocation confirmée par le serveur.');await op.check();await load();}catch(e){if(!isCancelled(e))setMessage('Révocation non confirmée. Rechargez la liste.');}}}>Révoquer l’invitation</button></p>)}</section><section className="panel"><h2>Historique des changements</h2>{data?.history.map(e=><p key={e.id}>{new Date(e.created_at).toLocaleString('fr-FR')} · {e.action} · {data.users.find(u=>u.id===e.actor_id)?.email??'Administrateur'} → {data.users.find(u=>u.id===e.subject_id)?.email??'Invitation / document'}</p>)}</section></div>;
++ {edit.id==='invitation'?<button disabled={busy||!inviteEmail} onClick={async()=>{setBusy(true);try{const op=await begin();const r=await op.run(()=>fetch('/api/access/invite',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+op.token},signal:op.signal,body:JSON.stringify({email:inviteEmail,grants:edit.modules,izordRole:edit.izordRole,assignments:edit.assignments})}));const result=await op.run(()=>r.json());setMessage(r.ok?'Invitation remise au transport. Aucun droit actif avant acceptation.':result.error);if(r.ok){setDirty(false);await op.check();await reload();}}catch(e){if(!isCancelled(e))setMessage('Envoi non confirmé. Consultez les invitations en attente.');}finally{setBusy(false);}}}>Envoyer l’invitation</button>:<button disabled={busy||!dirty} onClick={save}>{busy?'Enregistrement…':'Enregistrer'}</button>}<button onClick={()=>{setEdit(null);setDirty(false);void reload();}}>Annuler et recharger</button>
++ </section>}</div><section className="panel"><h2>Invitations en attente</h2>{data?.invitations?.map(i=><p key={i.id}>{i.email} · expire le {new Date(i.expires_at).toLocaleString('fr-FR')} <button onClick={async()=>{if(!window.confirm('Révoquer cette invitation ?'))return;try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_invite_revoke',{p_id:i.id}));if(r.error)throw r.error;setMessage('Révocation confirmée par le serveur.');await op.check();await reload();}catch(e){if(!isCancelled(e))setMessage('Révocation non confirmée. Rechargez la liste.');}}}>Révoquer l’invitation</button></p>)}</section><AdminHistory key={userId+":"+JSON.stringify(access)+":"+historyReload} users={data?.users??[]}/></div>;
+diff --git a/components/TasksWorkspace.tsx b/components/TasksWorkspace.tsx
+index 6730d32..0dcfe04 100644
+--- a/components/TasksWorkspace.tsx
++++ b/components/TasksWorkspace.tsx
+@@ -241 +241,3 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-  const retainedRecipients = [...new Map([...directory.remembered.filter(person => selectedRecipients.includes(person.userId)), ...(currentEditor?.base?.assignees ?? [])].map(person => [person.userId, person])).values()].filter(person => !recipients.some(candidate => candidate.userId === person.userId));
++  const availableRecipients = matchingRecipients.filter(person => !selectedRecipients.includes(person.userId));
++  const recipientDetails = new Map([...directory.remembered, ...(currentEditor?.base?.assignees ?? []), ...recipients].map(person => [person.userId, person]));
++  const requiredManagerId = currentEditor?.base?.createdBy === null ? currentEditor.base.managerId : null;
+@@ -243,0 +246,12 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
++  function addRecipient(id: string) {
++    if (!currentEditor || !editorCapabilities.fields || editorBusy || !recipients.some(person => person.userId === id) || selectedRecipients.includes(id)) return;
++    setEditor(previous => previous?.scope === scope && previous.id === currentEditor.id && !previous.draft.assigneeIds.includes(id) ? { ...previous, draft: { ...previous.draft, assigneeIds: [...previous.draft.assigneeIds, id] } } : previous);
++    callbacks.current.onDirty?.(true);
++  }
++
++  function removeRecipient(id: string) {
++    if (!currentEditor || !editorCapabilities.fields || editorBusy || id === requiredManagerId || !selectedRecipients.includes(id)) return;
++    setEditor(previous => previous?.scope === scope && previous.id === currentEditor.id && !(previous.base?.createdBy === null && previous.base.managerId === id) ? { ...previous, draft: { ...previous.draft, assigneeIds: previous.draft.assigneeIds.filter(selected => selected !== id) } } : previous);
++    callbacks.current.onDirty?.(true);
++  }
++
+@@ -307 +321 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-            <label>Rechercher un responsable<input name="recipientSearch" type="search" value={recipientQuery} onChange={event => setRecipientQuery(event.target.value)} placeholder="Nom ou e-mail confirmé" /></label>
++            <label>Rechercher un responsable<input name="recipientSearch" type="search" value={recipientQuery} onChange={event => setRecipientQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} placeholder="Nom ou e-mail confirmé" /></label>
+@@ -311,2 +325,6 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-            {matchingRecipients.map(person => <label className="taskws-recipient" key={person.userId} data-task-recipient-id={person.userId} data-task-recipient-kind="eligible"><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId} onChange={event => changeDraft("assigneeIds", event.target.checked ? [...selectedRecipients, person.userId] : selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}{person.userId === userId ? " (moi)" : ""}<small>{person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? " · Gestionnaire, participant conservé" : ""}</small></span></label>)}
+-            {retainedRecipients.map(person => <label className="taskws-recipient" key={person.userId} data-task-recipient-id={person.userId} data-task-recipient-kind="retained"><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={!selectedRecipients.includes(person.userId) || (currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId)} onChange={() => changeDraft("assigneeIds", selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}<small>{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Décochez pour retirer explicitement."}</small></span></label>)}
++            <select name="recipientToAdd" aria-label="Ajouter un responsable" className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">Ajouter un responsable</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? " (moi)" : ""} · {person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
++            {selectedRecipients.length > 0 && <ul className="taskws-recipients" aria-label="Responsables sélectionnés">{selectedRecipients.map(id => {
++              const person = recipientDetails.get(id), label = person?.label ?? "Responsable indisponible";
++              const retained = !recipients.some(candidate => candidate.userId === id), required = id === requiredManagerId;
++              return <li className="taskws-recipient" key={id} data-task-recipient-id={id} data-task-recipient-kind={retained ? "retained" : "eligible"}><span>{label}{id === userId ? " (moi)" : ""}<small>{retained ? required ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Retirez-la explicitement si nécessaire." : `${person?.access === "read" ? "Lecture" : "Contribution"}${required ? " · Gestionnaire, participant conservé" : ""}`}{person?.email ? ` · ${person.email}` : ""}{person?.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</small></span><button type="button" aria-label={`Retirer ${label}`} disabled={required} onClick={() => removeRecipient(id)}>×</button></li>;
++            })}</ul>}
+@@ -369,2 +387,3 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-      .taskws-dialog .taskws-recipient { display: flex; flex-direction: row; align-items: flex-start; gap: 9px; padding: 8px 0; }
+-      .taskws-recipient > input { flex: 0 0 18px; width: 18px; height: 18px; margin: 2px 0 0; }
++      .taskws-dialog .taskws-add-recipient { margin-top: 4px; min-height: 42px; }
++      .taskws-recipients { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 12px 0; }
++      .taskws-dialog .taskws-recipient { display: flex; flex: 0 1 auto; max-width: 100%; align-items: flex-start; gap: 8px; padding: 8px; border: 1px solid #dce1e7; border-radius: 8px; background: #f4f6f8; font-size: 14px; }
+@@ -371,0 +391 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
++      .taskws-dialog .taskws-recipient > button { flex: 0 0 38px; width: 38px; padding: 0; }
+diff --git a/lib/access/AdminHistory.tsx b/lib/access/AdminHistory.tsx
+new file mode 100644
+index 0000000..d723b38
+--- /dev/null
++++ b/lib/access/AdminHistory.tsx
+@@ -0,0 +1,90 @@
++"use client";
++
++import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
++import { isCancelled, useScopedOperations } from "./operations";
++
++type HistoryEvent = {
++  id: string;
++  created_at: string;
++  action: string;
++  actor_id: string | null;
++  subject_id: string | null;
++};
++type HistoryCursor = { beforeId: string; snapshotId: string };
++type HistoryPage = { events: HistoryEvent[]; nextCursor: HistoryCursor | null; hasMore: boolean };
++type HistoryState = HistoryPage & { status: "loading" | "ready" | "error" };
++const emptyPage: HistoryPage = { events: [], nextCursor: null, hasMore: false };
++const pageSize = 50;
++
++// Keep bigint identifiers as strings from the RPC through the next request.
++function parsePage(value: unknown): HistoryPage {
++  if (!value || typeof value !== "object") throw new Error("Invalid history page");
++  const page = value as HistoryPage;
++  if (!Array.isArray(page.events) || page.events.length > pageSize || typeof page.hasMore !== "boolean") throw new Error("Invalid history page");
++  let previous: bigint | null = null;
++  for (const event of page.events) {
++    if (typeof event.id !== "string" || !/^\d+$/.test(event.id) || typeof event.created_at !== "string" || !Number.isFinite(Date.parse(event.created_at)) || typeof event.action !== "string" || (event.actor_id !== null && typeof event.actor_id !== "string") || (event.subject_id !== null && typeof event.subject_id !== "string")) throw new Error("Invalid history event");
++    const id = BigInt(event.id);
++    if (previous !== null && id >= previous) throw new Error("Invalid history order");
++    previous = id;
++  }
++  if (page.hasMore) {
++    const cursor = page.nextCursor;
++    if (!cursor || typeof cursor.beforeId !== "string" || !/^\d+$/.test(cursor.beforeId) || typeof cursor.snapshotId !== "string" || !/^\d+$/.test(cursor.snapshotId) || cursor.beforeId !== page.events.at(-1)?.id || BigInt(cursor.snapshotId) < BigInt(cursor.beforeId)) throw new Error("Invalid history cursor");
++  } else if (page.nextCursor !== null) throw new Error("Invalid history cursor");
++  return page;
++}
++
++export default function AdminHistory({ users }: { users: { id: string; email: string }[] }) {
++  const begin = useScopedOperations("admin");
++  const request = useRef({ sequence: 0 });
++  const [history, setHistory] = useState<HistoryState>({ ...emptyPage, status: "loading" });
++  const [expanded, setExpanded] = useState(false);
++  const listId = useId();
++
++  const readPage = useCallback(async (cursor: HistoryCursor | null) => {
++    const lease = request.current, sequence = ++lease.sequence;
++    try {
++      const op = await begin();
++      const result = await op.run(() => op.client.rpc("crm_admin_history_page", { p_before_id: cursor?.beforeId ?? null, p_snapshot_id: cursor?.snapshotId ?? null, p_limit: pageSize }).abortSignal(op.signal));
++      if (sequence !== lease.sequence) return;
++      if (result.error) throw result.error;
++      const page = parsePage(result.data);
++      if (cursor && (page.events.some(event => BigInt(event.id) >= BigInt(cursor.beforeId) || BigInt(event.id) > BigInt(cursor.snapshotId)) || (page.nextCursor && page.nextCursor.snapshotId !== cursor.snapshotId))) throw new Error("Invalid history continuation");
++      setHistory(current => ({ ...page, events: cursor ? [...current.events, ...page.events] : page.events, status: "ready" }));
++    } catch (error) {
++      if (sequence === lease.sequence && !isCancelled(error)) setHistory(current => ({ ...current, status: "error" }));
++    }
++  }, [begin]);
++
++  useLayoutEffect(() => {
++    const lease = request.current, sequence = lease.sequence;
++    void Promise.resolve().then(() => { if (sequence === lease.sequence) void readPage(null); });
++    return () => { lease.sequence++; };
++  }, [readPage]);
++
++  function loadOlder() {
++    setHistory(current => ({ ...current, status: "loading" }));
++    void readPage(history.nextCursor);
++  }
++
++  const shown = expanded ? history.events : history.events.slice(0, 3);
++  const email = (id: string) => users.find(user => user.id === id)?.email;
++  return <section className="panel" data-admin-history>
++    <h2>Historique des changements</h2>
++    <div id={listId}>
++      {shown.map(event => <p key={event.id} data-admin-history-event={event.id}>
++        <time dateTime={event.created_at}>{new Date(event.created_at).toLocaleString("fr-FR")}</time>
++        {" · Auteur : "}{event.actor_id ? email(event.actor_id) ?? `Compte indisponible · ${event.actor_id}` : "Non renseigné"}
++        {" · Action : "}{event.action}
++        {" · Destinataire : "}{event.subject_id ? email(event.subject_id) ?? `Compte / invitation / document · ${event.subject_id}` : "Non renseigné"}
++      </p>)}
++    </div>
++    {history.status === "ready" && history.events.length === 0 && <p>Aucun changement enregistré.</p>}
++    {history.events.length > 0 && <p data-admin-history-count>{expanded ? `${history.events.length} événements chargés.` : `${shown.length} événement${shown.length > 1 ? "s" : ""} affiché${shown.length > 1 ? "s" : ""} sur ${history.events.length} chargé${history.events.length > 1 ? "s" : ""}.`}{history.hasMore ? " Des événements plus anciens restent à charger." : history.status === "ready" ? " Historique entièrement chargé." : ""}</p>}
++    {history.events.length > 3 && <button type="button" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>{expanded ? "Réduire l’historique" : "Voir tout l’historique"}</button>}
++    {history.status === "loading" && <p role="status">Chargement de l’historique…</p>}
++    {history.status === "error" && <><p role="status">Lecture de l’historique indisponible. Les événements déjà chargés sont conservés.</p><button type="button" onClick={loadOlder}>Réessayer le chargement de l’historique</button></>}
++    {expanded && history.hasMore && history.status !== "error" && <button type="button" disabled={history.status === "loading"} onClick={loadOlder}>Charger les événements plus anciens</button>}
++  </section>;
++}
+diff --git a/supabase/migrations/20261007171153_tasks_admin_history_pagination.sql b/supabase/migrations/20261007171153_tasks_admin_history_pagination.sql
+new file mode 100644
+index 0000000..b1af3bd
+--- /dev/null
++++ b/supabase/migrations/20261007171153_tasks_admin_history_pagination.sql
+@@ -0,0 +1,60 @@
++-- Add one read-only, bounded Administration history projection.
++-- Existing administration RPCs, permission rules and business data stay intact.
++begin;
++create function public.crm_admin_history_page(
++ p_before_id bigint default null,
++ p_snapshot_id bigint default null,
++ p_limit integer default 50
++) returns jsonb
++language plpgsql stable security definer set search_path=pg_catalog as $$
++declare anchor_id bigint; page_events jsonb; last_id bigint; more boolean;
++begin
++ -- General Administration is independent of the Tasks module grant.
++ if not app_private.general_admin() or not app_private.document_actor_active(auth.uid())
++ or not exists(select 1 from auth.users u where u.id=auth.uid()
++  and coalesce(to_jsonb(u)->>'is_anonymous','false')<>'true')
++ or not exists(select 1 from auth.sessions s where s.user_id=auth.uid()
++  and s.id::text=auth.jwt()->>'session_id'
++  and (nullif(to_jsonb(s)->>'not_after','') is null
++   or (to_jsonb(s)->>'not_after')::timestamptz>clock_timestamp())) then
++  raise exception 'general_admin_required' using errcode='42501';
++ end if;
++ if p_limit is null or p_limit<1 or p_limit>100 then
++  raise exception 'invalid_history_limit' using errcode='22023';
++ end if;
++ if (p_before_id is null)<>(p_snapshot_id is null)
++ or (p_before_id is not null and (p_before_id<1 or p_snapshot_id<1 or p_before_id>p_snapshot_id)) then
++  raise exception 'invalid_history_cursor' using errcode='22023';
++ end if;
++ if p_snapshot_id is null then
++  select max(e.id) into anchor_id from public.crm_permission_events e;
++ else
++  if not exists(select 1 from public.crm_permission_events e where e.id=p_snapshot_id)
++   or not exists(select 1 from public.crm_permission_events e where e.id=p_before_id) then
++   raise exception 'invalid_history_cursor' using errcode='22023';
++  end if;
++  anchor_id:=p_snapshot_id;
++ end if;
++ -- The extra row is only a hasMore sentinel. No timestamp-based tie-breaking,
++ -- OFFSET or raw detail projection; bigint IDs are JSON strings throughout.
++ with bounded as materialized (
++  select e.id,e.created_at,e.action,e.actor_id,e.subject_id
++  from public.crm_permission_events e
++  where e.id<=anchor_id and (p_before_id is null or e.id<p_before_id)
++  order by e.id desc limit p_limit+1
++ ), page as (
++  select * from bounded order by id desc limit p_limit
++ )
++ select coalesce(jsonb_agg(jsonb_build_object('id',id::text,'created_at',created_at,
++  'action',action,'actor_id',actor_id,'subject_id',subject_id) order by id desc),'[]'::jsonb),
++  min(id),(select count(*)>p_limit from bounded)
++ into page_events,last_id,more from page;
++ return jsonb_build_object('events',page_events,'hasMore',more,
++  'nextCursor',case when more then jsonb_build_object('beforeId',last_id::text,
++   'snapshotId',anchor_id::text) else null end);
++end;
++$$;
++revoke all on function public.crm_admin_history_page(bigint,bigint,integer) from public,anon;
++grant execute on function public.crm_admin_history_page(bigint,bigint,integer) to authenticated;
++notify pgrst, 'reload schema';
++commit;

@@ -238,8 +238,22 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const selectedRecipients = currentEditor ? currentEditor.draft.assigneeIds : [];
   const recipientNeedle = recipientSearch(recipientQuery);
   const matchingRecipients = recipients.filter(person => recipientSearch([person.label, person.email, person.detail].filter(Boolean).join(" ")).includes(recipientNeedle));
-  const retainedRecipients = [...new Map([...directory.remembered.filter(person => selectedRecipients.includes(person.userId)), ...(currentEditor?.base?.assignees ?? [])].map(person => [person.userId, person])).values()].filter(person => !recipients.some(candidate => candidate.userId === person.userId));
+  const availableRecipients = matchingRecipients.filter(person => !selectedRecipients.includes(person.userId));
+  const recipientDetails = new Map([...directory.remembered, ...(currentEditor?.base?.assignees ?? []), ...recipients].map(person => [person.userId, person]));
+  const requiredManagerId = currentEditor?.base?.createdBy === null ? currentEditor.base.managerId : null;
   const leadOptions = links?.leads ?? [], contactOptions = links?.contacts ?? [];
+
+  function addRecipient(id: string) {
+    if (!currentEditor || !editorCapabilities.fields || editorBusy || !recipients.some(person => person.userId === id) || selectedRecipients.includes(id)) return;
+    setEditor(previous => previous?.scope === scope && previous.id === currentEditor.id && !previous.draft.assigneeIds.includes(id) ? { ...previous, draft: { ...previous.draft, assigneeIds: [...previous.draft.assigneeIds, id] } } : previous);
+    callbacks.current.onDirty?.(true);
+  }
+
+  function removeRecipient(id: string) {
+    if (!currentEditor || !editorCapabilities.fields || editorBusy || id === requiredManagerId || !selectedRecipients.includes(id)) return;
+    setEditor(previous => previous?.scope === scope && previous.id === currentEditor.id && !(previous.base?.createdBy === null && previous.base.managerId === id) ? { ...previous, draft: { ...previous.draft, assigneeIds: previous.draft.assigneeIds.filter(selected => selected !== id) } } : previous);
+    callbacks.current.onDirty?.(true);
+  }
 
   return <section className="taskws" aria-label="Tâches privées" data-task-workspace>
     {!permissions.read ? <p role="status">Vous n’avez plus accès à Tâches.</p> : <>
@@ -304,12 +318,16 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
           <label className="taskws-full">Avancement<select name="status" value={currentEditor.draft.status} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("status", event.target.value as TaskDraft["status"])}>{taskStatuses.map(status => <option key={status}>{status}</option>)}</select></label>
           <label className="taskws-full">Notes<textarea name="notes" rows={6} maxLength={TASK_NOTE_LIMIT} value={currentEditor.draft.notes} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("notes", event.target.value)} /><small>{currentEditor.draft.notes.length.toLocaleString("fr-FR")} / {TASK_NOTE_LIMIT.toLocaleString("fr-FR")} caractères · Texte commun aux participants autorisés</small></label>
           <fieldset className="taskws-full" disabled={!editorCapabilities.fields || editorBusy} data-task-directory={directory.status}><legend>Responsables</legend><p className="taskws-help">Choisissez directement les comptes actifs de l’organisation disposant de Tâches. Un lecteur consulte ; un contributeur peut avancer la tâche.</p>
-            <label>Rechercher un responsable<input name="recipientSearch" type="search" value={recipientQuery} onChange={event => setRecipientQuery(event.target.value)} placeholder="Nom ou e-mail confirmé" /></label>
+            <label>Rechercher un responsable<input name="recipientSearch" type="search" value={recipientQuery} onChange={event => setRecipientQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} placeholder="Nom ou e-mail confirmé" /></label>
             {directory.status === "loading" && <p role="status">Chargement des personnes éligibles… Votre saisie et vos sélections sont conservées.</p>}
             {directory.status === "error" && <p role="alert">Annuaire indisponible. Votre saisie et vos sélections sont conservées. Réessayez pour actualiser les personnes éligibles.</p>}
             <p className="taskws-help" aria-live="polite">{selectedRecipients.length} responsable{selectedRecipients.length > 1 ? "s" : ""} sélectionné{selectedRecipients.length > 1 ? "s" : ""}{recipientNeedle ? ` · ${matchingRecipients.length} résultat${matchingRecipients.length > 1 ? "s" : ""}` : ""}.</p>
-            {matchingRecipients.map(person => <label className="taskws-recipient" key={person.userId} data-task-recipient-id={person.userId} data-task-recipient-kind="eligible"><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId} onChange={event => changeDraft("assigneeIds", event.target.checked ? [...selectedRecipients, person.userId] : selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}{person.userId === userId ? " (moi)" : ""}<small>{person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? " · Gestionnaire, participant conservé" : ""}</small></span></label>)}
-            {retainedRecipients.map(person => <label className="taskws-recipient" key={person.userId} data-task-recipient-id={person.userId} data-task-recipient-kind="retained"><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={!selectedRecipients.includes(person.userId) || (currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId)} onChange={() => changeDraft("assigneeIds", selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}<small>{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Décochez pour retirer explicitement."}</small></span></label>)}
+            <select name="recipientToAdd" aria-label="Ajouter un responsable" className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">Ajouter un responsable</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? " (moi)" : ""} · {person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
+            {selectedRecipients.length > 0 && <ul className="taskws-recipients" aria-label="Responsables sélectionnés">{selectedRecipients.map(id => {
+              const person = recipientDetails.get(id), label = person?.label ?? "Responsable indisponible";
+              const retained = !recipients.some(candidate => candidate.userId === id), required = id === requiredManagerId;
+              return <li className="taskws-recipient" key={id} data-task-recipient-id={id} data-task-recipient-kind={retained ? "retained" : "eligible"}><span>{label}{id === userId ? " (moi)" : ""}<small>{retained ? required ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Retirez-la explicitement si nécessaire." : `${person?.access === "read" ? "Lecture" : "Contribution"}${required ? " · Gestionnaire, participant conservé" : ""}`}{person?.email ? ` · ${person.email}` : ""}{person?.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</small></span><button type="button" aria-label={`Retirer ${label}`} disabled={required} onClick={() => removeRecipient(id)}>×</button></li>;
+            })}</ul>}
             {directory.status === "ready" && !recipients.length && <p role="status" className="taskws-help">Aucun compte éligible. Vous pouvez conserver une tâche personnelle.</p>}
             {directory.status === "ready" && recipients.length > 0 && !matchingRecipients.length && <p role="status" className="taskws-help">Aucun responsable ne correspond à cette recherche. Les sélections précédentes sont conservées.</p>}
             {!selectedRecipients.length && <p className="taskws-help">Aucun responsable sélectionné : tâche personnelle, visible uniquement par son créateur.</p>}
@@ -366,9 +384,11 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
       .taskws-dialog small { font-size: 12px; font-weight: 400; color: #687283; }
       .taskws-dialog fieldset { border: 1px solid #dce1e7; border-radius: 8px; padding: 12px; margin: 0; }
       .taskws-dialog legend { font-weight: 600; padding: 0 4px; }
-      .taskws-dialog .taskws-recipient { display: flex; flex-direction: row; align-items: flex-start; gap: 9px; padding: 8px 0; }
-      .taskws-recipient > input { flex: 0 0 18px; width: 18px; height: 18px; margin: 2px 0 0; }
+      .taskws-dialog .taskws-add-recipient { margin-top: 4px; min-height: 42px; }
+      .taskws-recipients { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; padding: 0; margin: 12px 0; }
+      .taskws-dialog .taskws-recipient { display: flex; flex: 0 1 auto; max-width: 100%; align-items: flex-start; gap: 8px; padding: 8px; border: 1px solid #dce1e7; border-radius: 8px; background: #f4f6f8; font-size: 14px; }
       .taskws-recipient > span { flex: 1; }
+      .taskws-dialog .taskws-recipient > button { flex: 0 0 38px; width: 38px; padding: 0; }
       .taskws-recipient small { display: block; margin-top: 3px; }
       .taskws-dialog dl { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 1fr); gap: 8px 12px; font-size: 14px; }
       .taskws-dialog dt { font-weight: 600; }

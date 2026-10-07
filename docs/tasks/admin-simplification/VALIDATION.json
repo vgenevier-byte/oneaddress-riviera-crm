@@ -1,0 +1,22 @@
+{
+  "publishedBase": "39aa89811258c2ff8438dc2bd49ed54f5fb58ea7",
+  "productSourceHashes": {
+    "components/AccessAdministration.tsx": "0b05500823e8e2674b4f03616c9f5d3329ec4b319e218f9c13bc37254f0b52ff",
+    "components/TasksWorkspace.tsx": "5f72141d54d7c5143c02a8571dfb7e37d0c576fd21d36a0ad321f154826aaab8",
+    "lib/access/AdminHistory.tsx": "59eae12b0ccd6d0aadb4347bf9b3248108a0576e93cef7934716a3af2e125469",
+    "supabase/migrations/20261007171153_tasks_admin_history_pagination.sql": "3237c9e14136828c33f6ab5a2beb8cbfc4180f55c5f835170dd7e0a42b5ccc5e"
+  },
+  "serverGroupsPassed": 7,
+  "administrationBrowserGroupsPassed": 11,
+  "responsiblesBrowserGroupsPassed": 7,
+  "typescript": "PASS",
+  "lint": "PASS; 0 errors, 2 inherited warnings",
+  "productionSourceBuild": "PASS",
+  "sourceIdenticalDemoFiles": 162,
+  "oldMigrationsByteIdentical": 13,
+  "productionChangesBeforeRelease": 0,
+  "externalPaidCalls": 0,
+  "generalAudit": false,
+  "contactsDriveExcluded": true,
+  "diffCheck": "PASS"
+}

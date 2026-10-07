@@ -1,0 +1,52 @@
+{
+  "candidateBaseSHA": "39aa89811258c2ff8438dc2bd49ed54f5fb58ea7",
+  "sourceRoot": "/private/tmp/oar-tasks-admin-candidate",
+  "sourceManifest": "/private/tmp/oar-tasks-admin-state/demo-manifest.json",
+  "sourceFiles": 162,
+  "actualLocalAuth": true,
+  "actualLocalRPC": true,
+  "actualLocalDatabase": true,
+  "simulatedFaults": [
+    "held actual directory response",
+    "HTTP 503 directory response",
+    "empty directory response"
+  ],
+  "externalCalls": 0,
+  "productionWrites": 0,
+  "physicalDevice": false,
+  "adminJourney": false,
+  "cleanupPassed": true,
+  "results": [
+    {
+      "name": "Chromium desktop 1440: native select, keyboard add/remove, self label, homonyms/email search, unique UUID chips, loading/error/retry, explicit save, personal task, inactive retention/removal",
+      "passed": true
+    },
+    {
+      "name": "Chromium mobile 390: native select, touch removal, wrapped chips, draft/selection preservation and no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "Conflict keeps UUID selections and private draft until explicit revision acceptance and save",
+      "passed": true
+    },
+    {
+      "name": "Cancelled editor ignores its late directory reply after a new editor has current choices",
+      "passed": true
+    },
+    {
+      "name": "Historical manager stays selected and non-removable when active, then retained and non-removable when inactive",
+      "passed": true
+    },
+    {
+      "name": "Revocation while an actual directory response is delayed clears private draft and ignores the late response",
+      "passed": true
+    },
+    {
+      "name": "WebKit mobile 390: native select, touch removal, search/retry, unique chips and inactive retention/removal",
+      "passed": true
+    }
+  ],
+  "passed": true,
+  "initialWebKitLaunch": "Default executable missing; no test ran. Existing executable used for successful retry, no download/source change.",
+  "webkitCleanupPassed": true
+}
