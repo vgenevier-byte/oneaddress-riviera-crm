@@ -1,0 +1,315 @@
+{
+  "date": "2026-10-07",
+  "outcome": "LOCAL_READY",
+  "publishedBaseSHA": "aeadd4c6999755001da34f60f85a028be30e59ca",
+  "productionWrites": 0,
+  "gitCommits": 0,
+  "gitPushes": 0,
+  "deploymentsCreated": 0,
+  "paidCalls": 0,
+  "contactsDriveActivated": false,
+  "checks": {
+    "finalBuild": "PASS",
+    "tsc": "PASS",
+    "fullLintErrors": 0,
+    "preexistingLintWarnings": 2,
+    "finalTargetedLint": "PASS",
+    "independentTargetedReview": "PASS"
+  },
+  "sourceConcordance": {
+    "base": "aeadd4c6999755001da34f60f85a028be30e59ca",
+    "publishedTrackedFiles": 392,
+    "changedPublishedFiles": [
+      "components/TaskIdentityAdministration.tsx",
+      "components/TasksWorkspace.tsx",
+      "lib/tasks/types.ts"
+    ],
+    "otherPublishedFilesExact": 389,
+    "servedSourcesExact": 160,
+    "originalMigrationUnchanged": true,
+    "newMigrationSha256": "2cb1b6c8d0094d1bd11ec15dd1c831f6946c1fc748380221d45699235b5f8661",
+    "candidatePath": "/private/tmp/oar-tasks-direct-candidate",
+    "demo": "http://127.0.0.1:3198/demo",
+    "build": "PASS",
+    "gitIndexPaths": "",
+    "rootHead": "2980ce93784c4c725acf3ac644caf2c2416bad77"
+  },
+  "server": {
+    "results": [
+      {
+        "name": "eligible unlinked accounts appear with only minimal confirmed account directory fields",
+        "passed": true
+      },
+      {
+        "name": "inactive, deleted, banned, anonymous, unconfirmed, invited and no-Tasks accounts reject forged assignment IDs",
+        "passed": true
+      },
+      {
+        "name": "new creator and multiple recipients work without identity links, including a recipient with no login session",
+        "passed": true
+      },
+      {
+        "name": "contributor/reader/creator restrictions and nonparticipant administrator privacy remain server enforced",
+        "passed": true
+      },
+      {
+        "name": "optional identity link and Contact classification no longer decide ordinary access or assignment",
+        "passed": true
+      },
+      {
+        "name": "grant/profile/membership/session revocation applies immediately and idempotent replay cannot bypass it",
+        "passed": true
+      },
+      {
+        "name": "private verified-owner recovery accepts unlinked manager/assignees and preserves unknown author and historical originals",
+        "passed": true
+      },
+      {
+        "name": "task document scope, raw payload and raw table restrictions stay closed for nonparticipant accounts",
+        "passed": true
+      }
+    ],
+    "passed": true,
+    "actualLocalAuth": true,
+    "externalCalls": 0,
+    "productionQueries": 0,
+    "migrationFile": "supabase/migrations/20261007132122_tasks_direct_account_assignment.sql",
+    "migrationSha256": "2cb1b6c8d0094d1bd11ec15dd1c831f6946c1fc748380221d45699235b5f8661",
+    "preserved": {
+      "public.crm_workspace_state": {
+        "rows": 1,
+        "sha256": "d1d47f1768f576e4425591e122683121a10ef8691bf752603477d1e334f399ca",
+        "unchanged": true
+      },
+      "public.crm_backups": {
+        "rows": 1,
+        "sha256": "292c21ffa88b029634cb45857927c93aa22db2a41ad38f779baa1e54e863be14",
+        "unchanged": true
+      },
+      "public.crm_tasks": {
+        "rows": 1,
+        "sha256": "861e92c21cfd4aef4dc4a088f706624afeacb1fc7893666a7b207a07c9ad3ccc",
+        "unchanged": true
+      },
+      "public.crm_document_scopes": {
+        "rows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unchanged": true
+      },
+      "public.crm_document_shares": {
+        "rows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unchanged": true
+      },
+      "public.crm_permission_events": {
+        "rows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unchanged": true
+      },
+      "app_private.task_transition_backup": {
+        "rows": 4,
+        "sha256": "32e2109f290fca6f9d11d99c31777f41c452b92b1a62d545977082d7c6025372",
+        "unchanged": true
+      },
+      "app_private.task_legacy_archive": {
+        "rows": 8,
+        "sha256": "265efc53c017cb077b7ed8b6891be96d1e5ce0dd2c6d9cc3070e4dcd8ddb6e2e",
+        "unchanged": true
+      },
+      "app_private.task_records": {
+        "rows": 22,
+        "sha256": "88b627b120e90a2070d0e8b3744e587ae555ca9283225799d88f36ab31af9969",
+        "unchanged": true
+      },
+      "app_private.task_assignments": {
+        "rows": 22,
+        "sha256": "f12c6c7a501aecb5464b0a143f7f9dbcea12c3863552bbf42038e24fcc830c7f",
+        "unchanged": true
+      },
+      "app_private.task_events": {
+        "rows": 42,
+        "sha256": "f6565d84975b7451d2f46fb420a989a650ce600f377c93dc46110da85d69f31a",
+        "unchanged": true
+      },
+      "app_private.task_requests": {
+        "rows": 42,
+        "sha256": "e16e02bf2ab7da68088122e023f73fe6b5c3abd8f425ea58ffeb8a20132e806e",
+        "unchanged": true
+      },
+      "app_private.task_identity_links": {
+        "rows": 9,
+        "sha256": "37fd917d463071021760ee39a17275ced1af613e458f6c494d2c50067d54c21b",
+        "unchanged": true
+      },
+      "public.crm_access_profiles": {
+        "rows": 46,
+        "sha256": "ef2d8cc428b4e118bce93d0f168ef7232fd7dfdab743d4cb9ced99de35fd9f7d",
+        "unchanged": true
+      },
+      "public.crm_module_grants": {
+        "rows": 89,
+        "sha256": "e14e568e2cc0d4af395675366b7fc50579170373752ef38d0bf26cd49a236774",
+        "unchanged": true
+      },
+      "public.app_memberships": {
+        "rows": 45,
+        "sha256": "9787d15f626e0546c5303a238ec4e05a692a24ac25d1c2df2dcb15be3eed6b1b",
+        "unchanged": true
+      }
+    }
+  },
+  "browser": {
+    "results": [
+      {
+        "name": "Chromium desktop 1440: automatic directory, confirmed name/email search, UUID multi-select, loading/error/retry, save, personal task, inactive retention, no Admin",
+        "passed": true
+      },
+      {
+        "name": "Chromium mobile 390: same direct-assignment journey with all fields and selections preserved and no horizontal overflow",
+        "passed": true
+      },
+      {
+        "name": "Revocation while an actual directory response is delayed clears private draft and ignores the late response",
+        "passed": true
+      },
+      {
+        "name": "WebKit mobile 390: real direct assignment, search, retry, multi-select, personal task and inactive retention",
+        "passed": true
+      }
+    ],
+    "candidateBaseSHA": "aeadd4c6999755001da34f60f85a028be30e59ca",
+    "sourceRoot": "/private/tmp/oar-tasks-direct-candidate",
+    "sourceManifest": "/private/tmp/oar-tasks-direct-state/demo-manifest.json",
+    "sourceFiles": 160,
+    "actualLocalAuth": true,
+    "actualLocalRPC": true,
+    "actualLocalDatabase": true,
+    "simulatedFaults": [
+      "held actual directory response",
+      "HTTP 503 directory response",
+      "empty directory response"
+    ],
+    "externalCalls": 0,
+    "productionWrites": 0,
+    "physicalDevice": false,
+    "adminJourney": false,
+    "cleanupPassed": true
+  },
+  "preservationAfterBrowser": {
+    "passed": true,
+    "phase": "after-final-browser-cleanup",
+    "tables": 16,
+    "preserved": {
+      "public.crm_workspace_state": {
+        "existingRows": 1,
+        "sha256": "d1d47f1768f576e4425591e122683121a10ef8691bf752603477d1e334f399ca",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "public.crm_backups": {
+        "existingRows": 1,
+        "sha256": "292c21ffa88b029634cb45857927c93aa22db2a41ad38f779baa1e54e863be14",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "public.crm_tasks": {
+        "existingRows": 1,
+        "sha256": "861e92c21cfd4aef4dc4a088f706624afeacb1fc7893666a7b207a07c9ad3ccc",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "public.crm_document_scopes": {
+        "existingRows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "public.crm_document_shares": {
+        "existingRows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "public.crm_permission_events": {
+        "existingRows": 0,
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "app_private.task_transition_backup": {
+        "existingRows": 4,
+        "sha256": "32e2109f290fca6f9d11d99c31777f41c452b92b1a62d545977082d7c6025372",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "app_private.task_legacy_archive": {
+        "existingRows": 8,
+        "sha256": "265efc53c017cb077b7ed8b6891be96d1e5ce0dd2c6d9cc3070e4dcd8ddb6e2e",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "app_private.task_records": {
+        "existingRows": 22,
+        "sha256": "88b627b120e90a2070d0e8b3744e587ae555ca9283225799d88f36ab31af9969",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "app_private.task_assignments": {
+        "existingRows": 22,
+        "sha256": "f12c6c7a501aecb5464b0a143f7f9dbcea12c3863552bbf42038e24fcc830c7f",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "app_private.task_events": {
+        "existingRows": 42,
+        "sha256": "f6565d84975b7451d2f46fb420a989a650ce600f377c93dc46110da85d69f31a",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "app_private.task_requests": {
+        "existingRows": 42,
+        "sha256": "e16e02bf2ab7da68088122e023f73fe6b5c3abd8f425ea58ffeb8a20132e806e",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "app_private.task_identity_links": {
+        "existingRows": 9,
+        "sha256": "37fd917d463071021760ee39a17275ced1af613e458f6c494d2c50067d54c21b",
+        "unchanged": true,
+        "declaredFixtureRows": 0
+      },
+      "public.crm_access_profiles": {
+        "existingRows": 46,
+        "sha256": "ef2d8cc428b4e118bce93d0f168ef7232fd7dfdab743d4cb9ced99de35fd9f7d",
+        "unchanged": true,
+        "declaredFixtureRows": 4
+      },
+      "public.crm_module_grants": {
+        "existingRows": 89,
+        "sha256": "e14e568e2cc0d4af395675366b7fc50579170373752ef38d0bf26cd49a236774",
+        "unchanged": true,
+        "declaredFixtureRows": 4
+      },
+      "public.app_memberships": {
+        "existingRows": 45,
+        "sha256": "9787d15f626e0546c5303a238ec4e05a692a24ac25d1c2df2dcb15be3eed6b1b",
+        "unchanged": true,
+        "declaredFixtureRows": 4
+      }
+    },
+    "retainedFictionalDemoAccounts": {
+      "count": 4,
+      "userIds": [
+        "7b22e3e1-3595-4f0f-8921-71974499385f",
+        "2eb96e88-555e-45ef-90c7-c202f9b1af8a",
+        "d625e1ab-fae2-4a70-ba1c-a10a2b8e018d",
+        "c48a7fdb-c800-4b1b-ae60-f5cfbf537e8a"
+      ],
+      "allEligible": true,
+      "allWithoutContactOrIdentityLink": true,
+      "createdInLocalTestsOnly": true
+    },
+    "externalCalls": 0,
+    "productionQueries": 0
+  }
+}

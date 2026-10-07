@@ -1,0 +1,133 @@
+TÂCHES — RESPONSABLES DIRECTEMENT SÉLECTIONNABLES
+Livraison locale du 7 octobre 2026. Aucune publication autorisée ou effectuée.
+
+Le correctif part de la version effectivement publiée :
+aeadd4c6999755001da34f60f85a028be30e59ca,
+déploiement READY dpl_BkiiiUwwUEZrTPZqRmgRB6T8hDvR.
+Le checkout principal volontairement modifié est préservé ; son HEAD reste
+2980ce93784c4c725acf3ac644caf2c2416bad77 et son index Git est vide.
+Le candidat de test est un export de la version publiée auquel seuls les
+chemins ciblés ont été ajoutés. Aucun commit, push, déploiement ou SQL Production.
+
+COMPORTEMENT LIVRÉ
+
+L’annuaire charge automatiquement les comptes individuels ayant Auth actif,
+email confirmé, profil CRM actif, appartenance OAR active et accès effectif à
+Tâches. Les invitations sans droits ouverts, comptes désactivés, supprimés,
+bannis, anonymes, non confirmés, sans profil, hors OAR ou sans Tâches sont exclus.
+Une session active et les droits actuels du demandeur sont vérifiés à chaque RPC.
+
+Une liaison task_identity_links, une fiche Contact Membre, ou la confirmation
+Propriétaire interne ne sont plus nécessaires à une attribution ordinaire.
+Aucun compte, droit, lien Contact ou statut propriétaire n’est créé par ce code.
+Les libellés confirmés restent prioritaires lorsqu’ils existent ; sinon le nom
+disponible dans le compte est utilisé, puis son email confirmé complet. Le nom
+est uniquement affiché : les autorisations et affectations utilisent l’UUID Auth.
+
+Le formulaire propose recherche par nom ou email et sélection multiple. Les
+homonymes affichent leurs emails distincts. Chargement, liste vide, recherche sans
+résultat et erreur sont explicites. Actualiser ou réessayer garde le formulaire,
+les champs, la recherche et les sélections. Une affectation devenue inactive
+reste affichée et n’est pas retirée lors d’une autre modification. Une révocation
+réelle de l’accès du demandeur retire la saisie privée et ignore une réponse tardive.
+
+La visibilité reste limitée au créateur et aux responsables actuels autorisés.
+Être dans l’annuaire, administrateur ou fullAccess ne donne aucun accès aux tâches
+d’un tiers. Lecture, Contribution, Export et Suppression restent distincts ; les
+règles du créateur et du gestionnaire explicitement désigné sont conservées.
+Les contrôles couvrent aussi recherches, Dashboard, compteurs, exports, documents,
+tables/payload directs et rejeux de requêtes après révocation.
+
+Les historiques et gestionnaires restent inchangés et bornés à leurs tâches.
+La reprise privée conserve exactement sa garde propriétaire interne confirmé +
+Administration + session/Tâches ; sa mutation exige aussi Contribution. Une simple
+éligibilité à Tâches ne donne jamais ce droit. Aucun historique repris ou réaffecté,
+aucun auteur remplacé, aucune confirmation d’identité automatique.
+Contact lié reste facultatif et sans effet sur la visibilité.
+
+SQL CIBLÉ ET DONNÉES
+
+Nouvelle migration, appliquée uniquement au banc fictif local :
+supabase/migrations/20261007132122_tasks_direct_account_assignment.sql
+SHA256 2cb1b6c8d0094d1bd11ec15dd1c831f6946c1fc748380221d45699235b5f8661.
+Elle adapte ensemble éligibilité, annuaire et résolutions de libellés des créations,
+affectations, reprises explicites et corrections de gestion. Les cinq anciens
+accès obligatoires aux libellés de task_identity_links sont remplacés par le
+résolveur de compte. Le reste des trois corps de mutation garde ses contrôles,
+révisions, idempotence et journaux. Le nouveau helper n’est pas exécutable par
+PUBLIC, anon ou authenticated. La migration ne migre aucun enregistrement existant.
+
+Migration déjà appliquée conservée à l’identique :
+supabase/migrations/20261006202942_canonical_private_tasks.sql
+SHA256 32160066611932453e25fc4a6b1314b6b484e66c9db10eeccf59f5bf0c588951.
+
+Après tests et nettoyage navigateur, les empreintes des 16 tables préexistantes
+du banc correspondent exactement à celles d’avant les tests serveur : tâches,
+IDs, auteurs, responsables, notes, dates, priorités, gestionnaires, événements,
+requêtes, archives, liaisons, workspace, sauvegardes, scopes, partages et droits.
+Quatre comptes fictifs serveur sans Contact ni identity_link sont volontairement
+conservés pour la démo. Les empreintes des profils/droits/appartenances distinguent
+ces quatre ajouts locaux déclarés des lignes préexistantes. Les comptes et tâches
+créés par les trois essais navigateur intermédiaires/final ont été nettoyés.
+Ces preuves concernent le banc local ; aucune donnée métier Production n’a été
+rejouée, modifiée ou présentée comme test authentifié Production.
+
+VALIDATION CIBLÉE
+
+8/8 groupes serveur avec véritable Auth locale et appels HTTP RPC :
+1. Comptes autorisés sans liaison immédiatement présents, projection minimale.
+2. Comptes inéligibles et UUID forgés refusés côté serveur.
+3. Création et affectation multiple sans liaison, destinataire sans session ouverte.
+4. Tâche personnelle/partagée ; lecteur/contributeur/créateur ; tiers admin refusé.
+5. Liaison et catégorie Contact facultatives ; libellé confirmé réutilisé.
+6. Révocations profil/OAR/Tâches/session effectives, y compris sur rejeu idempotent.
+7. Reprise privée explicitement confirmée et gestionnaire sans Contact ; auteur
+   ancien inconnu, original et gestionnaires préexistants conservés.
+8. Documents et lectures brutes fermés pour les non-participants.
+
+4/4 groupes navigateur : Chromium ordinateur 1440 px, Chromium mobile 390 px,
+révocation pendant une réponse tardive, WebKit mobile 390 px. Recherche, homonymes,
+choix multiple, chargement, erreur/réessai, brouillons, enregistrement partagé,
+personnel et conservation d’une affectation inactive sont validés. Pas de passage
+Administration, erreur navigateur ou débordement horizontal dans ces parcours.
+Le test mobile a révélé un bouton Fermer héritant d’une largeur pleine : un
+sélecteur CSS local et width:auto corrigent ce point ; titre lisible vérifié.
+Une réponse réelle retardée, HTTP 503 et liste vide sont des injections de test
+déclarées. Les enregistrements, lectures et restrictions utilisent Auth/RPC/DB réels
+du banc. Émulation mobile ; aucun iPhone physique testé. Aucun service payant appelé.
+
+Build final Next/TypeScript PASS. tsc PASS. Lint PASS : deux avertissements déjà
+présents sur la version de base ; lint ciblé final des fichiers modifiés PASS.
+Revue indépendante limitée aux fonctions/guards touchés PASS.
+Concordance : 160 sources servies identiques au candidat ; seuls trois fichiers
+publiés sont modifiés, les 389 autres fichiers publiés sont exactement conservés.
+Diagnostic Google, œil des mots de passe, nettoyage Intervenants et autres modules
+restent ceux du SHA publié. Contacts → Drive est exclu du candidat et non activé ;
+ses travaux locaux et les documents Publisher sont préservés. Aucun audit général.
+Le diff livré est vérifié par application dans une copie temporaire de la base,
+comparaison exacte de chaque résultat et contrôle des espaces ; aucun index modifié.
+
+DÉMONSTRATION ET REPRODUCTION
+
+Démo locale : http://127.0.0.1:3198/demo
+Ouvrir le profil fictif contributeur Benoît, puis Tâches → Ajouter une tâche.
+Chercher « Nora Sans Liaison Fictive » ou « Camille Homonyme Fictive » : les comptes
+sans Contact sont directement proposés ; les deux Camille ont des emails distincts.
+Cocher plusieurs personnes puis enregistrer. Les autres profils du lanceur
+permettent de comparer lecteur, créateur et administrateur non concerné.
+Le lanceur /demo et ses identifiants fictifs restent hors du correctif applicatif.
+
+Scripts ciblés : tests/tasks/direct-assignment-database.mjs et
+tests/tasks/direct-assignment-browser.mjs. Ils refusent tout autre endpoint que
+le banc 127.0.0.1:55731/55732 ; l’app navigateur est limitée à 3198.
+TASKS_TEST_ACK=TASKS_DISPOSABLE_LOCAL_ONLY est obligatoire. Les clés et sessions
+locales restent dans les fichiers privés hors dépôt, jamais dans ce rapport.
+Le banc est conservé, sans reset ni nouvelle archive. Ses manifests privés :
+/private/tmp/oar-tasks-stack-manifest.json
+/private/tmp/oar-tasks-direct-state/demo-manifest.json
+Le candidat isolé : /private/tmp/oar-tasks-direct-candidate.
+Préparation : TASKS_DIRECT_REQUIRE_TESTS=1 node tests/tasks/direct-candidate.mjs.
+Génération du diff : node tests/tasks/direct-diff.mjs.
+Résultats durables : VALIDATION.json ; captures dans screenshots/.
+
+Livraison arrêtée ici pour décision de publication distincte.

@@ -7,6 +7,8 @@ export type TaskPriority = (typeof taskPriorities)[number];
 export type TaskRecipient = {
   userId: string;
   label: string;
+  /** Optional for older API projections; only a server-confirmed email is exposed. */
+  email?: string;
   access: "read" | "contribute";
   detail?: string;
 };

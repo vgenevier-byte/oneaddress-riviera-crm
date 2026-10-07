@@ -20,6 +20,11 @@ export type TasksWorkspaceProps = {
 };
 
 type Editor = { scope: string; id: string; base?: Task; draft: TaskDraft; revision: number | null };
+type Directory = { scope: string; items: TaskRecipient[]; remembered: TaskRecipient[]; status: "idle" | "loading" | "ready" | "error" };
+
+function recipientSearch(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").trim();
+}
 
 function messageOf(error: unknown) {
   return error instanceof Error ? error.message : (error as { message?: string })?.message ?? "Opération non confirmée.";
@@ -50,7 +55,8 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const callbacks = useRef({ onTasksChange, onDirty, onDraftConsumed });
   useLayoutEffect(() => { callbacks.current = { onTasksChange, onDirty, onDraftConsumed }; }, [onTasksChange, onDirty, onDraftConsumed]);
   const [collection, setCollection] = useState<{ scope: string; items: Task[] }>({ scope, items: [] });
-  const [directory, setDirectory] = useState<{ scope: string; items: TaskRecipient[] }>({ scope, items: [] });
+  const [directory, setDirectory] = useState<Directory>({ scope, items: [], remembered: [], status: "idle" });
+  const [recipientQuery, setRecipientQuery] = useState("");
   const [editor, setEditor] = useState<Editor | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [filters, setFilters] = useState<TaskFilters>({ relation: "related", status: "all", priority: "all", query: "" });
@@ -61,6 +67,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const requests = useRef(new TaskRequestLedger());
   const pending = useRef(new Set<string>());
   const sequence = useRef(0);
+  const directorySequence = useRef(0);
   const lease = useRef(0);
   const knownVisible = useRef(new Set<string>());
   const visibilityEpochs = useRef(new Map<string, number>());
@@ -96,7 +103,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
       accept(items, capturedScope); setToday(parisCivilDate());
     } catch (error) {
       if (capturedScope !== scopeRef.current || capturedLease !== lease.current || readSequence !== sequence.current) return;
-      if (lostAccess(error)) { accept([], capturedScope); setEditor(null); setDirectory({ scope: capturedScope, items: [] }); requests.current.clear(); callbacks.current.onDirty?.(false); }
+      if (lostAccess(error)) { accept([], capturedScope); setEditor(null); ++directorySequence.current; setDirectory({ scope: capturedScope, items: [], remembered: [], status: "idle" }); requests.current.clear(); callbacks.current.onDirty?.(false); }
       setMessage(lostAccess(error) ? "L’accès a changé. Les tâches et la saisie privée ont été retirées." : "Actualisation non confirmée. Vérifiez la connexion puis réessayez.");
     } finally { if (capturedScope === scopeRef.current && capturedLease === lease.current && readSequence === sequence.current) setLoading(false); }
   }, [accept, api, permissions.read, scope]);
@@ -105,7 +112,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
     ++lease.current;
     const capturedLease = lease.current;
     queueMicrotask(() => { if (capturedLease === lease.current) void refresh(); });
-    const endLifetime = () => { ++sequence.current; ++lease.current; callbacks.current.onDirty?.(false); };
+    const endLifetime = () => { ++sequence.current; ++directorySequence.current; ++lease.current; callbacks.current.onDirty?.(false); };
     return endLifetime;
   }, [refresh, scope]);
 
@@ -122,11 +129,18 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   }, [refresh]);
 
   const loadDirectory = useCallback(async () => {
-    const capturedScope = scope, capturedLease = lease.current;
-    try { const items = await api.directory(); if (capturedScope === scopeRef.current && capturedLease === lease.current) setDirectory({ scope: capturedScope, items }); }
-    catch (error) { if (capturedScope === scopeRef.current && capturedLease === lease.current) {
-      if (lostAccess(error)) { accept([], capturedScope); setEditor(null); setDirectory({ scope: capturedScope, items: [] }); requests.current.clear(); callbacks.current.onDirty?.(false); }
-      setMessage(lostAccess(error) ? "Vos droits ont changé. La saisie privée a été retirée." : "Annuaire indisponible. La saisie est conservée ; aucun responsable n’a été ajouté.");
+    const capturedScope = scope, capturedLease = lease.current, readSequence = ++directorySequence.current;
+    setDirectory(previous => ({ ...previous, status: "loading" }));
+    try {
+      const items = await api.directory();
+      if (capturedScope !== scopeRef.current || capturedLease !== lease.current || readSequence !== directorySequence.current) return;
+      setDirectory(previous => ({ scope: capturedScope, items, remembered: [...new Map([...previous.remembered, ...items].map(person => [person.userId, person])).values()], status: "ready" }));
+    }
+    catch (error) { if (capturedScope === scopeRef.current && capturedLease === lease.current && readSequence === directorySequence.current) {
+      if (lostAccess(error)) {
+        accept([], capturedScope); setEditor(null); setDirectory({ scope: capturedScope, items: [], remembered: [], status: "idle" }); requests.current.clear(); callbacks.current.onDirty?.(false);
+        setMessage("Vos droits ont changé. La saisie privée a été retirée.");
+      } else setDirectory(previous => ({ ...previous, status: "error" }));
     } }
   }, [accept, api, scope]);
 
@@ -135,7 +149,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
     if (!draft || consumedDraft.current === key || !permissions.contribute) return;
     consumedDraft.current = key;
     const capturedLease = lease.current;
-    queueMicrotask(() => { if (capturedLease === lease.current) { setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null }); callbacks.current.onDraftConsumed?.(); } });
+    queueMicrotask(() => { if (capturedLease === lease.current) { setRecipientQuery(""); setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null }); callbacks.current.onDraftConsumed?.(); } });
     void loadDirectory();
   }, [draft, loadDirectory, permissions.contribute, scope]);
 
@@ -143,7 +157,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
     if (!permissions.contribute || (task && !taskCapabilities(task, userId, permissions).progress)) return;
     try {
       const values = draftForTask(task);
-      setDetailId(null); setMessage("");
+      setDetailId(null); setMessage(""); setRecipientQuery("");
       setEditor({ scope, id: task?.id ?? crypto.randomUUID(), base: task, revision: task?.revision ?? null, draft: values });
       void loadDirectory();
     } catch (error) { setMessage(messageOf(error)); }
@@ -222,7 +236,9 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const editorCapabilities = currentEditor?.base ? taskCapabilities(latest ?? currentEditor.base, userId, permissions) : { fields: permissions.contribute, progress: permissions.contribute, delete: false };
   const editorBusy = Boolean(currentEditor && pendingIds.includes(currentEditor.id));
   const selectedRecipients = currentEditor ? currentEditor.draft.assigneeIds : [];
-  const retainedRecipients = currentEditor?.base?.assignees.filter(person => !recipients.some(candidate => candidate.userId === person.userId)) ?? [];
+  const recipientNeedle = recipientSearch(recipientQuery);
+  const matchingRecipients = recipients.filter(person => recipientSearch([person.label, person.email, person.detail].filter(Boolean).join(" ")).includes(recipientNeedle));
+  const retainedRecipients = [...new Map([...directory.remembered.filter(person => selectedRecipients.includes(person.userId)), ...(currentEditor?.base?.assignees ?? [])].map(person => [person.userId, person])).values()].filter(person => !recipients.some(candidate => candidate.userId === person.userId));
   const leadOptions = links?.leads ?? [], contactOptions = links?.contacts ?? [];
 
   return <section className="taskws" aria-label="Tâches privées" data-task-workspace>
@@ -287,12 +303,17 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
           <label>Priorité<select name="priority" value={currentEditor.draft.priority} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("priority", event.target.value as TaskDraft["priority"])}>{taskPriorities.map(priority => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}</select></label>
           <label className="taskws-full">Avancement<select name="status" value={currentEditor.draft.status} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("status", event.target.value as TaskDraft["status"])}>{taskStatuses.map(status => <option key={status}>{status}</option>)}</select></label>
           <label className="taskws-full">Notes<textarea name="notes" rows={6} maxLength={TASK_NOTE_LIMIT} value={currentEditor.draft.notes} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("notes", event.target.value)} /><small>{currentEditor.draft.notes.length.toLocaleString("fr-FR")} / {TASK_NOTE_LIMIT.toLocaleString("fr-FR")} caractères · Texte commun aux participants autorisés</small></label>
-          <fieldset className="taskws-full" disabled={!editorCapabilities.fields || editorBusy}><legend>Responsables</legend><p className="taskws-help">Comptes actifs de l’organisation disposant de Tâches. Un lecteur consulte ; un contributeur peut avancer la tâche.</p>
-            {recipients.map(person => <label className="taskws-recipient" key={person.userId}><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId} onChange={event => changeDraft("assigneeIds", event.target.checked ? [...selectedRecipients, person.userId] : selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}{person.userId === userId ? " (moi)" : ""}<small>{person.access === "read" ? "Lecture" : "Contribution"}{person.detail ? ` · ${person.detail}` : ""}{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? " · Gestionnaire, participant conservé" : ""}</small></span></label>)}
-            {retainedRecipients.map(person => <label className="taskws-recipient" key={person.userId}><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={!selectedRecipients.includes(person.userId) || (currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId)} onChange={() => changeDraft("assigneeIds", selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}<small>{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Décochez pour retirer explicitement."}</small></span></label>)}
-            {!recipients.length && <p className="taskws-help">Aucun destinataire éligible reçu. Vous pouvez conserver une tâche personnelle.</p>}
+          <fieldset className="taskws-full" disabled={!editorCapabilities.fields || editorBusy} data-task-directory={directory.status}><legend>Responsables</legend><p className="taskws-help">Choisissez directement les comptes actifs de l’organisation disposant de Tâches. Un lecteur consulte ; un contributeur peut avancer la tâche.</p>
+            <label>Rechercher un responsable<input name="recipientSearch" type="search" value={recipientQuery} onChange={event => setRecipientQuery(event.target.value)} placeholder="Nom ou e-mail confirmé" /></label>
+            {directory.status === "loading" && <p role="status">Chargement des personnes éligibles… Votre saisie et vos sélections sont conservées.</p>}
+            {directory.status === "error" && <p role="alert">Annuaire indisponible. Votre saisie et vos sélections sont conservées. Réessayez pour actualiser les personnes éligibles.</p>}
+            <p className="taskws-help" aria-live="polite">{selectedRecipients.length} responsable{selectedRecipients.length > 1 ? "s" : ""} sélectionné{selectedRecipients.length > 1 ? "s" : ""}{recipientNeedle ? ` · ${matchingRecipients.length} résultat${matchingRecipients.length > 1 ? "s" : ""}` : ""}.</p>
+            {matchingRecipients.map(person => <label className="taskws-recipient" key={person.userId} data-task-recipient-id={person.userId} data-task-recipient-kind="eligible"><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId} onChange={event => changeDraft("assigneeIds", event.target.checked ? [...selectedRecipients, person.userId] : selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}{person.userId === userId ? " (moi)" : ""}<small>{person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? " · Gestionnaire, participant conservé" : ""}</small></span></label>)}
+            {retainedRecipients.map(person => <label className="taskws-recipient" key={person.userId} data-task-recipient-id={person.userId} data-task-recipient-kind="retained"><input type="checkbox" checked={selectedRecipients.includes(person.userId)} disabled={!selectedRecipients.includes(person.userId) || (currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId)} onChange={() => changeDraft("assigneeIds", selectedRecipients.filter(id => id !== person.userId))} /><span>{person.label}<small>{currentEditor.base?.createdBy === null && currentEditor.base.managerId === person.userId ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Décochez pour retirer explicitement."}</small></span></label>)}
+            {directory.status === "ready" && !recipients.length && <p role="status" className="taskws-help">Aucun compte éligible. Vous pouvez conserver une tâche personnelle.</p>}
+            {directory.status === "ready" && recipients.length > 0 && !matchingRecipients.length && <p role="status" className="taskws-help">Aucun responsable ne correspond à cette recherche. Les sélections précédentes sont conservées.</p>}
             {!selectedRecipients.length && <p className="taskws-help">Aucun responsable sélectionné : tâche personnelle, visible uniquement par son créateur.</p>}
-            <button type="button" onClick={() => void loadDirectory()}>Actualiser les personnes éligibles</button>
+            <button type="button" disabled={directory.status === "loading"} onClick={() => void loadDirectory()}>{directory.status === "error" ? "Réessayer de charger les responsables" : "Actualiser les personnes éligibles"}</button>
           </fieldset>
           {(leadOptions.length > 0 || currentEditor.draft.leadId) && <label className="taskws-full">Lead lié<select name="leadId" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("leadId", event.target.value)}><option value="">Aucun lead lié</option>{currentEditor.draft.leadId && !leadOptions.some(option => option.id === currentEditor.draft.leadId) && <option value={currentEditor.draft.leadId}>Rattachement conservé · détail indisponible</option>}{leadOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
           {(contactOptions.length > 0 || currentEditor.draft.contactId) && <label className="taskws-full">Contact lié<select name="contactId" value={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("contactId", event.target.value)}><option value="">Aucun contact lié</option>{currentEditor.draft.contactId && !contactOptions.some(option => option.id === currentEditor.draft.contactId) && <option value={currentEditor.draft.contactId}>Rattachement conservé · détail indisponible</option>}{contactOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
@@ -338,7 +359,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
       .taskws-dialog::backdrop { background: rgba(20, 30, 42, .5); }
       .taskws-dialog-heading { flex-wrap: nowrap; align-items: center; margin-bottom: 12px; }
       .taskws-dialog-heading h2 { margin: 0; flex: 1; }
-      .taskws-dialog-heading > button { flex: 0 0 auto; font-size: 20px; }
+      .taskws-dialog .taskws-dialog-heading > button { flex: 0 0 auto; width: auto; font-size: 20px; }
       .taskws-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
       .taskws-full { grid-column: 1 / -1; }
       .taskws-dialog textarea { resize: vertical; min-height: 120px; }
