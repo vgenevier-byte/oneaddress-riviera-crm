@@ -1,0 +1,31 @@
+diff --git a/components/TasksWorkspace.tsx b/components/TasksWorkspace.tsx
+index 0dcfe04..fcf9dc6 100644
+--- a/components/TasksWorkspace.tsx
++++ b/components/TasksWorkspace.tsx
+@@ -25,4 +24,0 @@ type Directory = { scope: string; items: TaskRecipient[]; remembered: TaskRecipi
+-function recipientSearch(value: string) {
+-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").trim();
+-}
+-
+@@ -59 +54,0 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-  const [recipientQuery, setRecipientQuery] = useState("");
+@@ -152 +147 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-    queueMicrotask(() => { if (capturedLease === lease.current) { setRecipientQuery(""); setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null }); callbacks.current.onDraftConsumed?.(); } });
++    queueMicrotask(() => { if (capturedLease === lease.current) { setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null }); callbacks.current.onDraftConsumed?.(); } });
+@@ -160 +155 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-      setDetailId(null); setMessage(""); setRecipientQuery("");
++      setDetailId(null); setMessage("");
+@@ -239,3 +234 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-  const recipientNeedle = recipientSearch(recipientQuery);
+-  const matchingRecipients = recipients.filter(person => recipientSearch([person.label, person.email, person.detail].filter(Boolean).join(" ")).includes(recipientNeedle));
+-  const availableRecipients = matchingRecipients.filter(person => !selectedRecipients.includes(person.userId));
++  const availableRecipients = recipients.filter(person => !selectedRecipients.includes(person.userId));
+@@ -321 +313,0 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-            <label>Rechercher un responsable<input name="recipientSearch" type="search" value={recipientQuery} onChange={event => setRecipientQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} placeholder="Nom ou e-mail confirmé" /></label>
+@@ -324,2 +316,2 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-            <p className="taskws-help" aria-live="polite">{selectedRecipients.length} responsable{selectedRecipients.length > 1 ? "s" : ""} sélectionné{selectedRecipients.length > 1 ? "s" : ""}{recipientNeedle ? ` · ${matchingRecipients.length} résultat${matchingRecipients.length > 1 ? "s" : ""}` : ""}.</p>
+-            <select name="recipientToAdd" aria-label="Ajouter un responsable" className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">Ajouter un responsable</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? " (moi)" : ""} · {person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
++            <p className="taskws-help" aria-live="polite">{selectedRecipients.length} responsable{selectedRecipients.length > 1 ? "s" : ""} sélectionné{selectedRecipients.length > 1 ? "s" : ""}.</p>
++            <select name="recipientToAdd" aria-label="Sélectionner un responsable" className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">Sélectionner un responsable</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? " (moi)" : ""} · {person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
+@@ -332 +323,0 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-            {directory.status === "ready" && recipients.length > 0 && !matchingRecipients.length && <p role="status" className="taskws-help">Aucun responsable ne correspond à cette recherche. Les sélections précédentes sont conservées.</p>}

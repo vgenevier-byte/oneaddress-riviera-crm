@@ -22,10 +22,6 @@ export type TasksWorkspaceProps = {
 type Editor = { scope: string; id: string; base?: Task; draft: TaskDraft; revision: number | null };
 type Directory = { scope: string; items: TaskRecipient[]; remembered: TaskRecipient[]; status: "idle" | "loading" | "ready" | "error" };
 
-function recipientSearch(value: string) {
-  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr-FR").trim();
-}
-
 function messageOf(error: unknown) {
   return error instanceof Error ? error.message : (error as { message?: string })?.message ?? "Opération non confirmée.";
 }
@@ -56,7 +52,6 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   useLayoutEffect(() => { callbacks.current = { onTasksChange, onDirty, onDraftConsumed }; }, [onTasksChange, onDirty, onDraftConsumed]);
   const [collection, setCollection] = useState<{ scope: string; items: Task[] }>({ scope, items: [] });
   const [directory, setDirectory] = useState<Directory>({ scope, items: [], remembered: [], status: "idle" });
-  const [recipientQuery, setRecipientQuery] = useState("");
   const [editor, setEditor] = useState<Editor | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [filters, setFilters] = useState<TaskFilters>({ relation: "related", status: "all", priority: "all", query: "" });
@@ -149,7 +144,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
     if (!draft || consumedDraft.current === key || !permissions.contribute) return;
     consumedDraft.current = key;
     const capturedLease = lease.current;
-    queueMicrotask(() => { if (capturedLease === lease.current) { setRecipientQuery(""); setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null }); callbacks.current.onDraftConsumed?.(); } });
+    queueMicrotask(() => { if (capturedLease === lease.current) { setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null }); callbacks.current.onDraftConsumed?.(); } });
     void loadDirectory();
   }, [draft, loadDirectory, permissions.contribute, scope]);
 
@@ -157,7 +152,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
     if (!permissions.contribute || (task && !taskCapabilities(task, userId, permissions).progress)) return;
     try {
       const values = draftForTask(task);
-      setDetailId(null); setMessage(""); setRecipientQuery("");
+      setDetailId(null); setMessage("");
       setEditor({ scope, id: task?.id ?? crypto.randomUUID(), base: task, revision: task?.revision ?? null, draft: values });
       void loadDirectory();
     } catch (error) { setMessage(messageOf(error)); }
@@ -236,9 +231,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const editorCapabilities = currentEditor?.base ? taskCapabilities(latest ?? currentEditor.base, userId, permissions) : { fields: permissions.contribute, progress: permissions.contribute, delete: false };
   const editorBusy = Boolean(currentEditor && pendingIds.includes(currentEditor.id));
   const selectedRecipients = currentEditor ? currentEditor.draft.assigneeIds : [];
-  const recipientNeedle = recipientSearch(recipientQuery);
-  const matchingRecipients = recipients.filter(person => recipientSearch([person.label, person.email, person.detail].filter(Boolean).join(" ")).includes(recipientNeedle));
-  const availableRecipients = matchingRecipients.filter(person => !selectedRecipients.includes(person.userId));
+  const availableRecipients = recipients.filter(person => !selectedRecipients.includes(person.userId));
   const recipientDetails = new Map([...directory.remembered, ...(currentEditor?.base?.assignees ?? []), ...recipients].map(person => [person.userId, person]));
   const requiredManagerId = currentEditor?.base?.createdBy === null ? currentEditor.base.managerId : null;
   const leadOptions = links?.leads ?? [], contactOptions = links?.contacts ?? [];
@@ -318,18 +311,16 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
           <label className="taskws-full">Avancement<select name="status" value={currentEditor.draft.status} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("status", event.target.value as TaskDraft["status"])}>{taskStatuses.map(status => <option key={status}>{status}</option>)}</select></label>
           <label className="taskws-full">Notes<textarea name="notes" rows={6} maxLength={TASK_NOTE_LIMIT} value={currentEditor.draft.notes} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("notes", event.target.value)} /><small>{currentEditor.draft.notes.length.toLocaleString("fr-FR")} / {TASK_NOTE_LIMIT.toLocaleString("fr-FR")} caractères · Texte commun aux participants autorisés</small></label>
           <fieldset className="taskws-full" disabled={!editorCapabilities.fields || editorBusy} data-task-directory={directory.status}><legend>Responsables</legend><p className="taskws-help">Choisissez directement les comptes actifs de l’organisation disposant de Tâches. Un lecteur consulte ; un contributeur peut avancer la tâche.</p>
-            <label>Rechercher un responsable<input name="recipientSearch" type="search" value={recipientQuery} onChange={event => setRecipientQuery(event.target.value)} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} placeholder="Nom ou e-mail confirmé" /></label>
             {directory.status === "loading" && <p role="status">Chargement des personnes éligibles… Votre saisie et vos sélections sont conservées.</p>}
             {directory.status === "error" && <p role="alert">Annuaire indisponible. Votre saisie et vos sélections sont conservées. Réessayez pour actualiser les personnes éligibles.</p>}
-            <p className="taskws-help" aria-live="polite">{selectedRecipients.length} responsable{selectedRecipients.length > 1 ? "s" : ""} sélectionné{selectedRecipients.length > 1 ? "s" : ""}{recipientNeedle ? ` · ${matchingRecipients.length} résultat${matchingRecipients.length > 1 ? "s" : ""}` : ""}.</p>
-            <select name="recipientToAdd" aria-label="Ajouter un responsable" className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">Ajouter un responsable</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? " (moi)" : ""} · {person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
+            <p className="taskws-help" aria-live="polite">{selectedRecipients.length} responsable{selectedRecipients.length > 1 ? "s" : ""} sélectionné{selectedRecipients.length > 1 ? "s" : ""}.</p>
+            <select name="recipientToAdd" aria-label="Sélectionner un responsable" className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">Sélectionner un responsable</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? " (moi)" : ""} · {person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
             {selectedRecipients.length > 0 && <ul className="taskws-recipients" aria-label="Responsables sélectionnés">{selectedRecipients.map(id => {
               const person = recipientDetails.get(id), label = person?.label ?? "Responsable indisponible";
               const retained = !recipients.some(candidate => candidate.userId === id), required = id === requiredManagerId;
               return <li className="taskws-recipient" key={id} data-task-recipient-id={id} data-task-recipient-kind={retained ? "retained" : "eligible"}><span>{label}{id === userId ? " (moi)" : ""}<small>{retained ? required ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Retirez-la explicitement si nécessaire." : `${person?.access === "read" ? "Lecture" : "Contribution"}${required ? " · Gestionnaire, participant conservé" : ""}`}{person?.email ? ` · ${person.email}` : ""}{person?.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</small></span><button type="button" aria-label={`Retirer ${label}`} disabled={required} onClick={() => removeRecipient(id)}>×</button></li>;
             })}</ul>}
             {directory.status === "ready" && !recipients.length && <p role="status" className="taskws-help">Aucun compte éligible. Vous pouvez conserver une tâche personnelle.</p>}
-            {directory.status === "ready" && recipients.length > 0 && !matchingRecipients.length && <p role="status" className="taskws-help">Aucun responsable ne correspond à cette recherche. Les sélections précédentes sont conservées.</p>}
             {!selectedRecipients.length && <p className="taskws-help">Aucun responsable sélectionné : tâche personnelle, visible uniquement par son créateur.</p>}
             <button type="button" disabled={directory.status === "loading"} onClick={() => void loadDirectory()}>{directory.status === "error" ? "Réessayer de charger les responsables" : "Actualiser les personnes éligibles"}</button>
           </fieldset>

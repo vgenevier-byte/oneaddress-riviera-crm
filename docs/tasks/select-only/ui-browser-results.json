@@ -1,0 +1,402 @@
+{
+  "candidateBaseSHA": "bfc1ef853afe215e420fe5be3c7ab334964b492a",
+  "componentSHA256": "bcc4957728156b05c930405ab99ee73c0cdb66b1fedae1e0e6a01b8a6b241108",
+  "sourceManifest": "ui-source-manifest.json",
+  "results": [
+    {
+      "name": "Chromium desktop 1440: direct complete UUID select, self/homonyms/email labels, multi-add/remove, no editor search, explicit simulated confirmation, reload, search unchanged, loading/503/retry/empty preservation",
+      "passed": true
+    },
+    {
+      "name": "Chromium mobile 390 touch emulation: same direct select journey, wrapped chips and no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "Inactive existing assignment is retained until explicit removal; historical manager remains selected and non-removable",
+      "passed": true
+    },
+    {
+      "name": "Conflict keeps local notes and UUID chips; explicit revision acceptance and save required",
+      "passed": true
+    },
+    {
+      "name": "WebKit mobile 390 touch emulation: source-identical select journey and preserved chips/draft",
+      "passed": true
+    }
+  ],
+  "fictionalFixture": true,
+  "simulatedHTTPConfirmation": true,
+  "statePersistence": "In-memory Playwright route closure across page reload",
+  "actualAuth": false,
+  "actualRPC": false,
+  "actualDatabase": false,
+  "accountsCreated": 0,
+  "businessWrites": 0,
+  "productionWrites": 0,
+  "externalCalls": 0,
+  "physicalDevice": false,
+  "isolatedFixtureLayout": true,
+  "audits": [
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "4fc6f283-bd7a-4e75-90ed-e825d2537536",
+          "id": "df0aa8bb-5db0-4bcf-af2d-78150ee3140c",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Note fictive ligne 1\nLigne 2 conservée",
+            "status": "À faire",
+            "title": "Sélection directe chromium 1440",
+            "dueDate": "2026-12-11",
+            "priority": "urgent",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000003"
+            ],
+            "leadId": "",
+            "contactId": ""
+          }
+        },
+        {
+          "requestId": "35257922-f067-47e0-82f1-148c6b007c48",
+          "id": "df0aa8bb-5db0-4bcf-af2d-78150ee3140c",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Note fictive ligne 1\nLigne 2 conservée\nÉdition explicite conservée"
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "c07a5802-8724-4cd9-911a-f15ed6a0b9ff",
+          "id": "a0fbc08f-6b1e-4f02-8b2a-826bdbd46620",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Note fictive ligne 1\nLigne 2 conservée",
+            "status": "À faire",
+            "title": "Sélection directe chromium 390",
+            "dueDate": "2026-12-11",
+            "priority": "urgent",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000003"
+            ],
+            "leadId": "",
+            "contactId": ""
+          }
+        },
+        {
+          "requestId": "581fed88-694b-499f-81a0-a5f5faaa7658",
+          "id": "a0fbc08f-6b1e-4f02-8b2a-826bdbd46620",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Note fictive ligne 1\nLigne 2 conservée\nÉdition explicite conservée"
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "872a5ac9-6f83-419b-81b2-1209138297b1",
+          "id": "00000000-0000-4000-8000-000000000103",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Notes fictives, affectation inactive gardée"
+          }
+        },
+        {
+          "requestId": "e6bd28f4-423e-4c7d-af04-583741c898d3",
+          "id": "00000000-0000-4000-8000-000000000103",
+          "expectedRevision": 2,
+          "patch": {
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000001"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "48edcd06-0ed0-4ddf-a0b7-8e4cc1f0858c",
+          "id": "00000000-0000-4000-8000-000000000101",
+          "expectedRevision": 2,
+          "patch": {
+            "notes": "Notes privées fictives gardées",
+            "title": "Titre privé fictif en conflit",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000002",
+              "00000000-0000-4000-8000-000000000003"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "d5f29b97-c5e6-4ff7-9790-a8b3893804ad",
+          "id": "0624dd91-b24b-4b1f-92d0-8feaa43a5347",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Note fictive ligne 1\nLigne 2 conservée",
+            "status": "À faire",
+            "title": "Sélection directe webkit 390",
+            "dueDate": "2026-12-11",
+            "priority": "urgent",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000003"
+            ],
+            "leadId": "",
+            "contactId": ""
+          }
+        },
+        {
+          "requestId": "f327115c-3749-4744-92fb-0c9e8b4774a0",
+          "id": "0624dd91-b24b-4b1f-92d0-8feaa43a5347",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Note fictive ligne 1\nLigne 2 conservée\nÉdition explicite conservée"
+          }
+        }
+      ]
+    }
+  ]
+}

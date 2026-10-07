@@ -1,0 +1,51 @@
+{
+  "status": "ready",
+  "directory": "/var/folders/mh/cdb8c40d4jq3g9_g6l04wtzc0000gn/T/oar-tasks-select-only-ui-PTqU13",
+  "sourceRoot": "/private/tmp/oar-tasks-select-only-candidate",
+  "candidateBaseSHA": "bfc1ef853afe215e420fe5be3c7ab334964b492a",
+  "app": "http://127.0.0.1:3201",
+  "sourceFiles": [
+    {
+      "path": "components/TasksWorkspace.tsx",
+      "sha256": "bcc4957728156b05c930405ab99ee73c0cdb66b1fedae1e0e6a01b8a6b241108"
+    },
+    {
+      "path": "lib/tasks/types.ts",
+      "sha256": "6531a86f13801db280a5ab08ad63c07592a01b7e54f9287d2414d81efe06e47b"
+    },
+    {
+      "path": "lib/tasks/domain.ts",
+      "sha256": "7c5b9824a2e747a3430f8e8459cd5f322bf8091af226db78e7b53206ae75e7d8"
+    },
+    {
+      "path": "package.json",
+      "sha256": "98066298e6312d811f93de740cccdc3746123bb036fadc5b76e4e12975d57e66"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "e53920f4b77ab7b7486947e0e80fc8005192acaecf48f06d6680a08526316058"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "8c1e09ece2f9b62f91417b520d3265c6dd02030bff6b44e29cf8a307570715a3"
+    },
+    {
+      "path": "next.config.mjs",
+      "sha256": "10f3416af7a0a92f59c4d283113624e9c286f645c6155e91c5a381d512feb9ee"
+    }
+  ],
+  "fixtureOnlyFiles": [
+    "app/layout.tsx",
+    "app/select-demo/page.tsx",
+    "select-only-network-guard.cjs"
+  ],
+  "productionComponentModified": false,
+  "actualAuth": false,
+  "actualRPC": false,
+  "actualDatabase": false,
+  "accountsCreated": 0,
+  "businessWrites": 0,
+  "simulatedHTTPConfirmation": true,
+  "externalCalls": 0,
+  "serverPID": 96916
+}
