@@ -30,6 +30,7 @@ import Image from "next/image";
 
 import { isCompletedTaskStatus } from "@/lib/taskMaintenance";
 import TasksWorkspace from "./TasksWorkspace";
+import { taskContactOptions } from "@/lib/tasks/contactOptions";
 import { useTaskApi, useTaskProjection, taskPermissions, taskForBusinessView } from "@/lib/tasks/client";
 import { parisCivilDate, isCivilDate, TaskRequestLedger, effectiveTaskLeadId } from "@/lib/tasks/domain";
 import { crmCache } from "@/lib/access/crmCache";
@@ -9083,7 +9084,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "tasks" && (
-          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={{ leads: data.leads.map(lead => ({ id: lead.id, label: `${lead.category} · ${lead.contactName}` })), contacts: data.contacts.map(contact => ({ id: contact.id, label: contact.name })) }} />
+          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={{ leads: data.leads.map(lead => ({ id: lead.id, label: `${lead.category} · ${lead.contactName}` })), contacts: taskContactOptions(readable(access, "contacts") ? data.contacts : []) }} />
         )}
       </section>
 

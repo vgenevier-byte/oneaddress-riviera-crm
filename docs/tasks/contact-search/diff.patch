@@ -1,0 +1,577 @@
+diff --git a/components/CRMApp.tsx b/components/CRMApp.tsx
+index 8950812..7a33ccd 100644
+--- a/components/CRMApp.tsx
++++ b/components/CRMApp.tsx
+@@ -32,0 +33 @@ import TasksWorkspace from "./TasksWorkspace";
++import { taskContactOptions } from "@/lib/tasks/contactOptions";
+@@ -9086 +9087 @@ function createQuoteDraftFromLead(lead: Lead) {
+-          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={{ leads: data.leads.map(lead => ({ id: lead.id, label: `${lead.category} · ${lead.contactName}` })), contacts: data.contacts.map(contact => ({ id: contact.id, label: contact.name })) }} />
++          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={{ leads: data.leads.map(lead => ({ id: lead.id, label: `${lead.category} · ${lead.contactName}` })), contacts: taskContactOptions(readable(access, "contacts") ? data.contacts : []) }} />
+diff --git a/components/ModuleWorkspace.tsx b/components/ModuleWorkspace.tsx
+index 15df7aa..342588e 100644
+--- a/components/ModuleWorkspace.tsx
++++ b/components/ModuleWorkspace.tsx
+@@ -17,0 +18 @@ import {TaskRequestLedger} from '@/lib/tasks/domain';
++import {taskContactOptions} from '@/lib/tasks/contactOptions';
+@@ -21 +22 @@ type Projection={revision:string;collections:Record<string,Row[]|number>};
+-const dependencies:Partial<Record<ModuleId,ModuleId[]>>={properties:['leads'],vehicles:['leads'],boats:['leads'],contacts:['leads','tasks'],tasks:['leads'],leads:['contacts','properties','vehicles','boats','tasks','quotes'],quotes:['contacts','leads'],bookings:['contacts'],vendorQuotes:['contacts','vendorInvoices'],vendorInvoices:['contacts','vendorQuotes'],houseTracking:['contacts'],planning:['contacts','properties','vehicles','boats','leads']};
++const dependencies:Partial<Record<ModuleId,ModuleId[]>>={properties:['leads'],vehicles:['leads'],boats:['leads'],contacts:['leads','tasks'],tasks:['leads','contacts'],leads:['contacts','properties','vehicles','boats','tasks','quotes'],quotes:['contacts','leads'],bookings:['contacts'],vendorQuotes:['contacts','vendorInvoices'],vendorInvoices:['contacts','vendorQuotes'],houseTracking:['contacts'],planning:['contacts','properties','vehicles','boats','leads']};
+@@ -68 +69 @@ export default function ModuleWorkspace({module,access,userId,onDirty,draft,onDr
+- {module==='tasks'&&<TasksWorkspace sessionKey={JSON.stringify(access)} userId={userId} api={taskApi} permissions={taskRights} onTasksChange={tasksProjection.accept} onDirty={onDirty} onDraftConsumed={onDraftConsumed} draft={draft} links={{leads:rows('leads').map(row=>({id:row.id,label:`${row.category} · ${row.contactName}`})),contacts:rows('contacts').map(row=>({id:row.id,label:row.name}))}}/>}
++ {module==='tasks'&&<TasksWorkspace sessionKey={JSON.stringify(access)} userId={userId} api={taskApi} permissions={taskRights} onTasksChange={tasksProjection.accept} onDirty={onDirty} onDraftConsumed={onDraftConsumed} draft={draft} links={{leads:rows('leads').map(row=>({id:row.id,label:`${row.category} · ${row.contactName}`})),contacts:taskContactOptions(readable(access,'contacts')?rows('contacts'):[])}}/>}
+diff --git a/components/TaskContactPicker.tsx b/components/TaskContactPicker.tsx
+new file mode 100644
+index 0000000..e68d132
+--- /dev/null
++++ b/components/TaskContactPicker.tsx
+@@ -0,0 +1,114 @@
++"use client";
++
++import { useEffect, useId, useState, type KeyboardEvent } from "react";
++import { matchesTaskContact, taskContactLabel, type TaskContactOption } from "@/lib/tasks/contactOptions";
++
++type Props = {
++  options: TaskContactOption[];
++  contactId: string;
++  onChange: (contactId: string) => void;
++  disabled?: boolean;
++};
++
++function contactInformation(contact: TaskContactOption) {
++  const label = taskContactLabel(contact);
++  return [contact.company?.trim(), contact.email?.trim()].filter(value => value && value !== label).join(" · ");
++}
++
++/** The text is a local search only. A link changes only after an explicit choice or removal. */
++export default function TaskContactPicker({ options, contactId, onChange, disabled = false }: Props) {
++  const inputId = useId();
++  const listId = `${inputId}-results`;
++  const [query, setQuery] = useState("");
++  const [open, setOpen] = useState(false);
++  const [activeId, setActiveId] = useState("");
++  const selected = options.find(contact => contact.id === contactId);
++  const matches = options.filter(contact => matchesTaskContact(contact, query));
++  const listVisible = !disabled && open && Boolean(query.trim());
++  const activeIndex = matches.findIndex(contact => contact.id === activeId);
++
++  useEffect(() => {
++    if (listVisible && activeIndex >= 0) document.getElementById(`${listId}-option-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
++  }, [listVisible, activeIndex, listId]);
++
++  function choose(id: string) {
++    // Recheck the current readable options: a revoked/stale result cannot be selected.
++    if (disabled || !options.some(contact => contact.id === id)) return;
++    onChange(id);
++    setQuery("");
++    setOpen(false);
++    setActiveId("");
++  }
++
++  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
++    if (event.nativeEvent.isComposing) return;
++    if (event.key === "Enter") {
++      event.preventDefault();
++      event.stopPropagation();
++      if (!disabled && listVisible && activeIndex >= 0) choose(matches[activeIndex].id);
++      return;
++    }
++    if (disabled || !query.trim() || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
++    event.preventDefault();
++    setOpen(true);
++    if (!matches.length) return;
++    const nextIndex = event.key === "ArrowDown"
++      ? (activeIndex + 1) % matches.length
++      : (activeIndex < 0 ? matches.length - 1 : (activeIndex - 1 + matches.length) % matches.length);
++    setActiveId(matches[nextIndex].id);
++  }
++
++  return <div className="task-contact-picker" onBlur={event => {
++    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) { setOpen(false); setActiveId(""); }
++  }} onKeyDownCapture={event => {
++    if (event.key === "Escape" && !event.nativeEvent.isComposing && listVisible) {
++      // Cancel the native dialog's Escape action while its suggestions are open.
++      event.preventDefault(); event.stopPropagation(); setOpen(false); setActiveId("");
++    }
++  }}>
++    <label htmlFor={inputId}>Contact lié — facultatif</label>
++    {contactId && <div className="task-contact-selected">
++      <div className="task-contact-identity">
++        <strong>{selected ? taskContactLabel(selected) : "Rattachement conservé · détail indisponible"}</strong>
++        {selected && contactInformation(selected) && <small>{contactInformation(selected)}</small>}
++      </div>
++      <button type="button" disabled={disabled} onClick={() => {
++        if (disabled) return;
++        onChange(""); setQuery(""); setOpen(false); setActiveId("");
++      }}>Retirer le contact lié</button>
++    </div>}
++    <input id={inputId} type="search" role="combobox" aria-autocomplete="list" aria-expanded={listVisible}
++      aria-controls={listId} aria-activedescendant={listVisible && activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined}
++      autoComplete="off" placeholder="Rechercher un contact par prénom ou nom…" value={query} disabled={disabled}
++      onFocus={() => { if (!disabled && query.trim()) setOpen(true); }}
++      onChange={event => { if (!disabled) { setQuery(event.target.value); setOpen(Boolean(event.target.value.trim())); setActiveId(""); } }}
++      onKeyDown={handleKeyDown} />
++    {listVisible && <div className="task-contact-results">
++      <div id={listId} role="listbox" aria-label="Contacts correspondants">
++        {matches.map((contact, index) => <button key={contact.id} id={`${listId}-option-${index}`} type="button" role="option"
++          aria-selected={index === activeIndex} tabIndex={-1} disabled={disabled}
++          onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActiveId(contact.id)} onClick={() => choose(contact.id)}>
++          <strong>{taskContactLabel(contact)}</strong>
++          {contactInformation(contact) && <small>{contactInformation(contact)}</small>}
++        </button>)}
++      </div>
++      {!matches.length && <p role="status">Aucun contact correspondant</p>}
++    </div>}
++    <style jsx>{`
++      .task-contact-picker { display: flex; flex-direction: column; grid-column: 1 / -1; gap: 6px; min-width: 0; max-width: 100%; }
++      .task-contact-picker label { font-size: 14px; font-weight: 500; }
++      .task-contact-picker input { box-sizing: border-box; width: 100%; max-width: 100%; min-width: 0; }
++      .task-contact-selected { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px; border: 1px solid #dce1e7; border-radius: 8px; background: #f4f6f8; }
++      .task-contact-identity { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; }
++      .task-contact-identity strong, .task-contact-identity small, .task-contact-results strong, .task-contact-results small { overflow-wrap: anywhere; }
++      .task-contact-selected button { flex: 0 1 auto; font-size: 13px; }
++      .task-contact-results { max-height: min(240px, 40vh); overflow-y: auto; overflow-x: hidden; border: 1px solid #cdd1d8; border-radius: 8px; background: #fff; }
++      .task-contact-results [role="listbox"] { display: flex; flex-direction: column; }
++      .task-contact-results button { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; box-sizing: border-box; width: 100%; min-height: 44px; margin: 0; border: 0; border-bottom: 1px solid #e7e9ec; border-radius: 0; padding: 10px; background: #fff; text-align: left; white-space: normal; }
++      .task-contact-results button:last-child { border-bottom: 0; }
++      .task-contact-results button[aria-selected="true"] { background: #edf3fb; outline: 2px solid #547ec2; outline-offset: -2px; }
++      .task-contact-results small, .task-contact-identity small { color: #687283; font-size: 12px; font-weight: 400; }
++      .task-contact-results p { margin: 0; padding: 12px; color: #687283; font-size: 13px; }
++    `}</style>
++  </div>;
++}
+diff --git a/components/TasksWorkspace.tsx b/components/TasksWorkspace.tsx
+index fcf9dc6..0163e2e 100644
+--- a/components/TasksWorkspace.tsx
++++ b/components/TasksWorkspace.tsx
+@@ -5,0 +6,2 @@ import { taskPriorities, taskStatuses, type Task, type TaskApi, type TaskDraft,
++import { taskContactLabel, type TaskContactOption } from "@/lib/tasks/contactOptions";
++import TaskContactPicker from "./TaskContactPicker";
+@@ -19 +21 @@ export type TasksWorkspaceProps = {
+-  links?: { leads?: TaskLinkOption[]; contacts?: TaskLinkOption[] };
++  links?: { leads?: TaskLinkOption[]; contacts?: TaskContactOption[] };
+@@ -237,0 +240 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
++  const detailContact = detail?.contactId ? contactOptions.find(option => option.id === detail.contactId) : undefined;
+@@ -297 +300 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-        {detail.contactId && contactOptions.some(option => option.id === detail.contactId) && <p>Contact lié : {contactOptions.find(option => option.id === detail.contactId)?.label}</p>}
++        {detail.contactId && <p>Contact lié : {detailContact ? taskContactLabel(detailContact) : "Rattachement conservé · détail indisponible"}</p>}
+@@ -328 +331 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
+-          {(contactOptions.length > 0 || currentEditor.draft.contactId) && <label className="taskws-full">Contact lié<select name="contactId" value={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("contactId", event.target.value)}><option value="">Aucun contact lié</option>{currentEditor.draft.contactId && !contactOptions.some(option => option.id === currentEditor.draft.contactId) && <option value={currentEditor.draft.contactId}>Rattachement conservé · détail indisponible</option>}{contactOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
++          <TaskContactPicker key={currentEditor.id} options={contactOptions} contactId={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={id => changeDraft("contactId", id)} />
+diff --git a/lib/tasks/contactOptions.ts b/lib/tasks/contactOptions.ts
+new file mode 100644
+index 0000000..59f9fd9
+--- /dev/null
++++ b/lib/tasks/contactOptions.ts
+@@ -0,0 +1,37 @@
++/** Contact references come from the caller's authorized Contacts projection. */
++export type TaskContactOption = {
++  id: string;
++  firstName?: string;
++  name?: string;
++  company?: string;
++  email?: string;
++};
++
++export function taskContactLabel(contact: TaskContactOption): string {
++  return [contact.firstName, contact.name].filter(value => value?.trim()).join(" ") || (contact.company?.trim() ? contact.company : "Contact sans nom");
++}
++
++function normalizedContactSearch(value: string): string {
++  return value.normalize("NFKD").replace(/\p{M}+/gu, "").toLocaleLowerCase("fr").trim().replace(/\s+/gu, " ");
++}
++
++export function matchesTaskContact(contact: TaskContactOption, query: string): boolean {
++  const names = [contact.firstName, contact.name].filter(value => value?.trim()).join(" ");
++  const searchable = normalizedContactSearch(names || contact.company || "");
++  return normalizedContactSearch(query).split(" ").filter(Boolean).every(token => searchable.includes(token));
++}
++
++/** Never complete a restricted reference by reading a global CRM payload. */
++export function taskContactOptions(rows: unknown): TaskContactOption[] {
++  if (!Array.isArray(rows)) return [];
++  return rows.flatMap((value: unknown) => {
++    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
++    const row = value as Record<string, unknown>;
++    if (typeof row.id !== "string" || !row.id) return [];
++    const option: TaskContactOption = { id: row.id };
++    for (const [field, source] of [["firstName", "firstName"], ["name", "name"], ["company", "companyName"], ["email", "email"]] as const) {
++      if (typeof row[source] === "string" && row[source]) option[field] = row[source];
++    }
++    return [option];
++  });
++}
+diff --git a/tests/tasks/contact-search-browser.mjs b/tests/tasks/contact-search-browser.mjs
+new file mode 100644
+index 0000000..aaa4c69
+--- /dev/null
++++ b/tests/tasks/contact-search-browser.mjs
+@@ -0,0 +1,205 @@
++/** Actual candidate components with fictional intercepted HTTP replies only. */
++import assert from 'node:assert/strict';
++import { createHash } from 'node:crypto';
++import { createRequire } from 'node:module';
++import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
++import { join, resolve } from 'node:path';
++
++assert.equal(process.env.TASKS_CONTACT_SEARCH_ACK, 'TASKS_UI_FICTION_ONLY');
++const sourceRoot = resolve(process.env.TASKS_CONTACT_SEARCH_SOURCE || process.cwd());
++assert.ok(sourceRoot.startsWith('/private/tmp/'));
++const output = resolve(process.env.TASKS_CONTACT_SEARCH_OUTPUT || join(sourceRoot, 'docs/tasks/contact-search'));
++mkdirSync(output, { recursive: true });
++const manifest = JSON.parse(readFileSync(join(output, 'ui-source-manifest.json'), 'utf8'));
++assert.equal(manifest.status, 'ready'); assert.equal(manifest.sourceRoot, sourceRoot);
++assert.equal(manifest.app, 'http://127.0.0.1:3202');
++assert.equal(manifest.candidateBaseSHA, '8136406ae8b38c0c43c3322d4b1d88983e2cb9cc');
++const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
++for (const entry of manifest.sourceFiles) {
++  assert.equal(hash(join(sourceRoot, entry.path)), entry.sha256, 'Candidate hash: ' + entry.path);
++  assert.equal(hash(join(manifest.directory, entry.path)), entry.sha256, 'Served hash: ' + entry.path);
++}
++for (const entry of manifest.supportingSourceFiles) assert.equal(hash(join(sourceRoot, entry.path)), entry.sha256, 'Supporting candidate hash: ' + entry.path);
++for (const entry of manifest.fixtureOnlyFiles) assert.equal(hash(join(manifest.directory, entry.path)), entry.sha256, 'Fixture hash: ' + entry.path);
++const require = createRequire(import.meta.url);
++const { chromium, webkit } = require(process.env.PLAYWRIGHT_MODULE || '/Users/vg/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
++const id = number => '00000000-0000-4000-8000-' + String(number).padStart(12, '0');
++const people = {
++  self: { userId: id(1), label: 'Léa Créatrice Fictive', email: 'lea@example.invalid', access: 'contribute' },
++  a: { userId: id(2), label: 'Élodie Responsable Fictive', email: 'elodie.a@example.invalid', access: 'contribute' },
++  b: { userId: id(3), label: 'Élodie Responsable Fictive', email: 'elodie.b@example.invalid', access: 'read' },
++};
++const contacts = [
++  { id: 'contact-clement-a-fictional', firstName: 'Clément', name: 'Minodier', companyName: 'Entreprise A fictive', email: 'clement.a@example.invalid' },
++  { id: 'contact-clement-b-fictional', firstName: 'Clément', name: 'Minodier', companyName: 'Entreprise B fictive', email: 'clement.b@example.invalid' },
++  { id: 'contact-compound-fictional', firstName: 'Anne-Marie', name: 'De La Résidence', companyName: 'Société composée fictive' },
++  { id: 'contact-surname-fictional', name: 'Dùpont' },
++  { id: 'contact-firstname-fictional', firstName: 'Élodie' },
++  { id: 'contact-company-fictional', firstName: ' \t ', name: '   ', companyName: 'Société Riviera fictive' },
++  { id: 'contact-unnamed-fictional', email: 'unnamed@example.invalid' },
++  { id: 'contact-other-fictional', firstName: 'Nora', name: 'Autre Fictive' },
++];
++const stamp = '2026-10-07T12:00:00.000Z';
++const task = (number, title, extras = {}) => ({ id: id(number), title, status: 'À faire', notes: '', dueDate: '', priority: 'normal', createdBy: people.self.userId, createdByLabel: people.self.label, createdAt: stamp, updatedAt: stamp, revision: 1, assignees: [], ...extras });
++const results = [], sessions = [];
++const resultFile = join(output, 'ui-browser-results.json');
++function save() {
++  writeFileSync(resultFile, JSON.stringify({ candidateBaseSHA: manifest.candidateBaseSHA, sourceManifest: 'ui-source-manifest.json', results, fictionalFixture: true, simulatedHTTPConfirmation: true, statePersistence: 'In-memory Playwright route closure across page reload', actualAuth: false, actualRPC: false, actualDatabase: false, accountsCreated: 0, businessWrites: 0, productionWrites: 0, externalCalls: 0, physicalDevice: false, isolatedFixtureLayout: true, integratedCRMPageRendered: false, audits: sessions.map(session => ({ engine: session.engine, width: session.width, ...session.audit })) }, null, 2) + '\n');
++}
++async function check(name, fn) {
++  try { await fn(); results.push({ name, passed: true }); console.log('PASS ' + name); }
++  catch (error) { results.push({ name, passed: false, error: error.message }); process.exitCode = 1; console.log('FAIL ' + name + ': ' + error.message); }
++  finally { save(); }
++}
++const clone = value => JSON.parse(JSON.stringify(value));
++async function until(fn, label) { for (let attempt = 0; attempt < 100; attempt++) { if (await fn()) return; await new Promise(done => setTimeout(done, 50)); } throw new Error(label); }
++function deferred() { let release; const promise = new Promise(done => { release = done; }); return { promise, release }; }
++async function open(browser, engine, width) {
++  const context = await browser.newContext({ viewport: { width, height: 900 }, hasTouch: width === 390, locale: 'fr-FR', timezoneId: 'Europe/Paris', serviceWorkers: 'block' });
++  const state = { tasks: [task(101, 'Dossier Alpha Fictif', { notes: 'Texte de recherche gardé' }), task(102, 'Dossier Beta Fictif')], directory: [people.self, people.a, people.b], contacts: clone(contacts), nextMutation: null, nextDirectory: null };
++  const audit = { blocked: [], pageErrors: [], consoleErrors: [], expectedHTTPFailures: [], fixtureRequests: [], mutations: [] };
++  const session = { context, engine, width, state, audit }; sessions.push(session);
++  await context.route('**/*', async route => {
++    const url = new URL(route.request().url());
++    if (url.origin !== manifest.app) { audit.blocked.push(url.origin + url.pathname); return route.abort(); }
++    if (!url.pathname.startsWith('/__task_fixture/')) return route.continue();
++    audit.fixtureRequests.push({ method: route.request().method(), path: url.pathname });
++    const reply = (body, status = 200) => { if (status >= 400) audit.expectedHTTPFailures.push({ path: url.pathname, status }); return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) }); };
++    if (url.pathname === '/__task_fixture/list') return reply(clone(state.tasks));
++    if (url.pathname === '/__task_fixture/contacts') return reply(clone(state.contacts));
++    if (url.pathname === '/__task_fixture/directory') {
++      const mode = state.nextDirectory; state.nextDirectory = null;
++      if (mode?.kind === 'error') return reply({ message: 'Simulated UI directory interruption' }, 503);
++      return reply(clone(state.directory));
++    }
++    if (url.pathname === '/__task_fixture/mutate') {
++      const request = route.request().postDataJSON(); audit.mutations.push(clone(request));
++      const mode = state.nextMutation; state.nextMutation = null;
++      if (mode?.arrived) mode.arrived.release(); if (mode?.gate) await mode.gate.promise;
++      if (mode?.kind === 'error') return reply({ message: 'network simulated fictional save interruption' }, 503);
++      const previous = state.tasks.find(item => item.id === request.id);
++      if (previous && request.expectedRevision !== previous.revision) return reply({ message: 'revision_conflict' }, 409);
++      if (request.delete) { state.tasks = state.tasks.filter(item => item.id !== request.id); return reply(null); }
++      const confirmed = { ...(previous || task(999, '')), ...request.patch, id: request.id, revision: previous ? previous.revision + 1 : 1, updatedAt: stamp };
++      if ('assigneeIds' in request.patch) confirmed.assignees = request.patch.assigneeIds.map(userId => {
++        const selected = state.directory.find(person => person.userId === userId) || previous?.assignees.find(person => person.userId === userId);
++        assert.ok(selected, 'Fictional fixture recipient exists'); return { ...selected, active: state.directory.some(person => person.userId === userId) };
++      });
++      delete confirmed.assigneeIds;
++      state.tasks = state.tasks.filter(item => item.id !== request.id).concat(confirmed); return reply(clone(confirmed));
++    }
++    return reply({ message: 'Unknown UI fixture endpoint' }, 404);
++  });
++  const page = await context.newPage(); session.page = page;
++  page.on('pageerror', error => audit.pageErrors.push(error.message));
++  page.on('console', message => { if (message.type() === 'error' && !/503 \(Service Unavailable\)|409 \(Conflict\)/.test(message.text())) audit.consoleErrors.push(message.text()); });
++  await page.goto(manifest.app + '/contact-demo'); await page.locator('[data-task-workspace]').waitFor();
++  await page.locator('[data-fixture-contacts-state=ready]').waitFor(); await card(page, id(101)).waitFor(); return session;
++}
++const card = (page, uuid) => page.locator(`[data-task-id="${uuid}"]`);
++const contactInput = dialog => dialog.getByRole('combobox', { name: 'Contact lié — facultatif', exact: true });
++const contactOptions = dialog => dialog.getByRole('listbox', { name: 'Contacts correspondants', exact: true }).getByRole('option');
++const chosenContact = dialog => dialog.locator('.task-contact-selected');
++const responsibleSelect = dialog => dialog.getByRole('combobox', { name: 'Sélectionner un responsable', exact: true });
++async function begin(page, title) { await page.getByRole('button', { name: 'Ajouter une tâche', exact: true }).click(); const dialog = page.getByRole('dialog', { name: 'Ajouter une tâche', exact: true }); await dialog.locator('[name=title]').fill(title); await dialog.locator('[data-task-directory=ready]').waitFor(); return dialog; }
++async function queryOptions(dialog, query, expectedNames) {
++  await contactInput(dialog).fill(query); await until(async () => (await contactInput(dialog).getAttribute('aria-expanded')) === 'true', 'Contact suggestions opened'); await until(async () => (await contactOptions(dialog).count()) === expectedNames.length, 'Contact result count for ' + query);
++  const texts = await contactOptions(dialog).allTextContents(); for (const name of expectedNames) assert.ok(texts.some(text => text.includes(name)), query + ' result ' + name); return texts;
++}
++async function pickContact(dialog, query, distinction) { await contactInput(dialog).fill(query); const option = contactOptions(dialog).filter({ hasText: distinction }); assert.equal(await option.count(), 1, 'Explicit distinct contact result'); await option.click(); await chosenContact(dialog).waitFor(); }
++async function clearContact(dialog) { await dialog.getByRole('button', { name: 'Retirer le contact lié', exact: true }).click(); assert.equal(await chosenContact(dialog).count(), 0); }
++async function fields(dialog, values) { for (const [key, value] of Object.entries(values)) assert.equal(await dialog.locator(`[name=${key}]`).inputValue(), value, 'Preserved field: ' + key); }
++async function fits(page, dialog, width) { const bounds = await dialog.boundingBox(); assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= width + 1); assert.ok(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1)); assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)); }
++async function confirmedSave(session, dialog, create = true) {
++  const response = session.page.waitForResponse(item => new URL(item.url()).pathname === '/__task_fixture/mutate' && item.status() === 200);
++  await dialog.getByRole('button', { name: create ? 'Créer la tâche' : 'Enregistrer', exact: true }).click();
++  const saved = await (await response).json(); await dialog.waitFor({ state: 'detached' }); await card(session.page, saved.id).waitFor(); return saved;
++}
++function clean(session) { assert.deepEqual(session.audit.blocked, [], 'No external URL attempted'); assert.deepEqual(session.audit.pageErrors, [], 'No browser error'); assert.deepEqual(session.audit.consoleErrors, [], 'No hydration/console error'); assert.ok(session.audit.fixtureRequests.every(request => /^\/__task_fixture\/(list|directory|mutate|contacts)$/.test(request.path))); }
++async function responsibleAndLeadUnchanged(dialog, audit) {
++  const directory = dialog.locator('[data-task-directory]');
++  assert.equal(await directory.locator('input[type=search],input[type=checkbox]').count(), 0, 'Responsible native select has no search or checkbox');
++  assert.equal(await responsibleSelect(dialog).getAttribute('multiple'), null); assert.equal(await responsibleSelect(dialog).getAttribute('size'), null);
++  assert.equal(await responsibleSelect(dialog).locator('option[value=""]').innerText(), 'Sélectionner un responsable');
++  const labels = await responsibleSelect(dialog).locator('option').allTextContents(); assert.ok(labels.some(value => value.includes('elodie.a@example.invalid'))); assert.ok(labels.some(value => value.includes('elodie.b@example.invalid')));
++  await responsibleSelect(dialog).focus(); await responsibleSelect(dialog).press('Enter'); assert.equal(audit.mutations.length, 0);
++  await responsibleSelect(dialog).selectOption(people.a.userId); assert.equal(await responsibleSelect(dialog).inputValue(), ''); assert.equal(await directory.locator(`[data-task-recipient-id="${people.a.userId}"]`).count(), 1);
++  await dialog.locator('[name=leadId]').selectOption('lead-alpha-fictional'); assert.equal(await dialog.locator('[name=leadId]').inputValue(), 'lead-alpha-fictional'); assert.equal(audit.mutations.length, 0);
++}
++async function journey(browser, engine, width) {
++  const session = await open(browser, engine, width), { page, audit } = session;
++  try {
++    const generalSearch = page.getByRole('searchbox', { name: 'Recherche', exact: true }); await generalSearch.fill('Texte de recherche gardé'); await card(page, id(101)).waitFor(); assert.equal(await page.locator('[data-task-id]').count(), 1); await generalSearch.fill('');
++    const values = { title: `Contact explicite ${engine} ${width}`, notes: 'Notes fictives ligne 1\nBrouillon conservé', dueDate: '2026-12-11', priority: 'urgent' };
++    const dialog = await begin(page, values.title); for (const field of ['notes', 'dueDate']) await dialog.locator(`[name=${field}]`).fill(values[field]); await dialog.locator('[name=priority]').selectOption(values.priority);
++    await responsibleAndLeadUnchanged(dialog, audit);
++    for (const query of ['clement', 'CLÉMENT', 'clem', 'minodier', 'clement minodier', 'minodier clement', '  MINO\t clem  ', 'Cle\u0301ment', 'ＣＬÉＭＥＮＴ']) {
++      const texts = await queryOptions(dialog, query, ['Clément Minodier', 'Clément Minodier']); assert.ok(texts.some(text => text.includes('Entreprise A fictive') && text.includes('clement.a@example.invalid'))); assert.ok(texts.some(text => text.includes('Entreprise B fictive') && text.includes('clement.b@example.invalid')));
++      assert.equal(await chosenContact(dialog).count(), 0, 'Typing never chooses a homonym'); assert.equal(audit.mutations.length, 0);
++    }
++    for (const query of ['anne', 'marie', 'resid', 'résidence anne', 'la marie de']) await queryOptions(dialog, query, ['Anne-Marie De La Résidence']);
++    await queryOptions(dialog, 'dupont', ['Dùpont']); await queryOptions(dialog, 'elo', ['Élodie']); await queryOptions(dialog, 'riviera societe', ['Société Riviera fictive']);
++    assert.equal(await chosenContact(dialog).count(), 0, 'A unique result never auto-selects'); assert.equal(audit.mutations.length, 0);
++    await queryOptions(dialog, 'clement dupont', []); await queryOptions(dialog, 'unmatched contact', []);
++    await pickContact(dialog, 'clem', 'clement.a@example.invalid'); assert.ok((await chosenContact(dialog).innerText()).includes('Clément Minodier')); assert.equal(audit.mutations.length, 0);
++    await clearContact(dialog); await pickContact(dialog, 'clem', 'clement.b@example.invalid'); assert.equal(audit.mutations.length, 0); await fields(dialog, values); await fits(page, dialog, width);
++    await contactInput(dialog).fill('clem'); await contactInput(dialog).scrollIntoViewIfNeeded(); await page.screenshot({ path: join(output, `${engine}-${width}-suggestions.png`), fullPage: true });
++    await contactInput(dialog).press('Escape'); await page.screenshot({ path: join(output, `${engine}-${width}-selected.png`), fullPage: true });
++    const confirm = { gate: deferred(), arrived: deferred() }; session.state.nextMutation = confirm; const pendingSave = confirmedSave(session, dialog); await confirm.arrived.promise;
++    assert.ok(await dialog.locator('button[type=submit]').isDisabled()); assert.equal(await page.getByRole('button', { name: values.title, exact: true }).count(), 0, 'Draft is not saved before response'); confirm.gate.release(); const saved = await pendingSave;
++    assert.equal(saved.contactId, contacts[1].id); assert.equal(audit.mutations.at(-1).patch.contactId, contacts[1].id); assert.equal(saved.leadId, 'lead-alpha-fictional'); assert.deepEqual(saved.assignees.map(person => person.userId), [people.a.userId]); await page.reload(); await card(page, saved.id).waitFor();
++    await card(page, saved.id).getByRole('button', { name: 'Modifier', exact: true }).click(); const edit = page.getByRole('dialog', { name: 'Modifier la tâche', exact: true }); await edit.locator('[data-task-directory=ready]').waitFor(); await chosenContact(edit).waitFor(); assert.ok((await chosenContact(edit).innerText()).includes('Clément Minodier')); await fields(edit, values); await fits(page, edit, width);
++    await edit.locator('[name=notes]').fill(values.notes + '\nÉdition explicite'); const edited = await confirmedSave(session, edit, false); assert.equal(edited.contactId, contacts[1].id); assert.equal('contactId' in audit.mutations.at(-1).patch, false, 'Unchanged contact omitted from edit patch');
++    await card(page, saved.id).getByRole('button', { name: values.title, exact: true }).click(); const detail = page.getByRole('dialog', { name: 'Détail de la tâche', exact: true }); await detail.waitFor(); assert.ok((await detail.innerText()).includes('Clément Minodier'), 'Detail uses first name and surname'); await detail.getByRole('button', { name: 'Fermer', exact: true }).first().click();
++    await card(page, saved.id).getByRole('button', { name: 'Modifier', exact: true }).click(); const removal = page.getByRole('dialog', { name: 'Modifier la tâche', exact: true }); await chosenContact(removal).waitFor(); await clearContact(removal); const cleared = await confirmedSave(session, removal, false); assert.equal(cleared.contactId, ''); assert.equal(audit.mutations.at(-1).patch.contactId, '', 'Explicit removal persists only on save'); clean(session);
++  } finally { await session.context.close(); }
++}
++let browser;
++try {
++  browser = await chromium.launch({ headless: true, channel: 'chrome', args: ['--disable-background-networking', '--disable-component-update', '--disable-default-apps'] });
++  await check('Chromium 1440: Unicode/case/partial/token-order search, homonyms and fallback labels, explicit select/remove/replace, simulated save/reload/edit/detail, responsible/Lead/general search preserved', () => journey(browser, 'chromium', 1440));
++  await check('Chromium 390 touch emulation: full contact journey, wrapped suggestions and no horizontal overflow', () => journey(browser, 'chromium', 390));
++  await check('Typing alone never selects: one result or no result saved explicitly as a personal contact-free draft', async () => {
++    const session = await open(browser, 'chromium', 1440); try {
++      for (const query of ['anne', 'no contact matches']) { const dialog = await begin(session.page, 'Saisie seule fictive ' + query); await contactInput(dialog).fill(query); await contactInput(dialog).press('Enter'); assert.equal(await chosenContact(dialog).count(), 0); assert.equal(session.audit.mutations.length, query === 'anne' ? 0 : 1, 'Enter without active result never submits or chooses'); const saved = await confirmedSave(session, dialog); assert.equal(saved.contactId, ''); assert.equal(session.audit.mutations.at(-1).patch.contactId, ''); }
++      clean(session);
++    } finally { await session.context.close(); }
++  });
++  await check('Keyboard ArrowDown/ArrowUp/Enter picks only on Enter without form submission; Escape closes suggestions before dialog', async () => {
++    const session = await open(browser, 'chromium', 1440); try {
++      const dialog = await begin(session.page, 'Clavier fictif'); await queryOptions(dialog, 'clem', ['Clément Minodier', 'Clément Minodier']); await contactInput(dialog).press('ArrowDown'); assert.ok(await contactInput(dialog).getAttribute('aria-activedescendant')); await contactInput(dialog).press('ArrowDown'); await contactInput(dialog).press('ArrowUp'); await contactInput(dialog).press('Enter'); await chosenContact(dialog).waitFor(); assert.equal(session.audit.mutations.length, 0);
++      await contactInput(dialog).fill('anne'); await contactOptions(dialog).waitFor(); await contactInput(dialog).press('Escape'); assert.equal(await contactOptions(dialog).count(), 0); assert.ok(await dialog.isVisible()); assert.equal(session.audit.mutations.length, 0); await dialog.getByRole('button', { name: 'Annuler', exact: true }).click(); clean(session);
++    } finally { await session.context.close(); }
++  });
++  await check('Contact-origin draft prefills first name and surname, saves its exact ID only after explicit confirmation', async () => {
++    const session = await open(browser, 'chromium', 1440); try {
++      await session.page.getByRole('button', { name: 'Créer depuis Contact (fixture)', exact: true }).click(); const dialog = session.page.getByRole('dialog', { name: 'Ajouter une tâche', exact: true }); await chosenContact(dialog).waitFor(); assert.ok((await chosenContact(dialog).innerText()).includes('Clément Minodier')); assert.equal(session.audit.mutations.length, 0); const saved = await confirmedSave(session, dialog); assert.equal(saved.contactId, contacts[0].id); clean(session);
++    } finally { await session.context.close(); }
++  });
++  await check('No Contacts read produces no options; unreadable contact ID remains generic and is omitted from unrelated edit patch', async () => {
++    const session = await open(browser, 'chromium', 1440); try {
++      await session.page.getByRole('button', { name: 'Retirer Contacts (fixture)', exact: true }).click(); const creation = await begin(session.page, 'Sans lecture Contacts fictif'); await contactInput(creation).fill('clem'); assert.equal(await contactOptions(creation).count(), 0); assert.equal(await chosenContact(creation).count(), 0); assert.ok(!(await creation.innerText()).includes('clement.a@example.invalid')); await creation.getByRole('button', { name: 'Annuler', exact: true }).click();
++      const secret = 'unreadable-contact-id-fictional'; session.state.tasks.push(task(103, 'Référence indisponible fictive', { contactId: secret })); await session.page.evaluate(() => window.dispatchEvent(new Event('focus'))); await card(session.page, id(103)).waitFor(); await card(session.page, id(103)).getByRole('button', { name: 'Modifier', exact: true }).click(); const edit = session.page.getByRole('dialog', { name: 'Modifier la tâche', exact: true }); await chosenContact(edit).waitFor(); assert.ok(!(await edit.innerText()).includes(secret)); assert.ok(!(await edit.innerText()).includes('Clément')); await edit.locator('[name=notes]').fill('Correction sans toucher référence'); const saved = await confirmedSave(session, edit, false); assert.equal(saved.contactId, secret); assert.equal('contactId' in session.audit.mutations.at(-1).patch, false); clean(session);
++    } finally { await session.context.close(); }
++  });
++  await check('Contacts option revocation removes stale selected labels and suggestions while preserving draft ID until explicit replacement/removal', async () => {
++    const session = await open(browser, 'chromium', 1440); try {
++      session.state.tasks.push(task(104, 'Révocation fictive', { contactId: contacts[0].id })); await session.page.evaluate(() => window.dispatchEvent(new Event('focus'))); await card(session.page, id(104)).waitFor(); await card(session.page, id(104)).getByRole('button', { name: 'Modifier', exact: true }).click(); const dialog = session.page.getByRole('dialog', { name: 'Modifier la tâche', exact: true }); await chosenContact(dialog).waitFor(); await dialog.locator('[name=notes]').fill('Saisie privée maintenue'); await contactInput(dialog).fill('clem');
++      await session.page.evaluate(() => { const button = [...document.querySelectorAll('button')].find(item => item.textContent === 'Retirer Contacts (fixture)'); button?.click(); });
++      await until(async () => !(await dialog.innerText()).includes('clement.a@example.invalid'), 'Revocation removes stale authorized label'); assert.equal(await contactOptions(dialog).count(), 0); assert.ok(!(await dialog.innerText()).includes('Clément Minodier')); await fields(dialog, { title: 'Révocation fictive', notes: 'Saisie privée maintenue' }); const saved = await confirmedSave(session, dialog, false); assert.equal(saved.contactId, contacts[0].id); assert.equal('contactId' in session.audit.mutations.at(-1).patch, false, 'Existing reference omitted from unrelated edit after Contacts revocation'); clean(session);
++    } finally { await session.context.close(); }
++  });
++  await check('Simulated save interruption preserves typed query, explicit contact, responsible chip and fields; conflict requires explicit revision acceptance', async () => {
++    const session = await open(browser, 'chromium', 1440); try {
++      const dialog = await begin(session.page, 'Erreur fictive'); await dialog.locator('[name=notes]').fill('Saisie erreur préservée'); await pickContact(dialog, 'clem', 'clement.b@example.invalid'); await responsibleSelect(dialog).selectOption(people.b.userId); await contactInput(dialog).fill('anne'); session.state.nextMutation = { kind: 'error' };
++      await dialog.getByRole('button', { name: 'Créer la tâche', exact: true }).click(); await until(async () => (await dialog.innerText()).includes('Connexion interrompue'), 'Simulated error reported'); assert.ok(await dialog.isVisible()); await fields(dialog, { title: 'Erreur fictive', notes: 'Saisie erreur préservée' }); assert.equal(await contactInput(dialog).inputValue(), 'anne'); assert.ok((await chosenContact(dialog).innerText()).includes('Clément Minodier')); assert.equal(await dialog.locator(`[data-task-recipient-id="${people.b.userId}"]`).count(), 1); const saved = await confirmedSave(session, dialog); assert.equal(saved.contactId, contacts[1].id); assert.equal(session.audit.mutations[0].requestId, session.audit.mutations[1].requestId, 'Identical retry keeps request ID');
++      await card(session.page, saved.id).getByRole('button', { name: 'Modifier', exact: true }).click(); const edit = session.page.getByRole('dialog', { name: 'Modifier la tâche', exact: true }); await chosenContact(edit).waitFor(); await edit.locator('[name=notes]').fill('Saisie conflit préservée'); await clearContact(edit); await pickContact(edit, 'anne', 'Anne-Marie De La Résidence'); session.state.tasks = session.state.tasks.map(item => item.id === saved.id ? { ...item, title: 'Titre concurrent fictif', revision: item.revision + 1 } : item); await session.page.evaluate(() => window.dispatchEvent(new Event('focus'))); await edit.locator('.taskws-conflict').waitFor(); assert.ok(await edit.getByRole('button', { name: 'Enregistrer', exact: true }).isDisabled()); await fields(edit, { notes: 'Saisie conflit préservée' }); assert.ok((await chosenContact(edit).innerText()).includes('Anne-Marie De La Résidence')); await edit.getByRole('button', { name: 'Reprendre sur cette révision avec ma saisie', exact: true }).click(); const updated = await confirmedSave(session, edit, false); assert.equal(updated.contactId, contacts[2].id); clean(session);
++    } finally { await session.context.close(); }
++  });
++  await browser.close(); browser = null;
++  const webkitPath = '/private/tmp/monthly-charges-browsers/webkit-2336/pw_run.sh';
++  assert.ok(existsSync(webkitPath), 'WebKit emulation runtime required for requested mobile proof');
++  browser = await webkit.launch({ headless: true, executablePath: webkitPath });
++  await check('WebKit 390 touch emulation: actual source contact journey and keyboard/selection preservation without overflow', () => journey(browser, 'webkit', 390));
++} finally { await browser?.close(); save(); }
++assert.equal(results.length, 9); assert.ok(results.every(result => result.passed), 'All UI fixture checks must pass');
+diff --git a/tests/tasks/contact-search-serve.mjs b/tests/tasks/contact-search-serve.mjs
+new file mode 100644
+index 0000000..e57470e
+--- /dev/null
++++ b/tests/tasks/contact-search-serve.mjs
+@@ -0,0 +1,74 @@
++/** Disposable UI fixture: exact candidate sources, fictional HTTP responses only. */
++import assert from 'node:assert/strict';
++import { createHash } from 'node:crypto';
++import { cpSync, mkdtempSync, readFileSync, writeFileSync, symlinkSync, chmodSync, mkdirSync } from 'node:fs';
++import { join, resolve } from 'node:path';
++import { tmpdir } from 'node:os';
++import { spawn } from 'node:child_process';
++
++assert.equal(process.env.TASKS_CONTACT_SEARCH_ACK, 'TASKS_UI_FICTION_ONLY');
++const sourceRoot = resolve(process.env.TASKS_CONTACT_SEARCH_SOURCE || process.cwd());
++assert.ok(sourceRoot.startsWith('/private/tmp/'), 'Explicit disposable candidate source required');
++const base = process.env.TASKS_CONTACT_SEARCH_BASE;
++assert.equal(base, '8136406ae8b38c0c43c3322d4b1d88983e2cb9cc', 'Explicit published base SHA required');
++const directory = mkdtempSync(join(tmpdir(), 'oar-tasks-contact-search-ui-')); chmodSync(directory, 0o700);
++const output = resolve(process.env.TASKS_CONTACT_SEARCH_OUTPUT || join(sourceRoot, 'docs/tasks/contact-search'));
++mkdirSync(output, { recursive: true });
++const manifestFile = join(output, 'ui-source-manifest.json');
++const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
++const sourceFiles = [];
++for (const path of ['components/TasksWorkspace.tsx', 'components/TaskContactPicker.tsx', 'lib/tasks/contactOptions.ts', 'lib/tasks/types.ts', 'lib/tasks/domain.ts', 'package.json', 'package-lock.json', 'tsconfig.json', 'next.config.mjs']) {
++  mkdirSync(join(directory, path, '..'), { recursive: true });
++  cpSync(join(sourceRoot, path), join(directory, path));
++  sourceFiles.push({ path, sha256: hash(join(sourceRoot, path)) });
++  assert.equal(hash(join(directory, path)), sourceFiles.at(-1).sha256, 'Exact candidate source copy: ' + path);
++}
++const supportingSourceFiles = ['components/CRMApp.tsx', 'components/ModuleWorkspace.tsx', 'tests/tasks/contactOptions.test.ts', 'tests/tasks/contact-search-serve.mjs', 'tests/tasks/contact-search-browser.mjs', 'tests/tasks/select-only-network-guard.cjs'].map(path => ({ path, sha256: hash(join(sourceRoot, path)) }));
++symlinkSync(join(sourceRoot, 'node_modules'), join(directory, 'node_modules'), 'dir');
++mkdirSync(join(directory, 'app/contact-demo'), { recursive: true });
++writeFileSync(join(directory, 'app/layout.tsx'), `export default function Layout({children}: {children: React.ReactNode}) {return <html lang="fr"><body style={{margin:0,fontFamily:"Arial,sans-serif",background:"#fff",color:"#293345"}}>{children}</body></html>; }\n`);
++writeFileSync(join(directory, 'app/contact-demo/page.tsx'), `"use client";
++import {useEffect,useState} from "react";
++import TasksWorkspace from "@/components/TasksWorkspace";
++import {taskContactOptions} from "@/lib/tasks/contactOptions";
++import type {TaskApi,TaskMutation} from "@/lib/tasks/types";
++async function request(path:string, body?:TaskMutation){const response=await fetch("/__task_fixture/"+path,{method:body?"POST":"GET",...(body?{headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{}),cache:"no-store"});const data=await response.json();if(!response.ok)throw new Error(data.message||"Fixture HTTP failure");return data;}
++const api:TaskApi={list:()=>request("list"),directory:()=>request("directory"),mutate:(mutation)=>request("mutate",mutation)};
++const permissions={read:true,contribute:true,export:true,delete:true};
++type InitialDraft={title?:string;contactId?:string};
++export default function Fixture(){
++ const [rows,setRows]=useState<unknown[]>([]),[readable,setReadable]=useState(true),[ready,setReady]=useState(false),[draft,setDraft]=useState<InitialDraft|undefined>();
++ useEffect(()=>{let alive=true;void request("contacts").then(value=>{if(alive){setRows(value);setReady(true);}});return()=>{alive=false;};},[]);
++ return <main style={{padding:12,maxWidth:1380,margin:"0 auto"}}><p style={{fontSize:12}}>Banc UI fictif · confirmation HTTP simulée · aucune Auth, RPC ou base de données</p>
++ <aside data-fixture-contacts-state={ready?"ready":"loading"} data-fixture-contacts-readable={String(readable)} style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:12}}>
++ <button type="button" onClick={()=>setReadable(false)}>Retirer Contacts (fixture)</button><button type="button" onClick={()=>setReadable(true)}>Restaurer Contacts (fixture)</button>
++ <button type="button" disabled={!readable||!ready} onClick={()=>setDraft({title:"Depuis contact Clément Minodier fictif",contactId:"contact-clement-a-fictional"})}>Créer depuis Contact (fixture)</button></aside>
++ <TasksWorkspace api={api} userId="00000000-0000-4000-8000-000000000001" sessionKey="fictional-contact-ui-session" permissions={permissions} draft={draft} onDraftConsumed={()=>setDraft(undefined)} links={{leads:[{id:"lead-alpha-fictional",label:"Lead Alpha Fictif"},{id:"lead-beta-fictional",label:"Lead Beta Fictif"}],contacts:taskContactOptions(readable?rows:[])}}/>
++ </main>;
++}
++`);
++// Reuse the existing guard; only the disposable fixture's fixed port changes.
++const guard = readFileSync(join(sourceRoot, 'tests/tasks/select-only-network-guard.cjs'), 'utf8').replaceAll('3201', '3202');
++writeFileSync(join(directory, 'contact-search-network-guard.cjs'), guard);
++const fixtureOnlyFiles = ['app/layout.tsx', 'app/contact-demo/page.tsx', 'contact-search-network-guard.cjs'].map(path => ({ path, sha256: hash(join(directory, path)) }));
++const manifest = { status: 'building', directory, sourceRoot, candidateBaseSHA: base, app: 'http://127.0.0.1:3202', sourceFiles, supportingSourceFiles, fixtureOnlyFiles, productionComponentModified: false, actualAuth: false, actualRPC: false, actualDatabase: false, accountsCreated: 0, businessWrites: 0, simulatedHTTPConfirmation: true, externalCalls: 0, guardReuse: 'select-only-network-guard.cjs with disposable fixed port 3201 replaced by 3202', integratedCRMPageRendered: false };
++const save = () => writeFileSync(manifestFile, JSON.stringify(manifest, null, 2) + '\n'); save();
++const env = { PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, LANG: 'en_US.UTF-8', NODE_ENV: 'production', NEXT_TELEMETRY_DISABLED: '1', NODE_OPTIONS: '--require=' + join(directory, 'contact-search-network-guard.cjs'), NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:3202', NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_fictional_ui_only', TASKS_SELECT_ONLY_ACK: 'TASKS_UI_FICTION_ONLY' };
++let child;
++function launch(args, file) {
++  child = spawn(process.execPath, [join(sourceRoot, 'node_modules/next/dist/bin/next'), ...args], { cwd: directory, env, stdio: ['ignore', 'pipe', 'pipe'] });
++  let log = '';
++  for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => { log += String(chunk); writeFileSync(file, log); });
++  return new Promise((done, fail) => { child.on('error', fail); child.on('exit', done); });
++}
++for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => child?.kill(signal));
++if (await launch(['build', '--webpack'], join(directory, 'build.log'))) { manifest.status = 'build-failed'; save(); throw new Error('UI fixture build failed: ' + join(directory, 'build.log')); }
++manifest.status = 'starting'; save();
++const stopped = launch(['start', '--hostname', '127.0.0.1', '--port', '3202'], join(directory, 'server.log'));
++for (let attempt = 0; attempt < 100; attempt++) {
++  try { if ((await fetch(manifest.app + '/contact-demo', { signal: AbortSignal.timeout(1000) })).ok) { manifest.status = 'ready'; manifest.serverPID = child.pid; save(); console.log('READY ' + manifest.app + '/contact-demo'); break; } } catch {}
++  if (child.exitCode !== null) break;
++  await new Promise(done => setTimeout(done, 200));
++}
++if (manifest.status !== 'ready') { child.kill('SIGTERM'); throw new Error('UI fixture startup failed'); }
++await stopped; manifest.status = 'stopped'; save();
+diff --git a/tests/tasks/contactOptions.test.ts b/tests/tasks/contactOptions.test.ts
+new file mode 100644
+index 0000000..b0636f7
+--- /dev/null
++++ b/tests/tasks/contactOptions.test.ts
+@@ -0,0 +1,78 @@
++import test from "node:test";
++import assert from "node:assert/strict";
++import { matchesTaskContact, taskContactLabel, taskContactOptions, type TaskContactOption } from "../../lib/tasks/contactOptions";
++
++const clement: TaskContactOption = { id: "contact-clement-fictional", firstName: "Clément", name: "Minodier" };
++
++test("first name and surname support partial, case, accents, Unicode and either token order", () => {
++  for (const query of ["clement", "CLÉMENT", "clem", "minodier", "clement minodier", "minodier clement", "  MINO\t clem  ", "Cle\u0301ment", "ＣＬÉＭＥＮＴ"]) {
++    assert.equal(matchesTaskContact(clement, query), true, query);
++  }
++  for (const query of ["Clement Dupont", "Minodier Vincent", "unrelated"]) assert.equal(matchesTaskContact(clement, query), false, query);
++  assert.equal(taskContactLabel(clement), "Clément Minodier", "Search never changes stored spelling");
++});
++
++test("composed first names and surnames are searchable across words without changing their labels", () => {
++  const composed = { id: "compound-fictional", firstName: "Anne-Marie", name: "De La Résidence" };
++  assert.equal(taskContactLabel(composed), "Anne-Marie De La Résidence");
++  for (const query of ["anne", "marie", "resid", "RESIDENCE Anne", "la marie de"]) assert.equal(matchesTaskContact(composed, query), true, query);
++  assert.equal(matchesTaskContact(composed, "anne martin"), false);
++});
++
++test("missing names and companies have truthful labels with no invented first name", () => {
++  const surname = { id: "surname-fictional", name: "Dùpont" };
++  const firstName = { id: "first-name-fictional", firstName: "Élodie" };
++  const company = { id: "company-fictional", company: "Société Riviera" };
++  const unnamed = { id: "unnamed-fictional", email: "existing@example.invalid" };
++  assert.equal(taskContactLabel(surname), "Dùpont");
++  assert.equal(taskContactLabel(firstName), "Élodie");
++  assert.equal(taskContactLabel(company), "Société Riviera");
++  assert.equal(taskContactLabel(unnamed), "Contact sans nom");
++  assert.equal(matchesTaskContact(surname, "dupont"), true);
++  assert.equal(matchesTaskContact(firstName, "elo"), true);
++  assert.equal(matchesTaskContact(company, "riviera societe"), true);
++  assert.equal(matchesTaskContact(unnamed, "existing"), false, "Email is a distinction, not a name search");
++  assert.equal(matchesTaskContact(unnamed, ""), true);
++});
++
++test("whitespace-only names are missing fields while recorded nonblank spellings remain intact", () => {
++  const company = { id: "company-blanks-fictional", firstName: "   ", name: "\t", company: "Société Riviera" };
++  const surname = { id: "surname-blank-first-fictional", firstName: "  ", name: "Dùpont" };
++  const unnamed = { id: "all-blanks-fictional", firstName: " ", name: "\t", company: "   " };
++  const padded = { id: "spelling-preserved-fictional", firstName: " Élodie ", name: "Dùpont" };
++  assert.equal(taskContactLabel(company), "Société Riviera");
++  assert.equal(matchesTaskContact(company, "riviera societe"), true);
++  assert.equal(taskContactLabel(surname), "Dùpont");
++  assert.equal(matchesTaskContact(surname, "dupont"), true);
++  assert.equal(taskContactLabel(unnamed), "Contact sans nom");
++  assert.equal(matchesTaskContact(unnamed, "contact"), false);
++  assert.equal(taskContactLabel(padded), " Élodie  Dùpont");
++  assert.equal(matchesTaskContact(padded, " DUPONT   elodie "), true);
++});
++
++test("homonyms keep distinct contact IDs and only already authorized distinctions", () => {
++  const projected = taskContactOptions([
++    { id: "homonym-a-fictional", firstName: "Clément", name: "Minodier", companyName: "Société A" },
++    { id: "homonym-b-fictional", firstName: "Clément", name: "Minodier", email: "b@example.invalid" },
++  ]);
++  assert.equal(projected.length, 2);
++  assert.deepEqual(projected.filter(row => matchesTaskContact(row, "clem")).map(row => row.id), ["homonym-a-fictional", "homonym-b-fictional"]);
++  assert.equal(taskContactLabel(projected[0]), taskContactLabel(projected[1]));
++  assert.equal(projected[0].company, "Société A");
++  assert.equal("email" in projected[0], false);
++  assert.equal(projected[1].email, "b@example.invalid");
++  assert.equal("company" in projected[1], false);
++});
++
++test("reference mapping copies only authorized contact display fields and preserves ID/spelling", () => {
++  const input = { id: "safe-contact-fictional", firstName: "Clément", name: "Minodier", companyName: "Déjà autorisée", email: "fixture@example.invalid", phone: "excluded", bankAccounts: ["excluded"], ownerId: "excluded", label: "Surname-only legacy label" };
++  assert.deepEqual(taskContactOptions([input]), [{ id: input.id, firstName: input.firstName, name: input.name, company: input.companyName, email: input.email }]);
++  assert.equal(input.label, "Surname-only legacy label");
++  assert.deepEqual(taskContactOptions([{ id: "limited-fictional", firstName: "Clément", name: "Minodier", companyName: "Autorisée" }]), [{ id: "limited-fictional", firstName: "Clément", name: "Minodier", company: "Autorisée" }]);
++  assert.deepEqual(taskContactOptions([]), [], "No Contacts permission produces no options");
++});
++
++test("malformed projections cannot become invented contacts or labels", () => {
++  for (const rows of [undefined, null, {}, "contacts"]) assert.deepEqual(taskContactOptions(rows), []);
++  assert.deepEqual(taskContactOptions([null, {}, { id: 7 }, { id: "" }, { id: "valid-fictional", firstName: 42, name: { secret: "invalid" }, companyName: [], email: false }]), [{ id: "valid-fictional" }]);
++});

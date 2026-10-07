@@ -1,0 +1,59 @@
+{
+  "baseSHA": "8136406ae8b38c0c43c3322d4b1d88983e2cb9cc",
+  "sourceFiles": {
+    "components/TasksWorkspace.tsx": "dfa49f6a3ec54afe12c8a4496ff1afe50665cf48e65cb4c26b20b056191e9252",
+    "components/TaskContactPicker.tsx": "7986ad82ac3dbe0e1f9115928532be9e034fb36438393fcb769fe9567145e3e5",
+    "components/CRMApp.tsx": "283badbf8734ccc2af3f6168bb92037f069fc2711bbe52a2bf5405ccbd658017",
+    "components/ModuleWorkspace.tsx": "9bc74b28beeb7b7026bef9643f790dbf0dbd2bc419b6ad035f8ca84eebe02468",
+    "lib/tasks/contactOptions.ts": "7c9825332d23ae869fa78e975087405a98f29d435cd0200bbcf4e04bb537f9bd",
+    "tests/tasks/contactOptions.test.ts": "49ec7f6957b45f98274225648d6dc59b6575616b952ee5032f2ce409af8c668c"
+  },
+  "sourceFingerprintMethod": "SHA256 of sorted JSON sourceFiles with default Python JSON separators",
+  "sourceFingerprint": "819cfda16e8e2674909807d8cc2c0773af01589e416247113f992a2819068af9",
+  "helperTests": {
+    "passed": 7,
+    "total": 7
+  },
+  "browserTests": {
+    "passed": 9,
+    "total": 9,
+    "engines": [
+      "Chromium desktop 1440",
+      "Chromium touch emulation 390",
+      "WebKit touch emulation 390"
+    ]
+  },
+  "checks": {
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "lintErrors": 0,
+    "lintWarnings": 1,
+    "lintWarning": "Existing @next/next/no-img-element in unchanged CRMApp img, verified on published baseline",
+    "productionBuild": "PASS",
+    "targetedDiffCheck": "PASS"
+  },
+  "scope": {
+    "productFiles": [
+      "components/TasksWorkspace.tsx",
+      "components/TaskContactPicker.tsx",
+      "components/CRMApp.tsx",
+      "components/ModuleWorkspace.tsx",
+      "lib/tasks/contactOptions.ts"
+    ],
+    "sqlChanges": 0,
+    "sqlCalls": 0,
+    "productionBusinessTestWrites": 0,
+    "accountsCreated": 0,
+    "newDependencies": 0,
+    "globalBackups": 0,
+    "contactsDriveActivated": false
+  },
+  "proofBounds": {
+    "actualAuth": false,
+    "actualRPC": false,
+    "actualDatabase": false,
+    "businessWrites": 0,
+    "physicalDevice": false,
+    "integratedCRMPageRendered": false
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "status": "stopped",
+  "directory": "/var/folders/mh/cdb8c40d4jq3g9_g6l04wtzc0000gn/T/oar-tasks-contact-search-ui-eMLJZe",
+  "sourceRoot": "/private/tmp/oar-tasks-contact-search-candidate",
+  "candidateBaseSHA": "8136406ae8b38c0c43c3322d4b1d88983e2cb9cc",
+  "app": "http://127.0.0.1:3202",
+  "sourceFiles": [
+    {
+      "path": "components/TasksWorkspace.tsx",
+      "sha256": "dfa49f6a3ec54afe12c8a4496ff1afe50665cf48e65cb4c26b20b056191e9252"
+    },
+    {
+      "path": "components/TaskContactPicker.tsx",
+      "sha256": "7986ad82ac3dbe0e1f9115928532be9e034fb36438393fcb769fe9567145e3e5"
+    },
+    {
+      "path": "lib/tasks/contactOptions.ts",
+      "sha256": "7c9825332d23ae869fa78e975087405a98f29d435cd0200bbcf4e04bb537f9bd"
+    },
+    {
+      "path": "lib/tasks/types.ts",
+      "sha256": "6531a86f13801db280a5ab08ad63c07592a01b7e54f9287d2414d81efe06e47b"
+    },
+    {
+      "path": "lib/tasks/domain.ts",
+      "sha256": "7c5b9824a2e747a3430f8e8459cd5f322bf8091af226db78e7b53206ae75e7d8"
+    },
+    {
+      "path": "package.json",
+      "sha256": "98066298e6312d811f93de740cccdc3746123bb036fadc5b76e4e12975d57e66"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "e53920f4b77ab7b7486947e0e80fc8005192acaecf48f06d6680a08526316058"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "8c1e09ece2f9b62f91417b520d3265c6dd02030bff6b44e29cf8a307570715a3"
+    },
+    {
+      "path": "next.config.mjs",
+      "sha256": "10f3416af7a0a92f59c4d283113624e9c286f645c6155e91c5a381d512feb9ee"
+    }
+  ],
+  "supportingSourceFiles": [
+    {
+      "path": "components/CRMApp.tsx",
+      "sha256": "283badbf8734ccc2af3f6168bb92037f069fc2711bbe52a2bf5405ccbd658017"
+    },
+    {
+      "path": "components/ModuleWorkspace.tsx",
+      "sha256": "9bc74b28beeb7b7026bef9643f790dbf0dbd2bc419b6ad035f8ca84eebe02468"
+    },
+    {
+      "path": "tests/tasks/contactOptions.test.ts",
+      "sha256": "49ec7f6957b45f98274225648d6dc59b6575616b952ee5032f2ce409af8c668c"
+    },
+    {
+      "path": "tests/tasks/contact-search-serve.mjs",
+      "sha256": "642e73aedfbf684edacec51244b901c3bffc6dcb196c212334917ed4dc47a9a7"
+    },
+    {
+      "path": "tests/tasks/contact-search-browser.mjs",
+      "sha256": "1c23cddd569fdf621d0e01719884293007b8e7f3f1a9f653d5c1126adb8d2a26"
+    },
+    {
+      "path": "tests/tasks/select-only-network-guard.cjs",
+      "sha256": "676ffe167905a3475b8f4772ec0fac61ef226cc9f5c176dd81b71b1ccf0bea1e"
+    }
+  ],
+  "fixtureOnlyFiles": [
+    {
+      "path": "app/layout.tsx",
+      "sha256": "9038b283b74be41eba21d218dc8d1a437242c3d9506ab92c88642282bd77598d"
+    },
+    {
+      "path": "app/contact-demo/page.tsx",
+      "sha256": "c8de24f1511a98f9971f8eb7dfbacc1b75a0304442f404911e0569152438f322"
+    },
+    {
+      "path": "contact-search-network-guard.cjs",
+      "sha256": "63932f848ce3f0925441d5782b53ef22f876f5e32e961f21a6e79ae36db76767"
+    }
+  ],
+  "productionComponentModified": false,
+  "actualAuth": false,
+  "actualRPC": false,
+  "actualDatabase": false,
+  "accountsCreated": 0,
+  "businessWrites": 0,
+  "simulatedHTTPConfirmation": true,
+  "externalCalls": 0,
+  "guardReuse": "select-only-network-guard.cjs with disposable fixed port 3201 replaced by 3202",
+  "integratedCRMPageRendered": false,
+  "serverPID": 381
+}

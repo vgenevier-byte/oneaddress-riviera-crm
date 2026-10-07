@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { buildTaskPatch, draftForTask, effectiveTaskLeadId, filterAndSortTasks, formatTaskTimestamp, parisCivilDate, priorityLabels, TASK_NOTE_LIMIT, TaskRequestLedger, taskCapabilities, taskDueLabel, taskDueState, taskManagementLabel, type TaskFilters } from "@/lib/tasks/domain";
 import { taskPriorities, taskStatuses, type Task, type TaskApi, type TaskDraft, type TaskLinkOption, type TaskPermissions, type TaskRecipient, type TaskMutation } from "@/lib/tasks/types";
+import { taskContactLabel, type TaskContactOption } from "@/lib/tasks/contactOptions";
+import TaskContactPicker from "./TaskContactPicker";
 
 export type TasksWorkspaceProps = {
   api: TaskApi;
@@ -16,7 +18,7 @@ export type TasksWorkspaceProps = {
   query?: string;
   onQueryChange?: (query: string) => void;
   draft?: { title?: string; leadId?: string; contactId?: string };
-  links?: { leads?: TaskLinkOption[]; contacts?: TaskLinkOption[] };
+  links?: { leads?: TaskLinkOption[]; contacts?: TaskContactOption[] };
 };
 
 type Editor = { scope: string; id: string; base?: Task; draft: TaskDraft; revision: number | null };
@@ -235,6 +237,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const recipientDetails = new Map([...directory.remembered, ...(currentEditor?.base?.assignees ?? []), ...recipients].map(person => [person.userId, person]));
   const requiredManagerId = currentEditor?.base?.createdBy === null ? currentEditor.base.managerId : null;
   const leadOptions = links?.leads ?? [], contactOptions = links?.contacts ?? [];
+  const detailContact = detail?.contactId ? contactOptions.find(option => option.id === detail.contactId) : undefined;
 
   function addRecipient(id: string) {
     if (!currentEditor || !editorCapabilities.fields || editorBusy || !recipients.some(person => person.userId === id) || selectedRecipients.includes(id)) return;
@@ -294,7 +297,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
         <dl><dt>Créée par</dt><dd>{detail.createdByLabel || "Auteur historique non confirmé"}</dd><dt>Créée le</dt><dd>{formatTaskTimestamp(detail.createdAt)}</dd><dt>Responsables</dt><dd>{detail.assignees.length ? detail.assignees.map(person => `${person.label} · ${person.active ? person.access === "read" ? "Lecture" : "Contribution" : "Accès inactif"}`).join(" ; ") : "Aucun · personnelle au créateur"}</dd>{detail.status === "Terminé" && <><dt>Terminée le</dt><dd>{formatTaskTimestamp(detail.completedAt)}</dd></>}</dl>
         {detail.createdBy === null && <p className="taskws-help">{taskManagementLabel(detail)}. Ce rôle est distinct de l’auteur historique.</p>}
         {effectiveTaskLeadId(detail) && leadOptions.some(option => option.id === effectiveTaskLeadId(detail)) && <p>Lead lié : {leadOptions.find(option => option.id === effectiveTaskLeadId(detail))?.label}</p>}
-        {detail.contactId && contactOptions.some(option => option.id === detail.contactId) && <p>Contact lié : {contactOptions.find(option => option.id === detail.contactId)?.label}</p>}
+        {detail.contactId && <p>Contact lié : {detailContact ? taskContactLabel(detailContact) : "Rattachement conservé · détail indisponible"}</p>}
         <h3>Notes</h3><p className="taskws-notes">{detail.notes || "Aucune note."}</p>
         <div className="taskws-buttons"><button type="button" onClick={() => setDetailId(null)}>Fermer</button>{taskCapabilities(detail, userId, permissions).progress && <button type="button" className="taskws-primary" onClick={() => openEditor(detail)}>Modifier</button>}</div>
       </Dialog>}
@@ -325,7 +328,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
             <button type="button" disabled={directory.status === "loading"} onClick={() => void loadDirectory()}>{directory.status === "error" ? "Réessayer de charger les responsables" : "Actualiser les personnes éligibles"}</button>
           </fieldset>
           {(leadOptions.length > 0 || currentEditor.draft.leadId) && <label className="taskws-full">Lead lié<select name="leadId" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("leadId", event.target.value)}><option value="">Aucun lead lié</option>{currentEditor.draft.leadId && !leadOptions.some(option => option.id === currentEditor.draft.leadId) && <option value={currentEditor.draft.leadId}>Rattachement conservé · détail indisponible</option>}{leadOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
-          {(contactOptions.length > 0 || currentEditor.draft.contactId) && <label className="taskws-full">Contact lié<select name="contactId" value={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("contactId", event.target.value)}><option value="">Aucun contact lié</option>{currentEditor.draft.contactId && !contactOptions.some(option => option.id === currentEditor.draft.contactId) && <option value={currentEditor.draft.contactId}>Rattachement conservé · détail indisponible</option>}{contactOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+          <TaskContactPicker key={currentEditor.id} options={contactOptions} contactId={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={id => changeDraft("contactId", id)} />
           <div className="taskws-full taskws-buttons"><button type="button" disabled={editorBusy} onClick={() => { setEditor(null); callbacks.current.onDirty?.(false); }}>Annuler</button><button className="taskws-primary" type="submit" disabled={editorBusy || conflict || !editorCapabilities.progress}>{editorBusy ? "Confirmation en cours…" : currentEditor.base ? "Enregistrer" : "Créer la tâche"}</button></div>
         </form>
       </Dialog>}

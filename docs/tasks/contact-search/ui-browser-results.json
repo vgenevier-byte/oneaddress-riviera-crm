@@ -1,0 +1,685 @@
+{
+  "candidateBaseSHA": "8136406ae8b38c0c43c3322d4b1d88983e2cb9cc",
+  "sourceManifest": "ui-source-manifest.json",
+  "results": [
+    {
+      "name": "Chromium 1440: Unicode/case/partial/token-order search, homonyms and fallback labels, explicit select/remove/replace, simulated save/reload/edit/detail, responsible/Lead/general search preserved",
+      "passed": true
+    },
+    {
+      "name": "Chromium 390 touch emulation: full contact journey, wrapped suggestions and no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "Typing alone never selects: one result or no result saved explicitly as a personal contact-free draft",
+      "passed": true
+    },
+    {
+      "name": "Keyboard ArrowDown/ArrowUp/Enter picks only on Enter without form submission; Escape closes suggestions before dialog",
+      "passed": true
+    },
+    {
+      "name": "Contact-origin draft prefills first name and surname, saves its exact ID only after explicit confirmation",
+      "passed": true
+    },
+    {
+      "name": "No Contacts read produces no options; unreadable contact ID remains generic and is omitted from unrelated edit patch",
+      "passed": true
+    },
+    {
+      "name": "Contacts option revocation removes stale selected labels and suggestions while preserving draft ID until explicit replacement/removal",
+      "passed": true
+    },
+    {
+      "name": "Simulated save interruption preserves typed query, explicit contact, responsible chip and fields; conflict requires explicit revision acceptance",
+      "passed": true
+    },
+    {
+      "name": "WebKit 390 touch emulation: actual source contact journey and keyboard/selection preservation without overflow",
+      "passed": true
+    }
+  ],
+  "fictionalFixture": true,
+  "simulatedHTTPConfirmation": true,
+  "statePersistence": "In-memory Playwright route closure across page reload",
+  "actualAuth": false,
+  "actualRPC": false,
+  "actualDatabase": false,
+  "accountsCreated": 0,
+  "businessWrites": 0,
+  "productionWrites": 0,
+  "externalCalls": 0,
+  "physicalDevice": false,
+  "isolatedFixtureLayout": true,
+  "integratedCRMPageRendered": false,
+  "audits": [
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "4895ec98-9f45-4d4c-9c37-4da98a6991ce",
+          "id": "0374ec2e-4b43-4b85-bc4e-cbec2b7ccdc5",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Notes fictives ligne 1\nBrouillon conservé",
+            "status": "À faire",
+            "title": "Contact explicite chromium 1440",
+            "dueDate": "2026-12-11",
+            "priority": "urgent",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000002"
+            ],
+            "leadId": "lead-alpha-fictional",
+            "contactId": "contact-clement-b-fictional"
+          }
+        },
+        {
+          "requestId": "ff4f421c-ed76-4ae1-9f0d-a5f26b33df13",
+          "id": "0374ec2e-4b43-4b85-bc4e-cbec2b7ccdc5",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Notes fictives ligne 1\nBrouillon conservé\nÉdition explicite"
+          }
+        },
+        {
+          "requestId": "3aea2bc8-6c78-4d00-9954-85b0b77c5008",
+          "id": "0374ec2e-4b43-4b85-bc4e-cbec2b7ccdc5",
+          "expectedRevision": 2,
+          "patch": {
+            "contactId": ""
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 390,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "f782f5e7-609d-4892-a00b-f0a843ff3df9",
+          "id": "bbc19ab6-51b6-4b63-9c76-e46751133623",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Notes fictives ligne 1\nBrouillon conservé",
+            "status": "À faire",
+            "title": "Contact explicite chromium 390",
+            "dueDate": "2026-12-11",
+            "priority": "urgent",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000002"
+            ],
+            "leadId": "lead-alpha-fictional",
+            "contactId": "contact-clement-b-fictional"
+          }
+        },
+        {
+          "requestId": "cb02f866-cc12-4aae-b987-7957143f151c",
+          "id": "bbc19ab6-51b6-4b63-9c76-e46751133623",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Notes fictives ligne 1\nBrouillon conservé\nÉdition explicite"
+          }
+        },
+        {
+          "requestId": "47a43f6d-2faf-4a67-8356-f4fce5465321",
+          "id": "bbc19ab6-51b6-4b63-9c76-e46751133623",
+          "expectedRevision": 2,
+          "patch": {
+            "contactId": ""
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "e76fc4ae-52af-4be0-aa65-b659924c9bd7",
+          "id": "923d6f8f-089a-4df2-a012-e9720594fc08",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "",
+            "status": "À faire",
+            "title": "Saisie seule fictive anne",
+            "dueDate": "",
+            "priority": "normal",
+            "assigneeIds": [],
+            "leadId": "",
+            "contactId": ""
+          }
+        },
+        {
+          "requestId": "41ad56a2-a225-410a-ad24-b58bf98aaabc",
+          "id": "4bd1f41b-12fb-4f38-9d17-1e96dbae0dc0",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "",
+            "status": "À faire",
+            "title": "Saisie seule fictive no contact matches",
+            "dueDate": "",
+            "priority": "normal",
+            "assigneeIds": [],
+            "leadId": "",
+            "contactId": ""
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "f7357b45-8258-46db-97e8-714ddb0751bb",
+          "id": "7b4e0050-0369-482e-8e04-d852f3573aba",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "",
+            "status": "À faire",
+            "title": "Depuis contact Clément Minodier fictif",
+            "dueDate": "",
+            "priority": "normal",
+            "assigneeIds": [],
+            "leadId": "",
+            "contactId": "contact-clement-a-fictional"
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "d92d5a06-3f29-4a31-a87a-5b3dbc7380c3",
+          "id": "00000000-0000-4000-8000-000000000103",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Correction sans toucher référence"
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "537f4614-bb09-4691-a31b-af74067fc8ac",
+          "id": "00000000-0000-4000-8000-000000000104",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Saisie privée maintenue"
+          }
+        }
+      ]
+    },
+    {
+      "engine": "chromium",
+      "width": 1440,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [
+        {
+          "path": "/__task_fixture/mutate",
+          "status": 503
+        }
+      ],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "80dcffbf-3ccb-4f6c-a341-6efb426d7fbd",
+          "id": "2a6ec707-f731-4838-ac27-8f1633424712",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Saisie erreur préservée",
+            "status": "À faire",
+            "title": "Erreur fictive",
+            "dueDate": "",
+            "priority": "normal",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000003"
+            ],
+            "leadId": "",
+            "contactId": "contact-clement-b-fictional"
+          }
+        },
+        {
+          "requestId": "80dcffbf-3ccb-4f6c-a341-6efb426d7fbd",
+          "id": "2a6ec707-f731-4838-ac27-8f1633424712",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Saisie erreur préservée",
+            "status": "À faire",
+            "title": "Erreur fictive",
+            "dueDate": "",
+            "priority": "normal",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000003"
+            ],
+            "leadId": "",
+            "contactId": "contact-clement-b-fictional"
+          }
+        },
+        {
+          "requestId": "49474d3e-d46e-4eb3-82b4-8e65de7b7f92",
+          "id": "2a6ec707-f731-4838-ac27-8f1633424712",
+          "expectedRevision": 2,
+          "patch": {
+            "notes": "Saisie conflit préservée",
+            "title": "Erreur fictive",
+            "contactId": "contact-compound-fictional"
+          }
+        }
+      ]
+    },
+    {
+      "engine": "webkit",
+      "width": 390,
+      "blocked": [],
+      "pageErrors": [],
+      "consoleErrors": [],
+      "expectedHTTPFailures": [],
+      "fixtureRequests": [
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/contacts"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/directory"
+        },
+        {
+          "method": "POST",
+          "path": "/__task_fixture/mutate"
+        },
+        {
+          "method": "GET",
+          "path": "/__task_fixture/list"
+        }
+      ],
+      "mutations": [
+        {
+          "requestId": "fd33dcf7-4990-44bd-8692-1d8629b534a5",
+          "id": "42abc91f-0285-43c6-b67b-2df07026d62e",
+          "expectedRevision": null,
+          "patch": {
+            "notes": "Notes fictives ligne 1\nBrouillon conservé",
+            "status": "À faire",
+            "title": "Contact explicite webkit 390",
+            "dueDate": "2026-12-11",
+            "priority": "urgent",
+            "assigneeIds": [
+              "00000000-0000-4000-8000-000000000002"
+            ],
+            "leadId": "lead-alpha-fictional",
+            "contactId": "contact-clement-b-fictional"
+          }
+        },
+        {
+          "requestId": "e9b48775-4474-4ec1-a0c6-eb0bc275de91",
+          "id": "42abc91f-0285-43c6-b67b-2df07026d62e",
+          "expectedRevision": 1,
+          "patch": {
+            "notes": "Notes fictives ligne 1\nBrouillon conservé\nÉdition explicite"
+          }
+        },
+        {
+          "requestId": "1bf09ad2-cc68-4a78-a68d-cb13d729c2c0",
+          "id": "42abc91f-0285-43c6-b67b-2df07026d62e",
+          "expectedRevision": 2,
+          "patch": {
+            "contactId": ""
+          }
+        }
+      ]
+    }
+  ]
+}
