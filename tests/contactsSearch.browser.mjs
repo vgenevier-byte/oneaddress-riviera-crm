@@ -33,7 +33,7 @@ const collections = ['contacts', 'leads', 'properties', 'vehicles', 'boats', 'ta
 const contact = (id, extras = {}) => ({ id, name: '', kind: 'Client', email: '', phone: '', city: '', postalAddress: '', budget: 0, source: '', notes: '', createdAt: stamp, ...extras });
 const contacts = [
   contact('fictional-client', { firstName: 'Clément', name: 'Minodier', companyName: 'Élévation Île', email: 'azur@example.invalid', phone: '+33 6 44 55 66 77', city: 'Menton', postalAddress: '14 rue des Cyprès', organizationFunction: 'GestionUniqueFictive', notes: 'NOTE_NON_SEARCHABLE_FICTION', supplierBankAccounts: [{ id: 'fictional-bank', accountHolder: 'BANK_NON_SEARCHABLE_FICTION', iban: 'FICTIONAL_IBAN_DO_NOT_USE', bic: 'FICTIONAL_BIC', status: 'À vérifier', isPrimary: true, createdAt: stamp }] }),
-  contact('fictional-supplier', { firstName: 'Clément', name: 'Fournisseur', kind: 'Prestataire', companyName: 'Élévation Services', supplierCategory: 'Électricien', supplierZone: 'Ouest fictif', supplierReliability: 'Très fiable' }),
+  contact('fictional-supplier', { firstName: 'Clément', name: 'Fournisseur', kind: 'Prestataire', companyName: 'Élévation Services', supplierCategory: 'Électricien fictif sur mesure', supplierZone: 'Ouest fictif', supplierReliability: 'Très fiable' }),
   contact('fictional-plumber', { firstName: 'Clément', name: 'Plombier', kind: 'Prestataire', supplierCategory: 'Plombier' }),
   contact('fictional-owner', { firstName: 'Clément', name: 'Patrimoine', kind: 'Propriétaire' }),
   contact('fictional-member', { firstName: 'Clément', name: 'Coordination', kind: 'Membre de l’organisation', organizationFunction: 'Intendance fictive' }),
@@ -185,11 +185,11 @@ async function journey(session) {
   for (const [label, ids] of [['Clients', clements.filter(id => ['fictional-client', 'fictional-decomposed', 'fictional-excluded'].includes(id))], ['Prestataires', ['fictional-supplier', 'fictional-plumber']], ['Propriétaires', ['fictional-owner']], ['Membres de l’organisation', ['fictional-member']], ['Tous', clements]]) await category(session, label, ids);
   await category(session, 'Prestataires', ['fictional-supplier', 'fictional-plumber']);
   const profession = toolbar(page).locator('.contacts-toolbar-stable-supplier-filter select');
-  await profession.selectOption('Électricien'); await assertRows(session, ['fictional-supplier']);
+  await profession.selectOption('Électricien fictif sur mesure'); await assertRows(session, ['fictional-supplier']);
   await query(session, 'Minodier', []);
-  assert.equal(await profession.inputValue(), 'Électricien', 'Profession visibly retained while query has no matches');
+  assert.equal(await profession.inputValue(), 'Électricien fictif sur mesure', 'Profession visibly retained while query has no matches');
   await query(session, '', ['fictional-supplier']);
-  assert.equal(await profession.inputValue(), 'Électricien', 'Clearing query preserves profession');
+  assert.equal(await profession.inputValue(), 'Électricien fictif sur mesure', 'Clearing query preserves profession');
   assert.equal(await toolbar(page).getByRole('button', { name: 'Prestataires', exact: true }).getAttribute('class').then(value => value.includes('primary-button')), true, 'Category preserved');
   await profession.selectOption('Toutes'); await assertRows(session, ['fictional-supplier', 'fictional-plumber']);
   await category(session, 'Tous', all);
