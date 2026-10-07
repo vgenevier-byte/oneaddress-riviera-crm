@@ -89,7 +89,7 @@ test("recherche existante par rue et code postal, conversion historique sans alt
   const toRow = handler("contactToSupabaseRow");
   const fromRow = handler("contactFromSupabaseRow");
   assert.equal(fromRow(toRow({ ...fictionalContact, postalAddress: address }, "user-test")).postalAddress, address);
-  assert.match(source, /data\.contacts\.filter\(\(contact\) => matchesContactSearch\(contact, query\)\)/);
+  assert.match(source, /contacts=\{data\.contacts\} query=\{query\}/);
 });
 
 for (const nextKind of ["Client", "Propriétaire"] as const) {

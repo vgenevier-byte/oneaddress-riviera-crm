@@ -31,7 +31,8 @@ import Image from "next/image";
 import { isCompletedTaskStatus } from "@/lib/taskMaintenance";
 import TasksWorkspace from "./TasksWorkspace";
 import { taskContactOptions } from "@/lib/tasks/contactOptions";
-import { matchesContactSearch } from "@/lib/contactSearch";
+import { normalizeContactSearch } from "@/lib/contactSearch";
+import { createContactSearchIndex, searchContactSuggestions, searchDirectContacts } from "@/lib/contactSuggestions";
 import { useTaskApi, useTaskProjection, taskPermissions, taskForBusinessView } from "@/lib/tasks/client";
 import { parisCivilDate, isCivilDate, TaskRequestLedger, effectiveTaskLeadId } from "@/lib/tasks/domain";
 import { crmCache } from "@/lib/access/crmCache";
@@ -6463,10 +6464,6 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       .slice(0, 20);
   }, [data, visibleTasks]);
 
-  const filteredContacts = useMemo(() => {
-    return data.contacts.filter((contact) => matchesContactSearch(contact, query));
-  }, [data.contacts, query]);
-
   const filteredLeads = useMemo(() => {
     return data.leads.filter((lead) => searchMatch(query, [lead.category, lead.contactName, lead.status, lead.nextAction, lead.rentalStartDate, lead.rentalEndDate]));
   }, [data.leads, query]);
@@ -8920,7 +8917,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "contacts" && (
-          <ContactsView access={access} focusContactId={focusContactId} actor={activeActor} contacts={filteredContacts} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
+          <ContactsView access={access} focusContactId={focusContactId} actor={activeActor} contacts={data.contacts} query={query} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
 
@@ -11752,6 +11749,7 @@ function ContactsView({
   focusContactId,
   actor,
   contacts,
+  query = "",
   leads,
   tasks,
   onAdd,
@@ -11764,6 +11762,7 @@ function ContactsView({
   focusContactId?: string;
   actor: string;
   contacts: Contact[];
+  query?: string;
   leads: Lead[];
   tasks: Task[];
   onAdd: (event: React.FormEvent<HTMLFormElement>) => FormSave;
@@ -11831,7 +11830,7 @@ function ContactsView({
     return tasks.filter((task) => task.contactId === contact.id || leadIds.has(effectiveTaskLeadId(task)));
   }
 
-  const visibleContacts = contacts.filter((contact) => {
+  const filteredByCategory = useMemo(() => contacts.filter((contact) => {
     const supplier = isSupplierContact(contact);
     const matchesType =
       contactFilter === "Tous" ||
@@ -11843,12 +11842,17 @@ function ContactsView({
     const matchesSupplierCategory = supplierCategoryFilter === "Toutes" || getContactSupplierCategory(contact) === supplierCategoryFilter;
 
     return matchesType && (contactFilter === "Prestataires" ? matchesSupplierCategory : true);
-  });
+  }), [contacts, contactFilter, supplierCategoryFilter]);
+  const contactSearchIndex = useMemo(() => createContactSearchIndex(filteredByCategory), [filteredByCategory]);
+  const { direct: visibleContacts, close: closeContacts } = useMemo(() => searchContactSuggestions(contactSearchIndex, query), [contactSearchIndex, query]);
+  const searching = Boolean(normalizeContactSearch(query));
+  const allContactSearchIndex = useMemo(() => createContactSearchIndex(contacts), [contacts]);
+  const searchedContacts = useMemo(() => searchDirectContacts(allContactSearchIndex, query), [allContactSearchIndex, query]);
 
-  const clientCount = contacts.filter((contact) => contact.kind === "Client" && !isSupplierContact(contact)).length;
-  const supplierCount = contacts.filter(isSupplierContact).length;
-  const ownerCount = contacts.filter((contact) => contact.kind === "Propriétaire").length;
-  const memberCount = contacts.filter((contact) => contact.kind === "Membre de l’organisation").length;
+  const clientCount = searchedContacts.filter((contact) => contact.kind === "Client" && !isSupplierContact(contact)).length;
+  const supplierCount = searchedContacts.filter(isSupplierContact).length;
+  const ownerCount = searchedContacts.filter((contact) => contact.kind === "Propriétaire").length;
+  const memberCount = searchedContacts.filter((contact) => contact.kind === "Membre de l’organisation").length;
 
   function submitEdit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -11921,13 +11925,14 @@ function ContactsView({
           <div className="contacts-toolbar-stable-title">
             <p className="eyebrow">Contacts</p>
             <div className="contacts-toolbar-stable-count">
-              <strong>{visibleContacts.length}</strong>
-              <span>contact{visibleContacts.length > 1 ? "s" : ""}</span>
+              <strong data-contact-direct-count>{visibleContacts.length}</strong>
+              <span>{searching ? `résultat${visibleContacts.length > 1 ? "s" : ""} direct${visibleContacts.length > 1 ? "s" : ""}` : `contact${visibleContacts.length > 1 ? "s" : ""}`}</span>
             </div>
+            {searching && <p className="muted-line"><strong data-contact-suggestion-count>{closeContacts.length}</strong> correspondance{closeContacts.length > 1 ? "s" : ""} proche{closeContacts.length > 1 ? "s" : ""}</p>}
             <p className="muted-line">Clients, prestataires, propriétaires et membres de l’organisation. Lecture rapide, action uniquement si nécessaire.</p>
           </div>
 
-          <div className="contacts-toolbar-stable-metrics" aria-label="Synthèse contacts">
+          <div className="contacts-toolbar-stable-metrics" aria-label={searching ? "Synthèse des résultats directs" : "Synthèse contacts"}>
             <div><span>Clients</span><strong>{clientCount}</strong></div>
             <div><span>Prestataires</span><strong>{supplierCount}</strong></div>
             <div><span>Propriétaires</span><strong>{ownerCount}</strong></div>
@@ -11965,7 +11970,7 @@ function ContactsView({
       <div className="contacts-layout oar-contacts-layout">
         <section className="card contacts-list-card oar-contacts-list-card">
           {visibleContacts.length === 0 ? (
-            <p className="muted-line">Aucun contact dans ce filtre.</p>
+            <p className="muted-line">{searching ? "Aucun résultat direct dans ce filtre." : "Aucun contact dans ce filtre."}</p>
           ) : (
             <div className="list-stack oar-contact-list-stack">
               {visibleContacts.map((contact) => (
@@ -12024,6 +12029,27 @@ function ContactsView({
                 </article>
               ))}
             </div>
+          )}
+          {closeContacts.length > 0 && (
+            <section className="stack" data-contact-suggestions aria-label="Correspondances proches">
+              <h3>Correspondances proches</h3>
+              <div className="list-stack">
+                {closeContacts.map((contact) => (
+                  <article className="item-card contact-row" key={contact.id} data-contact-suggestion-id={contact.id}>
+                    <div>
+                      <p className="eyebrow">{typeLabel(contact)}{isSupplierContact(contact) ? ` · ${getContactSupplierCategory(contact)}` : ""}</p>
+                      <h4>{getContactActionLabel(contact)}</h4>
+                      {contact.companyName && <p className="muted-line">Société : {contact.companyName}</p>}
+                    </div>
+                    <div className="item-actions">
+                      <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contact)}>
+                        Ouvrir la fiche
+                      </BusinessButton>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
           )}
         </section>
 
