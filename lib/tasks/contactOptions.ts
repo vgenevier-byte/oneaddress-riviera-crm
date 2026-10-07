@@ -16,18 +16,19 @@ function normalizedContactSearch(value: string): string {
 }
 
 export function matchesTaskContact(contact: TaskContactOption, query: string): boolean {
-  const names = [contact.firstName, contact.name].filter(value => value?.trim()).join(" ");
-  const searchable = normalizedContactSearch(names || contact.company || "");
+  const searchable = normalizedContactSearch([contact.firstName, contact.name, contact.company].filter(value => value?.trim()).join(" "));
   return normalizedContactSearch(query).split(" ").filter(Boolean).every(token => searchable.includes(token));
 }
 
 /** Never complete a restricted reference by reading a global CRM payload. */
 export function taskContactOptions(rows: unknown): TaskContactOption[] {
   if (!Array.isArray(rows)) return [];
+  const seenIds = new Set<string>();
   return rows.flatMap((value: unknown) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
     const row = value as Record<string, unknown>;
-    if (typeof row.id !== "string" || !row.id) return [];
+    if (typeof row.id !== "string" || !row.id || seenIds.has(row.id)) return [];
+    seenIds.add(row.id);
     const option: TaskContactOption = { id: row.id };
     for (const [field, source] of [["firstName", "firstName"], ["name", "name"], ["company", "companyName"], ["email", "email"]] as const) {
       if (typeof row[source] === "string" && row[source]) option[field] = row[source];

@@ -1,0 +1,96 @@
+{
+  "status": "stopped",
+  "directory": "/var/folders/mh/cdb8c40d4jq3g9_g6l04wtzc0000gn/T/oar-tasks-company-search-ui-qCGlPc",
+  "sourceRoot": "/private/tmp/oar-tasks-company-search-candidate",
+  "candidateBaseSHA": "b33ec9841d111727f48ace0f3c06ec2830da4b13",
+  "app": "http://127.0.0.1:3203",
+  "sourceFiles": [
+    {
+      "path": "components/TasksWorkspace.tsx",
+      "sha256": "dfa49f6a3ec54afe12c8a4496ff1afe50665cf48e65cb4c26b20b056191e9252"
+    },
+    {
+      "path": "components/TaskContactPicker.tsx",
+      "sha256": "d8eb22c5de451d77fd3fa6c519ea8f5d61b1eead09c24393e90898a97ee74ba3"
+    },
+    {
+      "path": "lib/tasks/contactOptions.ts",
+      "sha256": "24130d4baef88717c9ad3880e8c54ba628c5b55d5609f3071b4022a512236fb5"
+    },
+    {
+      "path": "lib/tasks/types.ts",
+      "sha256": "6531a86f13801db280a5ab08ad63c07592a01b7e54f9287d2414d81efe06e47b"
+    },
+    {
+      "path": "lib/tasks/domain.ts",
+      "sha256": "7c5b9824a2e747a3430f8e8459cd5f322bf8091af226db78e7b53206ae75e7d8"
+    },
+    {
+      "path": "package.json",
+      "sha256": "98066298e6312d811f93de740cccdc3746123bb036fadc5b76e4e12975d57e66"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "e53920f4b77ab7b7486947e0e80fc8005192acaecf48f06d6680a08526316058"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "8c1e09ece2f9b62f91417b520d3265c6dd02030bff6b44e29cf8a307570715a3"
+    },
+    {
+      "path": "next.config.mjs",
+      "sha256": "10f3416af7a0a92f59c4d283113624e9c286f645c6155e91c5a381d512feb9ee"
+    }
+  ],
+  "supportingSourceFiles": [
+    {
+      "path": "components/CRMApp.tsx",
+      "sha256": "283badbf8734ccc2af3f6168bb92037f069fc2711bbe52a2bf5405ccbd658017"
+    },
+    {
+      "path": "components/ModuleWorkspace.tsx",
+      "sha256": "9bc74b28beeb7b7026bef9643f790dbf0dbd2bc419b6ad035f8ca84eebe02468"
+    },
+    {
+      "path": "tests/tasks/contactOptions.test.ts",
+      "sha256": "f8112b93976a8cba37f5febe07a39e8602018344420c7977958c2d4d51e8e67e"
+    },
+    {
+      "path": "tests/tasks/company-search-serve.mjs",
+      "sha256": "0b21ac75cd011757811b0c98dd3df5b07acfd02a92e138589c69436a4f664bff"
+    },
+    {
+      "path": "tests/tasks/company-search-browser.mjs",
+      "sha256": "ca4d023f67319eeb6128535d2e663a29fcb96eba703879bb2e66eb9c5e21c594"
+    },
+    {
+      "path": "tests/tasks/select-only-network-guard.cjs",
+      "sha256": "676ffe167905a3475b8f4772ec0fac61ef226cc9f5c176dd81b71b1ccf0bea1e"
+    }
+  ],
+  "fixtureOnlyFiles": [
+    {
+      "path": "app/layout.tsx",
+      "sha256": "9038b283b74be41eba21d218dc8d1a437242c3d9506ab92c88642282bd77598d"
+    },
+    {
+      "path": "app/company-demo/page.tsx",
+      "sha256": "c8de24f1511a98f9971f8eb7dfbacc1b75a0304442f404911e0569152438f322"
+    },
+    {
+      "path": "company-search-network-guard.cjs",
+      "sha256": "2c4e51f9a5de071578bc52dca08b8d4a19a9ee9e60dea2d933b1dd9de77404e1"
+    }
+  ],
+  "productionComponentModified": false,
+  "actualAuth": false,
+  "actualRPC": false,
+  "actualDatabase": false,
+  "accountsCreated": 0,
+  "businessWrites": 0,
+  "simulatedHTTPConfirmation": true,
+  "externalCalls": 0,
+  "guardReuse": "select-only-network-guard.cjs with disposable fixed port 3201 replaced by 3203",
+  "integratedCRMPageRendered": false,
+  "serverPID": 2703
+}

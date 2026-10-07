@@ -1,0 +1,52 @@
+{
+  "baseSHA": "b33ec9841d111727f48ace0f3c06ec2830da4b13",
+  "sourceFiles": {
+    "lib/tasks/contactOptions.ts": "24130d4baef88717c9ad3880e8c54ba628c5b55d5609f3071b4022a512236fb5",
+    "components/TaskContactPicker.tsx": "d8eb22c5de451d77fd3fa6c519ea8f5d61b1eead09c24393e90898a97ee74ba3",
+    "tests/tasks/contactOptions.test.ts": "f8112b93976a8cba37f5febe07a39e8602018344420c7977958c2d4d51e8e67e"
+  },
+  "helperTests": {
+    "passed": 10,
+    "total": 10,
+    "priorTestsRetained": 7
+  },
+  "browserTests": {
+    "passed": 10,
+    "total": 10,
+    "sessions": 13,
+    "priorGroupsRetained": 9,
+    "engines": [
+      "Chromium desktop 1440",
+      "Chromium touch emulation 390",
+      "WebKit touch emulation 390"
+    ]
+  },
+  "checks": {
+    "typescript": "PASS",
+    "targetedLint": "PASS",
+    "lintErrors": 0,
+    "lintWarnings": 0,
+    "productionBuild": "PASS",
+    "targetedDiffCheck": "PASS"
+  },
+  "scope": {
+    "productFiles": [
+      "lib/tasks/contactOptions.ts",
+      "components/TaskContactPicker.tsx"
+    ],
+    "sqlChanges": 0,
+    "sqlCalls": 0,
+    "businessTestWrites": 0,
+    "newDependencies": 0,
+    "globalBackups": 0,
+    "contactsDriveActivated": false
+  },
+  "proofBounds": {
+    "actualAuth": false,
+    "actualRPC": false,
+    "actualDatabase": false,
+    "businessWrites": 0,
+    "physicalDevice": false,
+    "integratedCRMPageRendered": false
+  }
+}

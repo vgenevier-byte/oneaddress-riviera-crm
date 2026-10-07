@@ -11,7 +11,7 @@ type Props = {
 };
 
 function contactInformation(contact: TaskContactOption) {
-  const label = taskContactLabel(contact);
+  const label = taskContactLabel(contact).trim();
   return [contact.company?.trim(), contact.email?.trim()].filter(value => value && value !== label).join(" · ");
 }
 
@@ -79,7 +79,7 @@ export default function TaskContactPicker({ options, contactId, onChange, disabl
     </div>}
     <input id={inputId} type="search" role="combobox" aria-autocomplete="list" aria-expanded={listVisible}
       aria-controls={listId} aria-activedescendant={listVisible && activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined}
-      autoComplete="off" placeholder="Rechercher un contact par prénom ou nom…" value={query} disabled={disabled}
+      autoComplete="off" placeholder="Rechercher par prénom, nom ou entreprise…" value={query} disabled={disabled}
       onFocus={() => { if (!disabled && query.trim()) setOpen(true); }}
       onChange={event => { if (!disabled) { setQuery(event.target.value); setOpen(Boolean(event.target.value.trim())); setActiveId(""); } }}
       onKeyDown={handleKeyDown} />

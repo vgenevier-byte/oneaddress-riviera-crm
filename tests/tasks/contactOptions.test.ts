@@ -76,3 +76,37 @@ test("malformed projections cannot become invented contacts or labels", () => {
   for (const rows of [undefined, null, {}, "contacts"]) assert.deepEqual(taskContactOptions(rows), []);
   assert.deepEqual(taskContactOptions([null, {}, { id: 7 }, { id: "" }, { id: "valid-fictional", firstName: 42, name: { secret: "invalid" }, companyName: [], email: false }]), [{ id: "valid-fictional" }]);
 });
+
+test("named contacts match their company simultaneously and tokens may span fields in either order", () => {
+  const person = { id: "julien-company-fictional", firstName: "Julien", name: "Martin", company: "Àzur Sérvices" };
+  for (const query of ["julien", "martin", "azur", "services", "azur julien", "MARTIN AZUR", "ser ju", "  SERVICES\t Martin azur  ", "A\u0300zur Se\u0301rvices", "ＡＺＵＲ ＪＵＬＩＥＮ"]) {
+    assert.equal(matchesTaskContact(person, query), true, query);
+  }
+  assert.equal(matchesTaskContact(person, "azur dupont"), false);
+  assert.equal(taskContactLabel(person), "Julien Martin", "Company is additional authorized information, not the person label");
+});
+
+test("deduplicate only the same contact ID while retaining every interlocutor of the same company", () => {
+  const first = { id: "azur-julien-fictional", firstName: "Julien", name: "Martin", companyName: "Azur Services" };
+  const second = { id: "azur-laure-fictional", firstName: "Laure", name: "Durand", companyName: "Azur Services" };
+  const company = { id: "azur-company-fictional", companyName: "Azur Services" };
+  const projected = taskContactOptions([first, second, { ...first, firstName: "Duplicate ignored" }, company, second]);
+  assert.deepEqual(projected.map(contact => contact.id), [first.id, second.id, company.id]);
+  assert.deepEqual(projected.filter(contact => matchesTaskContact(contact, "azur")).map(contact => contact.id), [first.id, second.id, company.id]);
+  assert.deepEqual(projected.filter(contact => matchesTaskContact(contact, "azur julien")).map(contact => contact.id), [first.id]);
+  assert.equal(taskContactLabel(projected[0]), "Julien Martin", "First authorized occurrence stays unchanged");
+  assert.equal(taskContactLabel(projected[2]), "Azur Services", "Company-only contact has no invented interlocutor");
+});
+
+test("company search uses only companyName already present in the authorized projection", () => {
+  const projected = taskContactOptions([
+    { id: "limited-company-fictional", firstName: "Julien", name: "Martin", companyName: "Azur Services" },
+    { id: "limited-no-company-fictional", firstName: "Julien", name: "Martin", company: "Must not be completed" },
+  ]);
+  assert.equal(matchesTaskContact(projected[0], "azur martin"), true);
+  assert.equal(matchesTaskContact(projected[1], "julien"), true);
+  assert.equal(matchesTaskContact(projected[1], "azur"), false);
+  assert.equal(matchesTaskContact(projected[1], "completed"), false);
+  assert.equal("company" in projected[1], false);
+  assert.deepEqual(taskContactOptions([]), [], "No Contacts permission creates no company option");
+});
