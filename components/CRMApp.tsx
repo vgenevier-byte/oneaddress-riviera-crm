@@ -31,6 +31,7 @@ import Image from "next/image";
 import { isCompletedTaskStatus } from "@/lib/taskMaintenance";
 import TasksWorkspace from "./TasksWorkspace";
 import { taskContactOptions } from "@/lib/tasks/contactOptions";
+import { matchesContactSearch } from "@/lib/contactSearch";
 import { useTaskApi, useTaskProjection, taskPermissions, taskForBusinessView } from "@/lib/tasks/client";
 import { parisCivilDate, isCivilDate, TaskRequestLedger, effectiveTaskLeadId } from "@/lib/tasks/domain";
 import { crmCache } from "@/lib/access/crmCache";
@@ -6463,7 +6464,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   }, [data, visibleTasks]);
 
   const filteredContacts = useMemo(() => {
-    return data.contacts.filter((contact) => searchMatch(query, [contact.name, contact.firstName ?? "", contact.companyName ?? "", contact.kind, contact.email, contact.phone, contact.city, contact.postalAddress ?? "", contact.organizationFunction ?? "", contact.supplierCategory ?? "", contact.supplierZone ?? "", contact.supplierReliability ?? ""]));
+    return data.contacts.filter((contact) => matchesContactSearch(contact, query));
   }, [data.contacts, query]);
 
   const filteredLeads = useMemo(() => {
@@ -11790,8 +11791,8 @@ function ContactsView({
     const savedProfessions = contacts
       .map((contact) => String(contact.supplierCategory || "").trim())
       .filter((profession) => Boolean(profession) && !legacyAssetCategories.has(profession));
-    return Array.from(new Set([...supplierCategories, ...savedProfessions]));
-  }, [contacts]);
+    return Array.from(new Set([...supplierCategories, ...savedProfessions, ...(supplierCategoryFilter === "Toutes" ? [] : [supplierCategoryFilter])]));
+  }, [contacts, supplierCategoryFilter]);
 
   function getContactDisplayName(contact: Contact) {
     return [contact.civility, contact.firstName, contact.name].filter(Boolean).join(" ").trim();

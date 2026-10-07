@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "../lib/contactEditing";
+import { matchesContactSearch } from "../lib/contactSearch";
 import { fictionalContact, fictionalAccount } from "./fixtures/vendorBanking";
 import { isEligibleVendorContact } from "../lib/vendorContacts";
 import type { Contact } from "../lib/types";
@@ -82,12 +83,13 @@ test("seuls les champs modifiés sont transmis, même si le formulaire propose d
 });
 
 test("recherche existante par rue et code postal, conversion historique sans altération", () => {
-  const match = handler("searchMatch");
-  for (const query of ["avenue Exemple", "06400", "bâtiment"]) assert.equal(match(query, [address]), true);
+  for (const query of ["avenue Exemple", "06400", "bâtiment", "batiment", "EXEMPLE avenue"]) {
+    assert.equal(matchesContactSearch({ ...fictionalContact, postalAddress: address }, query), true);
+  }
   const toRow = handler("contactToSupabaseRow");
   const fromRow = handler("contactFromSupabaseRow");
   assert.equal(fromRow(toRow({ ...fictionalContact, postalAddress: address }, "user-test")).postalAddress, address);
-  assert.match(source, /contact\.city, contact\.postalAddress \?\? ""/);
+  assert.match(source, /data\.contacts\.filter\(\(contact\) => matchesContactSearch\(contact, query\)\)/);
 });
 
 for (const nextKind of ["Client", "Propriétaire"] as const) {

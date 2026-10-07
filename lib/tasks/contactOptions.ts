@@ -1,3 +1,5 @@
+import { matchesContactSearchFields } from "../contactSearch";
+
 /** Contact references come from the caller's authorized Contacts projection. */
 export type TaskContactOption = {
   id: string;
@@ -11,13 +13,8 @@ export function taskContactLabel(contact: TaskContactOption): string {
   return [contact.firstName, contact.name].filter(value => value?.trim()).join(" ") || (contact.company?.trim() ? contact.company : "Contact sans nom");
 }
 
-function normalizedContactSearch(value: string): string {
-  return value.normalize("NFKD").replace(/\p{M}+/gu, "").toLocaleLowerCase("fr").trim().replace(/\s+/gu, " ");
-}
-
 export function matchesTaskContact(contact: TaskContactOption, query: string): boolean {
-  const searchable = normalizedContactSearch([contact.firstName, contact.name, contact.company].filter(value => value?.trim()).join(" "));
-  return normalizedContactSearch(query).split(" ").filter(Boolean).every(token => searchable.includes(token));
+  return matchesContactSearchFields(query, [contact.firstName, contact.name, contact.company]);
 }
 
 /** Never complete a restricted reference by reading a global CRM payload. */
