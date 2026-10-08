@@ -2119,7 +2119,7 @@ function QuotesView({
       <section id="quotes-list-panel" className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Devis</p>
+            <p className="eyebrow">Devis clients</p>
             <h3>{visibleQuotes.length} devis affiché{visibleQuotes.length > 1 ? "s" : ""}{statusFilter !== "Tous" ? ` · ${quotes.length} total` : ""}</h3>
           </div>
         </div>
@@ -3964,7 +3964,7 @@ function HouseTrackingView({
       <section className="card house-control-card">
         <div className="section-heading house-section-heading">
           <div>
-            <p className="eyebrow">Suivi maison</p>
+            <p className="eyebrow">Personnel &amp; interventions</p>
             <h3>Gestion simple des heures et paiements</h3>
           </div>
           <BusinessButton permission="export" className="secondary-button" type="button" onClick={exportHouseCsv}>Export CSV</BusinessButton>
@@ -5296,7 +5296,7 @@ function DashboardQuickTile({
   onClick: () => void;
 }) {
   const access=useBusinessPermissions();
-  const moduleByCaption:Record<string,import("@/lib/access/modules").ModuleId>={"Factures prestataires":"vendorInvoices","Interventions du jour":"planning","Suivi maison":"houseTracking","Paiements clients":"bookings"};
+  const moduleByCaption:Record<string,import("@/lib/access/modules").ModuleId>={"Factures prestataires":"vendorInvoices","Interventions du jour":"planning","Personnel & interventions":"houseTracking","Paiements clients":"bookings"};
   if(access&&moduleByCaption[caption]&&!access.read(moduleByCaption[caption]))return null;
   return (
     <button className="stat-card dashboard-command-kpi-tile" type="button" onClick={onClick} title="Ouvrir le module concerné">
@@ -5582,7 +5582,7 @@ function DashboardQuickTile({
 
 export {createQuickEntryRecords, promptQuickEntryText};
 
-export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => boolean | void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
   const beginHouseOperation = useScopedOperations("houseTracking");
   const taskApi = useTaskApi();
   const taskStatusRequests = useRef(new TaskRequestLedger());
@@ -5606,6 +5606,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   });
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
+  const [navigationRevision, setNavigationRevision] = useState(0);
   const [focusContactId, setFocusContactId] = useState<string | undefined>();
   const [, setMobileMoreOpen] = useState(false);
 
@@ -5794,6 +5795,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
     setFocusContactId(undefined);
     setQuery("");
     setActiveTabState(tab);
+    setNavigationRevision(value => value + 1);
     return true;
   }
 
@@ -6531,7 +6533,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       });
     };
 
-    setActiveTab(targetTab);
+    if (!setActiveTab(targetTab)) return;
     window.setTimeout(() => runScroll(), activeTab === targetTab ? 80 : 180);
   }
 
@@ -8752,8 +8754,8 @@ function createQuoteDraftFromLead(lead: Lead) {
 
   return (
     <main className="crm-shell crm-readable-redesign" onChangeCapture={event=>{if((event.target as HTMLElement).closest("form"))setFormDirty(true);}} onSubmitCapture={()=>setFormDirty(false)}>
-      <UnifiedNavigation access={access} active={activeTab} badges={sidebarBadgeCounts} onLogout={onLogout} onNavigate={tab => {
-        if (tab === "monthlyCharges" || tab === "izord" || tab === "publisher" || tab === "admin") onExternalNavigate(tab); else setActiveTab(tab);
+      <UnifiedNavigation access={access} accountId={sessionUserId} navigationRevision={navigationRevision} active={activeTab} badges={sidebarBadgeCounts} onLogout={onLogout} onNavigate={tab => {
+        if (tab === "monthlyCharges" || tab === "izord" || tab === "publisher" || tab === "admin") return onExternalNavigate(tab); else return setActiveTab(tab);
       }} />
 
       <section className="content-panel">
@@ -11652,7 +11654,7 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
       id: "quality-leads-budget",
       title: `${leadsWithoutBudget.length} lead(s) sans budget`,
       detail: "Valeur commerciale à compléter.",
-      badge: "Leads",
+      badge: "Demandes clients",
       tone: "warning" as const,
       tab: "leads" as Tab
     } : null,
@@ -11683,7 +11685,7 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
             else onDashboardAction("vendorInvoices" as Tab);
           }} />
           <DashboardQuickTile label="Aujourd’hui" value={String(todayPlanning.length)} caption="Interventions du jour" onClick={() => onDashboardAction("planning" as Tab)} />
-          <DashboardQuickTile label="Maison à payer" value={currency.format(houseAmountToPay)} caption="Suivi maison" onClick={() => onDashboardAction("houseTracking" as Tab)} />
+          <DashboardQuickTile label="Maison à payer" value={currency.format(houseAmountToPay)} caption="Personnel & interventions" onClick={() => onDashboardAction("houseTracking" as Tab)} />
           <DashboardQuickTile label="À recevoir" value={currency.format(clientAmountToReceive)} caption="Paiements clients" onClick={() => onDashboardAction("bookings" as Tab)} />
         </div>
       </div>
@@ -11710,7 +11712,7 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
         <DashboardCommandCard eyebrow="Commercial" title="Leads et devis" summary={`${commercialItems.length} sujet${commercialItems.length > 1 ? "s" : ""}`}>
           {renderDashboardList(commercialItems, "Aucun lead ou devis urgent à relancer.", 6)}
           <div className="dashboard-command-actions">
-            <BusinessButton disabled={Boolean(business&&!business.read("leads"))} className="secondary-button compact-button" type="button" onClick={onShowLeads}>Voir les leads</BusinessButton>
+            <BusinessButton disabled={Boolean(business&&!business.read("leads"))} className="secondary-button compact-button" type="button" onClick={onShowLeads}>Voir les demandes clients</BusinessButton>
             <BusinessButton disabled={Boolean(business&&(!business.canWrite("contacts")||!business.canWrite("leads")))} className="secondary-button compact-button" type="button" onClick={onStartMessage}>Créer depuis message</BusinessButton>
           </div>
         </DashboardCommandCard>
@@ -12682,7 +12684,7 @@ const visibleLeads = leads.filter((lead) => {
         </div>
       </section>
 
-      <section className="pipeline-grid compact-pipeline" aria-label="Pipeline leads">
+      <section className="pipeline-grid compact-pipeline" aria-label="Demandes clients">
         {leadStatuses.map((status) => {
           const columnLeads = sortByUrgency(visibleLeads.filter((lead) => lead.status === status));
 

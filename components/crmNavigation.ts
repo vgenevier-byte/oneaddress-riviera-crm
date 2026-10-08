@@ -22,18 +22,18 @@ export type CRMNavigationItem = {
 };
 
 export const crmNavigationItems: CRMNavigationItem[] = [
-  { tab: "dashboard", label: "Dashboard", icon: "⌂" },
+  { tab: "dashboard", label: "Tableau de bord", icon: "⌂" },
   { tab: "contacts", label: "Contacts", icon: "◉" },
-  { tab: "leads", label: "Leads", icon: "◎" },
+  { tab: "leads", label: "Demandes clients", icon: "◎" },
   { tab: "tasks", label: "Tâches", icon: "✓" },
   { tab: "quotes", label: "Devis clients", icon: "▤" },
   { tab: "bookings", label: "Réservations", icon: "◆" },
   { tab: "vendorQuotes", label: "Devis prestataires", shortLabel: "Devis presta.", icon: "◇" },
   { tab: "vendorInvoices", label: "Factures prestataires", shortLabel: "Factures presta.", icon: "€" },
-  { tab: "houseTracking", label: "Suivi maison", icon: "◷" },
+  { tab: "houseTracking", label: "Personnel & interventions", icon: "◷" },
   { tab: "documents", label: "Documents", icon: "▣" },
   { tab: "planning", label: "Planning", icon: "▦" },
-  { tab: "properties", label: "Biens", icon: "⌂" },
+  { tab: "properties", label: "Biens immobiliers", icon: "⌂" },
   { tab: "vehicles", label: "Voitures", icon: "◇" },
   { tab: "boats", label: "Bateaux", icon: "≈" }
 ];
@@ -66,18 +66,18 @@ export function getCRMNavigationItem(tab: CRMTab) {
 
 export function getCRMTabTitle(tab: CRMTab) {
   const titles: Record<CRMTab, string> = {
-    dashboard: "Vue d’ensemble",
+    dashboard: "Tableau de bord",
     contacts: "Contacts",
-    leads: "Pipeline leads",
+    leads: "Demandes clients",
     tasks: "Tâches",
     quotes: "Devis clients",
     bookings: "Réservations",
     vendorQuotes: "Devis prestataires",
     vendorInvoices: "Factures prestataires",
-    houseTracking: "Suivi maison",
+    houseTracking: "Personnel & interventions",
     documents: "Documents",
     planning: "Planning",
-    properties: "Biens",
+    properties: "Biens immobiliers",
     vehicles: "Voitures",
     boats: "Bateaux"
   };

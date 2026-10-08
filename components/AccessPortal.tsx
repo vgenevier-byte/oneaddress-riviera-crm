@@ -36,6 +36,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
   const [businessDraft,setBusinessDraft]=useState<{user:string;revision:number;module:ModuleId;value:Record<string,string>}|null>(null);
   const [sourceFocus, setSourceFocus] = useState<{ module: "vendorInvoices" | "houseTracking"; id: string } | undefined>();
   const [view,setView] = useState<UnifiedTab>(space === "charges" ? "monthlyCharges" : space === "izord" ? "izord" : space === "publisher" ? "publisher" : space === "admin" ? "admin" : "dashboard");
+  const [navigationRevision, setNavigationRevision] = useState(0);
   const permissionsRef = useRef<string>("");
   const [invitation,setInvitation] = useState<string | null>(null);
   const [invitationReady,setInvitationReady] = useState(false);
@@ -351,17 +352,19 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
   const chargesDenied = view === "monthlyCharges" && permissions && !readable(permissions, "monthlyCharges");
   const selected = chargesDenied ? null : (view === "admin" ? permissions?.generalAdmin : permissions && readable(permissions,view)) ? view : allowed[0]?.tab ?? (permissions?.generalAdmin ? "admin" : null);
   function navigate(tab:UnifiedTab, recordId?: string) {
-    if(!confirmLeaving())return;
+    if(!confirmLeaving())return false;
     stopGenerator(); setHasUnsavedChanges(false); setView(tab);
+    setNavigationRevision(value => value + 1);
     const focus = recordId && (tab === "vendorInvoices" || tab === "houseTracking") ? { module: tab, id: recordId } : undefined;
     setSourceFocus(focus);
     const hash = focus ? "#"+(tab === "vendorInvoices" ? "vendor-invoice-" : "house-time-")+encodeURIComponent(focus.id) : "";
     window.history.replaceState(null,"",(tab === "monthlyCharges" ? "/charges" : tab === "izord" ? "/izord" : tab === "publisher" ? "/publisher" : tab === "admin" ? "/admin" : "/?module="+tab)+hash);
+    return true;
   }
   if(invitationReady && !access.loading && access.session && permissions && !access.error && !invitation && !invitationAccepted) {
     if(selected && selected!==view) return <SelectAllowed select={()=>setView(selected)} />;
     if(selected && selected!=="monthlyCharges" && selected!=="izord" && selected!=="publisher" && selected!=="admin" && permissions.fullAccess) return <OperationProvider userId={access.session.user.id} access={permissions}><CRMApp key={access.session.user.id+":"+permissions.revision} access={permissions} initialTab={selected as CRMTab} sourceFocus={sourceFocus} onExternalNavigate={navigate} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email??"utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} /></OperationProvider>;
-    return <OperationProvider userId={access.session.user.id} access={permissions}><main className="crm-shell crm-readable-redesign"><UnifiedNavigation access={permissions} active={selected??"dashboard"} onNavigate={navigate} onLogout={logout}/><section className="content-panel">
+    return <OperationProvider userId={access.session.user.id} access={permissions}><main className="crm-shell crm-readable-redesign"><UnifiedNavigation access={permissions} accountId={access.session.user.id} navigationRevision={navigationRevision} active={selected??"dashboard"} onNavigate={navigate} onLogout={logout}/><section className="content-panel">
       {message&&<p role="status">{message}</p>}
       {!selected && <div className="module-workspace"><h1>{chargesDenied ? "Charges mensuelles : accès refusé" : "Aucun accès autorisé"}</h1><p>{chargesDenied ? "Ce module n’est pas autorisé pour votre compte." : "Votre compte est connecté, mais aucun module ne lui est attribué. Contactez votre administrateur."}</p><button onClick={logout}>Se déconnecter</button></div>}
       {selected==="admin"&&<AccessAdministration key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onReconnect={reconnectForDriveDiagnostic} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
