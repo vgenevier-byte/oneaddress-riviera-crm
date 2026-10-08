@@ -1,5 +1,90 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import type { Variables } from "@/lib/i18n/types";
+import { translate } from "@/lib/i18n/engine";
+import { crmMessages } from "@/lib/i18n/catalogs/crm";
+import { modulesMessages } from "@/lib/i18n/catalogs/modules";
+
+type UITranslate = ReturnType<typeof useI18n>["t"];
+const defaultCRMTranslate: UITranslate = (key, variables) => translate(key, "fr", variables);
+type PlanningDisplay = { t: UITranslate; enum: (value: string) => string; shortDate: (value?: string) => string; timeRange: (start?: string, end?: string) => string };
+
+type ScreenNotice = string | { key: string; variables?: Variables };
+function screenNotice(key: string, variables?: Variables): ScreenNotice { return { key, variables }; }
+function displayValue(value: unknown) { return String(value ?? ""); }
+const knownCRMErrors = new Map(Object.entries(crmMessages).filter(([key]) => key.startsWith("crm.errors.") && key !== "crm.errors.unknown").map(([key, message]) => [message.fr, key]));
+function safeCRMError(error: unknown): ScreenNotice {
+  const text = error instanceof Error ? error.message : typeof error === "string" ? error : "";
+  return screenNotice(knownCRMErrors.get(text) || "crm.errors.unknown");
+}
+
+// Exact application-owned form outcomes only; never render an arbitrary server message.
+const knownConfirmedFormMessages = new Map<string, string>(([
+  "modules.common.newerDraftRetained",
+  "modules.common.saveUnconfirmedReview",
+  "modules.common.enterATitle",
+  "modules.moduleWorkspace.operationUnconfirmed",
+  "modules.moduleWorkspace.conflictTheDataHasChangedReloadBeforeContinuing",
+  "modules.moduleWorkspace.aSaveIsAlreadyInProgress",
+  "modules.moduleWorkspace.savingInterruptedYourSessionOrPermissionsHaveChanged",
+  "modules.moduleWorkspace.connectionInterruptedSaveUnconfirmedYourInputIsRetained",
+  "modules.moduleWorkspace.saveRefusedCheckTheFieldsAndYourPermissionsYourInputIsRetained",
+  "modules.moduleWorkspace.editingUnauthorisedOrSavingInProgress",
+  "modules.moduleWorkspace.savingInterruptedTheAccountOrPermissionsHaveChanged",
+  "modules.moduleWorkspace.conflictTheDataHasChangedYourInputIsRetainedReloadBeforeContinuing",
+  "modules.moduleWorkspace.saveUnconfirmedYourInputIsRetainedCheckTheConnectionAndYourPermissions",
+  "modules.moduleWorkspace.editOneItemAtATime",
+  "modules.moduleWorkspace.invalidScheduleDates",
+  "modules.houseWorkerEditor.enterAValidHourlyRateWithNoMoreThanTwoDecimalPlaces"
+] as const).map(key => [modulesMessages[key].fr, key]));
+function confirmedFormNotice(message: string) {
+  return { key: knownConfirmedFormMessages.get(message) || knownCRMErrors.get(message) || "crm.errors.unknown" };
+}
+function ConfirmedFormMessage({ message, inline = false }: { message: string; inline?: boolean }) {
+  const { t } = useI18n();
+  if (!message) return null;
+  const notice = confirmedFormNotice(message);
+  const Element = inline ? "span" : "p";
+  return <Element role={notice.key === "modules.common.newerDraftRetained" ? "status" : "alert"}>{t(notice.key)}</Element>;
+}
+
+/** Screen-only formatting. Export generators and stored business notes retain their original helpers. */
+function useCRMDisplay() {
+  const i18n = useI18n();
+  const { t, label, formatDate, locale } = i18n;
+  const current = useCommittedValue({ t, label });
+  const screenText = useCallback((notice: ScreenNotice) => typeof notice === "string" ? label(notice, "crm") : t(notice.key, notice.variables), [t, label]);
+  const dialogText = useCallback((notice: ScreenNotice) => typeof notice === "string" ? current.current.label(notice, "crm") : current.current.t(notice.key, notice.variables), [current]);
+  const dialogT: UITranslate = useCallback((key, variables) => current.current.t(key, variables), [current]);
+  const date = (value?: string) => value ? formatDate(value, { day: "2-digit", month: "2-digit", year: "numeric" }) : "";
+  const money = (value: number, maximumFractionDigits = 0) => new Intl.NumberFormat(locale, { style: "currency", currency: "EUR", maximumFractionDigits }).format(value);
+  const timeRange = (start?: string, end?: string) => start && end ? `${start} → ${end}` : start || (end ? t("crm.screen.untilTime", { time: end }) : "");
+  const shortDate = (value?: string) => value ? formatDate(value, { day: "2-digit", month: "2-digit" }) : t("crm.screen.dateMissing");
+  const planningDisplay: PlanningDisplay = { t, enum: value => label(value, "crm"), shortDate, timeRange };
+  const screen = {
+    date,
+    dateTime: (value?: string) => value ? formatDate(value, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "",
+    money,
+    quoteDate: (value?: string) => value ? formatDate(value, { day: "2-digit", month: "2-digit", year: "numeric" }) : "—",
+    euro: (value: unknown) => new Intl.NumberFormat(locale, { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(normalizeEuroAmount(value)).replace(/[\u00a0\u202f]/g, " "),
+    shortDate,
+    monthTitle: (value: string) => formatDate(`${value}-01`, { month: "long", year: "numeric" }),
+    reservation: (start?: string, end?: string) => start && end ? t("crm.screen.reservationPeriod", { start: date(start), end: date(end) }) : start ? t("crm.screen.reservationFrom", { start: date(start) }) : end ? t("crm.screen.reservationUntil", { end: date(end) }) : t("crm.screen.reservationMissing"),
+    due: (value?: string) => !value ? t("crm.screen.dateMissing") : getDueStatus(value) === "overdue" ? t("crm.screen.overdueDate", { date: date(value) }) : getDueStatus(value) === "today" ? t("crm.screen.todayDate", { date: date(value) }) : t("crm.screen.dueDate", { date: date(value) }),
+    action: (item: ActionTrackedItem) => { const actor = item.updatedBy || item.createdBy; if (!actor) return t("crm.screen.actionUnassigned"); const when = item.updatedAt || item.createdAt; return when ? t("crm.screen.lastActionDate", { actor, date: formatDate(when, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) }) : t("crm.screen.lastAction", { actor }); },
+    balance: (value: number) => value > 0 ? t("crm.screen.balanceDue", { amount: money(value, 2) }) : value < 0 ? t("crm.screen.balanceAdvance", { amount: money(Math.abs(value), 2) }) : t("crm.screen.balanceZero"),
+    timeRange,
+    planningRange: (entry: Pick<PlanningEntry, "startDate" | "endDate" | "startTime" | "endTime">) => { const start = [date(entry.startDate), entry.startTime].filter(Boolean).join(" · "); if (entry.endDate && entry.endDate !== entry.startDate) return `${start} → ${[date(entry.endDate), entry.endTime].filter(Boolean).join(" · ")}`; const time = timeRange(entry.startTime, entry.endTime); return [date(entry.startDate), time].filter(Boolean).join(" · "); },
+    enum: (canonical: string) => label(canonical, "crm"),
+    category: (canonical: string) => [...supplierCategories, ...planningCategoryOptions, "Tous", "Clients", "Prestataires", "Propriétaires", "Membres de l’organisation"].includes(canonical as never) ? label(canonical, "crm") : canonical,
+    planningSegment: (event: any, dayIso?: string) => getPlanningCalendarDaySegmentStatus(event, dayIso, planningDisplay),
+    planningExplanation: (event: any) => getPlanningTimingExplanation(event, planningDisplay),
+    planningEventLabel: (event: any, dayIso?: string) => getPlanningCalendarEventLabel(event, dayIso, planningDisplay),
+  };
+  return { ...i18n, label: (canonical: unknown, namespace?: string) => label(displayValue(canonical), namespace), screen, screenText, dialogText, dialogT };
+}
+
 import { BusinessForm, BusinessLabel, BusinessButton, BusinessSelect, useBusinessPermissions } from "./BusinessPermissions";
 import { useConfirmedForm, type FormSave, type FormSaveResult } from "@/lib/access/useConfirmedForm";
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
@@ -387,7 +472,7 @@ function readLocalCRMDataSafely() {
 type Tab = CRMTab;
 
 type Toast = {
-  message: string;
+  message: ScreenNotice;
   tone: "success" | "warning";
 };
 
@@ -670,7 +755,8 @@ function getActionMetaLabel(item: ActionTrackedItem) {
 }
 
 function ActionMeta({ item }: { item: ActionTrackedItem }) {
-  return <small className="action-meta">{getActionMetaLabel(item)}</small>;
+  const { screen } = useCRMDisplay();
+  return <small className="action-meta">{screen.action(item)}</small>;
 }
 
 
@@ -1900,6 +1986,8 @@ function QuotesView({
   onChange: (quotes: QuoteRequest[]) => FormSave;
   onQuoteChange?: (quote: QuoteRequest) => void;
 }) {
+  const { t, label, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const confirmation = useConfirmedForm(business?.markDirty);
   function setQuotes(update: QuoteRequest[] | ((current: QuoteRequest[]) => QuoteRequest[])) {
@@ -2044,22 +2132,22 @@ function QuotesView({
     const previousQuote = editingQuoteId ? quotes.find((item) => item.id === editingQuoteId) : undefined;
 
     if (!clientName && (!business || business.read("contacts") || !editingQuoteId)) {
-      window.alert("Sélectionnez un client.");
+      window.alert(dialogT("crm.quotes.6ba4d09b21"));
       return;
     }
 
     if (selectedCategories.length === 0) {
-      window.alert("Sélectionnez au moins une prestation.");
+      window.alert(dialogT("crm.quotes.61895a9dbb"));
       return;
     }
 
     if (quoteItems.some((item) => item.unitPrice <= 0)) {
-      window.alert("Renseignez un prix pour chaque prestation sélectionnée.");
+      window.alert(dialogT("crm.quotes.ddd5a36d4b"));
       return;
     }
 
     if (!startDate || !endDate) {
-      window.alert("Renseignez les dates demandées.");
+      window.alert(dialogT("crm.quotes.65ee26a365"));
       return;
     }
 
@@ -2119,8 +2207,8 @@ function QuotesView({
       <section id="quotes-list-panel" className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Devis clients</p>
-            <h3>{visibleQuotes.length} devis affiché{visibleQuotes.length > 1 ? "s" : ""}{statusFilter !== "Tous" ? ` · ${quotes.length} total` : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Devis clients"}>{t("crm.quotes.c53919a65c")}</p>
+            <h3>{t("crm.counts.quotesShown", { count: visibleQuotes.length })}{statusFilter !== "Tous" ? t("crm.quotes.f5300ab745", { value1: displayValue(quotes.length) }) : ""}</h3>
           </div>
         </div>
 
@@ -2133,32 +2221,29 @@ function QuotesView({
               className={statusFilter === status ? "primary-button" : "secondary-button"}
               onClick={() => setStatusFilter(status)}
             >
-              {status === "Tous" ? "Tous" : getQuoteStatusFrenchLabel(status)}
+              {status === "Tous" ? t("crm.quotes.2ff5998143") : label(getQuoteStatusFrenchLabel(status), "crm")}
             </BusinessButton>
           ))}
         </div>
 
-        {visibleQuotes.length === 0 ? (
-            <p className="muted-line">Aucun devis pour le moment. Créez d’abord un contact et un lead, puis générez un devis depuis le lead.</p>
-          ) : (
-            visibleQuotes.map((quote) => (
+        {visibleQuotes.length === 0 ? (<p className="muted-line">{t("crm.quotes.5cbb140b1b")}</p>) : (visibleQuotes.map((quote) => (
               <article className="quote-card" key={quote.id} data-notification-target={`quote-${quote.id}`}>
                 <div>
-                  <p className="eyebrow">{getQuoteItems(quote).map((item) => getQuoteCategoryFrenchLabel(item.category)).join(" · ")}</p>
+                  <p className="eyebrow">{getQuoteItems(quote).map((item) => label(getQuoteCategoryFrenchLabel(item.category), "crm")).join(" · ")}</p>
                   <h3>{quote.title || quote.clientName}</h3>
                   <p>{quote.clientName}</p>
-                  <p>Du {formatQuoteDate(quote.startDate)} au {formatQuoteDate(quote.endDate)}</p>
-                  <strong>{formatQuotePrice(getQuoteSubtotal(quote))}</strong>
+                  <p>{t("crm.quotes.0b6722a8ad")}{" "}{screen.quoteDate(quote.startDate)}{" "}{t("crm.quotes.632cd2fea7")}{" "}{screen.quoteDate(quote.endDate)}</p>
+                  <strong>{screen.money(getQuoteSubtotal(quote))}</strong>
 
                   {getQuoteDepositTotal(quote) > 0 && (
-                    <small>Caution : {formatQuotePrice(getQuoteDepositTotal(quote))}</small>
+                    <small>{t("crm.quotes.78edb987eb")}{" "}{screen.money(getQuoteDepositTotal(quote))}</small>
                   )}
 
                   <ul className="quote-line-preview">
                     {getQuoteItems(quote).map((item) => (
                       <li key={item.id}>
-                        <span>{getQuoteCategoryFrenchLabel(item.category)}</span>
-                        <strong>{formatQuotePrice(item.unitPrice)} {getQuoteUnitShortLabel(item.billingUnit)}</strong>
+                        <span>{label(getQuoteCategoryFrenchLabel(item.category), "crm")}</span>
+                        <strong>{screen.money(item.unitPrice)} {t(item.billingUnit === "week" ? "crm.screen.perWeek" : item.billingUnit === "fixed" ? "crm.screen.fixedFee" : "crm.screen.perDay")}</strong>
                       </li>
                     ))}
                   </ul>
@@ -2171,52 +2256,44 @@ function QuotesView({
                   <BusinessSelect
                     value={getQuoteStatus(quote.status)}
                     onChange={(event) => updateQuoteStatus(quote.id, getQuoteStatus(event.target.value))}
-                    aria-label="Devis status"
+                    aria-label={t("crm.quotes.183ca7a2cf")}
                   >
                     {quoteStatuses.map((status) => (
-                      <option key={status} value={status}>{getQuoteStatusFrenchLabel(status)}</option>
+                      <option key={status} value={status}>{label(getQuoteStatusFrenchLabel(status), "crm")}</option>
                     ))}
                   </BusinessSelect>
 
-                  <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => fillQuoteForm(quote)}>
-                    Modifier
-                  </BusinessButton>
+                  <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => fillQuoteForm(quote)} data-crm-auto-scroll="true">{t("crm.quotes.42e37604b6")}</BusinessButton>
 
-                  <BusinessButton permission="export" className="primary-button" type="button" onClick={async() => { if(business){try{await business.check();}catch{return;}} openQuotePdf(quote); }}>
-                    Générer PDF
-                  </BusinessButton>
+                  <BusinessButton permission="export" className="primary-button" type="button" onClick={async() => { if(business){try{await business.check();}catch{return;}} openQuotePdf(quote); }}>{t("crm.quotes.1ead755294")}</BusinessButton>
 
                   <BusinessButton permission="remove"
                     className="danger-link"
                     type="button"
                     onClick={() => {
-                      const confirmed = window.confirm("Supprimer ce devis ?");
+                      const confirmed = window.confirm(dialogT("crm.quotes.20d8c825b2"));
                       if (!confirmed) return;
                       setQuotes((current) => current.filter((item) => item.id !== quote.id));
                     }}
-                  >
-                    Supprimer
-                  </BusinessButton>
+                  >{t("crm.quotes.5e5d0216ce")}</BusinessButton>
                 </div>
               </article>
-            ))
-          )}
+            )))}
         </div>
       </section>
 
       <section className="card form-card">
-        <p className="eyebrow">{editingQuoteId ? "Modification" : "Nouveau"}</p>
-        <h3>{editingQuoteId ? "Modifier le devis" : "Créer un devis"}</h3>
+        <p className="eyebrow" data-semantic-text={"Modification Nouveau"}>{editingQuoteId ? t("crm.quotes.46889b43bc") : t("crm.quotes.c3634f2ede")}</p>
+        <h3>{editingQuoteId ? t("crm.quotes.709da97046") : t("crm.quotes.c144056867")}</h3>
 
         <BusinessForm className="form-grid" data-quote-form="true" onSubmit={addQuote} onChangeCapture={confirmation.changed} pending={confirmation.saving}>
-          {confirmation.message&&<p role="alert">{confirmation.message}</p>}
+          <ConfirmedFormMessage message={confirmation.message} />
           <input type="hidden" name="leadId" />
-          <BusinessLabel>Client
-            <input
+          <BusinessLabel>{t("crm.quotes.0c77fe09ab")}<input
               name="clientName"
               list="quote-client-options"
               required
-              placeholder="Rechercher un client"
+              placeholder={t("crm.quotes.11ab79048c")}
               autoComplete="off"
             />
             <datalist id="quote-client-options">
@@ -2229,80 +2306,69 @@ function QuotesView({
                 </option>
               ))}
             </datalist>
-            <small className="quote-client-helper">Clients uniquement. Les prestataires sont exclus des devis.</small>
+            <small className="quote-client-helper">{t("crm.quotes.96ba956293")}</small>
           </BusinessLabel>
 
-          <BusinessLabel>Titre du devis
-            <input name="title" placeholder="Séjour villa, location bateau, voiture, conciergerie..." />
+          <BusinessLabel>{t("crm.quotes.57257d8471")}<input name="title" placeholder={t("crm.quotes.eeb96f67e2")} />
           </BusinessLabel>
 
-          <BusinessLabel>Lieu / destination
-            <input name="location" placeholder="Cannes, Saint-Tropez, Monaco..." />
+          <BusinessLabel>{t("crm.quotes.c964b7d6ac")}<input name="location" placeholder={t("crm.quotes.3e00389e0f")} />
           </BusinessLabel>
 
-          <BusinessLabel>Nombre de voyageurs
-            <input name="guestCount" placeholder="Ex : 6 adultes, 2 enfants" />
+          <BusinessLabel>{t("crm.quotes.927df2deda")}<input name="guestCount" placeholder={t("crm.quotes.48ebdf394a")} />
           </BusinessLabel>
 
-          <BusinessLabel>Date début demandée
-            <input name="startDate" type="date" required />
+          <BusinessLabel>{t("crm.quotes.c6b03962c5")}<input name="startDate" type="date" required />
           </BusinessLabel>
 
-          <BusinessLabel>Date fin demandée
-            <input name="endDate" type="date" required />
+          <BusinessLabel>{t("crm.quotes.fc1c8c3a1f")}<input name="endDate" type="date" required />
           </BusinessLabel>
 
-          <BusinessLabel>Validité du devis
-            <input name="validityDate" type="date" />
+          <BusinessLabel>{t("crm.quotes.760d52c497")}<input name="validityDate" type="date" />
           </BusinessLabel>
 
           <fieldset className="full quote-category-box quote-lines-box">
-            <legend>Prestations, prix et cautions</legend>
+            <legend>{t("crm.quotes.dbd73be781")}</legend>
 
             {quoteCategories.map((category) => (
               <div className="quote-line-input" key={category}>
                 <BusinessLabel>
                   <input type="checkbox" name="categories" value={category} />
-                  {getQuoteCategoryFrenchLabel(category)}
+                  {label(getQuoteCategoryFrenchLabel(category), "crm")}
                 </BusinessLabel>
 
-                <input name={`description${category}`} placeholder="Détail prestation" />
+                <input name={`description${category}`} placeholder={t("crm.quotes.8ae68422f6")} />
 
-                <input name={`price${category}`} type="number" min="0" placeholder="Prix" />
+                <input name={`price${category}`} type="number" min="0" placeholder={t("crm.quotes.54c324f6c1")} />
 
                 <select name={`unit${category}`} defaultValue="day">
-                  <option value="day">Prix / jour</option>
-                  <option value="week">Prix / semaine</option>
-                  <option value="fixed">Forfait</option>
+                  <option value="day">{t("crm.quotes.6e55aff773")}</option>
+                  <option value="week">{t("crm.quotes.4cafd308a0")}</option>
+                  <option value="fixed">{t("crm.quotes.c1d3af5242")}</option>
                 </select>
 
-                <input name={`deposit${category}`} type="number" min="0" placeholder="Caution" />
+                <input name={`deposit${category}`} type="number" min="0" placeholder={t("crm.quotes.2e178e6c65")} />
               </div>
             ))}
           </fieldset>
 
-          <BusinessLabel className="full">Inclus
-            <textarea name="included" placeholder="Ex : accueil, linge, ménage intermédiaire, skipper, livraison..." />
+          <BusinessLabel className="full">{t("crm.quotes.f5ecc07b09")}<textarea name="included" placeholder={t("crm.quotes.88da7e8a81")} />
           </BusinessLabel>
 
-          <BusinessLabel className="full">Non inclus
-            <textarea name="excluded" placeholder="Ex : carburant, extras, transferts, repas, taxe de séjour..." />
+          <BusinessLabel className="full">{t("crm.quotes.345794b198")}<textarea name="excluded" placeholder={t("crm.quotes.30ed0f214a")} />
           </BusinessLabel>
 
-          <BusinessLabel className="full">Conditions de paiement
-            <textarea name="paymentTerms" placeholder="Ex : 50 % à la réservation, solde 30 jours avant arrivée..." />
+          <BusinessLabel className="full">{t("crm.quotes.676a9f4578")}<textarea name="paymentTerms" placeholder={t("crm.quotes.0845661111")} />
           </BusinessLabel>
 
-          <BusinessLabel className="full">Conditions d’annulation
-            <textarea name="cancellationTerms" placeholder="Conditions selon saison, disponibilité et prestataires..." />
+          <BusinessLabel className="full">{t("crm.quotes.b26789ecf9")}<textarea name="cancellationTerms" placeholder={t("crm.quotes.23dcf0de36")} />
           </BusinessLabel>
 
-          <BusinessLabel className="full">Notes internes / détails client
-            <textarea name="notes" placeholder="Informations utiles, préférences client, demandes spéciales..." />
+          <BusinessLabel className="full">{t("crm.quotes.09b8df2f9b")}<textarea name="notes" placeholder={t("crm.quotes.ce6bda37a6")} />
           </BusinessLabel>
 
-          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
-            {editingQuoteId ? "Enregistrer les modifications" : "Créer le devis"}
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit" data-crm-auto-scroll="true">
+            {editingQuoteId ? t("crm.quotes.45951f6ac1") : t("crm.quotes.7ca9fcd1d9")}
           </BusinessButton>
 
           {editingQuoteId && (
@@ -2315,9 +2381,7 @@ function QuotesView({
                 const form = document.querySelector<HTMLFormElement>('form[data-quote-form="true"]');
                 form?.reset();
               }}
-            >
-              Annuler la modification
-            </BusinessButton>
+            >{t("crm.quotes.c138318dfd")}</BusinessButton>
           )}
         </BusinessForm>
       </section>
@@ -2339,6 +2403,8 @@ function SuppliersView({
   onUpdate: (supplier: Supplier) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t, label, screen, dialogT } = useCRMDisplay();
+
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
@@ -2372,7 +2438,7 @@ function SuppliersView({
     };
 
     if (!supplier.name) {
-      window.alert("Ajoutez au minimum le nom du prestataire.");
+      window.alert(dialogT("crm.suppliers.c48375c50c"));
       return;
     }
 
@@ -2391,10 +2457,10 @@ function SuppliersView({
       <section className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Réseau privé</p>
-            <h3>{visibleSuppliers.length} prestataire{visibleSuppliers.length > 1 ? "s" : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Réseau privé"}>{t("crm.suppliers.e45be43991")}</p>
+            <h3>{t("crm.counts.suppliers", { count: visibleSuppliers.length })}</h3>
           </div>
-          <p className="muted-line">Partenaires et prestataires privés à activer rapidement.</p>
+          <p className="muted-line">{t("crm.suppliers.69a5cb2881")}</p>
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 22 }}>
@@ -2405,140 +2471,113 @@ function SuppliersView({
               className={categoryFilter === category ? "primary-button" : "secondary-button"}
               onClick={() => setCategoryFilter(category)}
             >
-              {category}
+              {screen.category(category)}
             </button>
           ))}
         </div>
 
-        {visibleSuppliers.length === 0 ? (
-          <p className="muted-line">Aucun prestataire dans cette catégorie.</p>
-        ) : (
-          <div className="list-stack oar-contact-list-stack">
+        {visibleSuppliers.length === 0 ? (<p className="muted-line">{t("crm.suppliers.86ff6ee587")}</p>) : (<div className="list-stack oar-contact-list-stack">
             {visibleSuppliers.map((supplier) => (
               <article className="item-card" key={supplier.id}>
                 <div>
-                  <p className="eyebrow">{supplier.category} · {supplier.status}</p>
+                  <p className="eyebrow" data-semantic-text={supplier.status}>{screen.category(supplier.category)} · {label(supplier.status, "crm")}</p>
                   <h3>{supplier.name}</h3>
-                  <p>{supplier.contactName || "Contact à compléter"}</p>
-                  <p className="muted-line">{supplier.zone || "Zone non renseignée"}</p>
-                  <p className="muted-line">
-                    Qualité : {supplier.quality} · Fiabilité : {supplier.reliability}
+                  <p>{supplier.contactName || t("crm.suppliers.7229369329")}</p>
+                  <p className="muted-line">{supplier.zone || t("crm.suppliers.40aa5057e1")}</p>
+                  <p className="muted-line">{t("crm.suppliers.4bb8de619a")}{" "}{label(supplier.quality, "crm")}{" "}{t("crm.suppliers.6e3b46603b")}{" "}{label(supplier.reliability, "crm")}
                   </p>
-                  {supplier.priceNotes && <p className="muted-line">Prix : {supplier.priceNotes}</p>}
-                  {supplier.commissionNotes && <p className="muted-line">Commission : {supplier.commissionNotes}</p>}
+                  {supplier.priceNotes && <p className="muted-line">{t("crm.suppliers.df951f9d86")}{" "}{supplier.priceNotes}</p>}
+                  {supplier.commissionNotes && <p className="muted-line">{t("crm.suppliers.1cdb57d4c1")}{" "}{supplier.commissionNotes}</p>}
                   {supplier.notes && <p>{supplier.notes}</p>}
                 </div>
 
                 <div className="item-actions contact-row-actions oar-contact-actions">
                   {supplier.phone && (
-                    <a className="secondary-button" href={`tel:${supplier.phone}`}>
-                      Appeler
-                    </a>
+                    <a className="secondary-button" href={`tel:${supplier.phone}`}>{t("crm.suppliers.16d93e3764")}</a>
                   )}
                   {supplier.email && (
-                    <a className="secondary-button" href={`mailto:${supplier.email}`}>
-                      Email
-                    </a>
+                    <a className="secondary-button" href={`mailto:${supplier.email}`}>{t("crm.suppliers.969ccbd3cf")}</a>
                   )}
-                  <button className="secondary-button" type="button" onClick={() => setEditingSupplier(supplier)}>
-                    Modifier
-                  </button>
+                  <button className="secondary-button" type="button" onClick={() => setEditingSupplier(supplier)} data-crm-auto-scroll="true">{t("crm.suppliers.42e37604b6")}</button>
                   <button
                     className="danger-button"
                     type="button"
                     onClick={() => {
-                      if (window.confirm("Supprimer ce prestataire ?")) {
+                      if (window.confirm(dialogT("crm.suppliers.9b33bd119a"))) {
                         onDelete(supplier.id);
                       }
                     }}
-                  >
-                    Supprimer
-                  </button>
+                  >{t("crm.suppliers.5e5d0216ce")}</button>
                 </div>
               </article>
             ))}
-          </div>
-        )}
+          </div>)}
       </section>
 
       <section className="card">
-        <p className="eyebrow">{editingSupplier ? "Modification" : "Nouveau"}</p>
-        <h3>{editingSupplier ? "Modifier le prestataire" : "Ajouter un prestataire"}</h3>
+        <p className="eyebrow" data-semantic-text={"Modification Nouveau"}>{editingSupplier ? t("crm.suppliers.46889b43bc") : t("crm.suppliers.c3634f2ede")}</p>
+        <h3>{editingSupplier ? t("crm.suppliers.df72949a43") : t("crm.suppliers.ac115b83bb")}</h3>
 
         <form className="form-grid" onSubmit={submitSupplier}>
-          <label>Nom prestataire
-            <input name="name" defaultValue={editingSupplier?.name ?? ""} placeholder="Ex : Riviera Chauffeur Premium" />
+          <label>{t("crm.suppliers.4e41070c90")}<input name="name" defaultValue={editingSupplier?.name ?? ""} placeholder={t("crm.suppliers.b8ce4eb0fd")} />
           </label>
 
-          <label>Catégorie
-            <select name="category" defaultValue={editingSupplier?.category ?? "Autre"}>
+          <label>{t("crm.suppliers.68a5341fc6")}<select name="category" defaultValue={editingSupplier?.category ?? "Autre"}>
               {categories.filter((category) => category !== "Tous").map((category) => (
-                <option key={category} value={category}>{category}</option>
+                <option key={category} value={category}>{screen.category(category)}</option>
               ))}
             </select>
           </label>
 
-          <label>Contact
-            <input name="contactName" defaultValue={editingSupplier?.contactName ?? ""} placeholder="Nom du contact" />
+          <label>{t("crm.suppliers.2b5c3d2672")}<input name="contactName" defaultValue={editingSupplier?.contactName ?? ""} placeholder={t("crm.suppliers.67f8a52b44")} />
           </label>
 
-          <label>Email
-            <input name="email" type="email" defaultValue={editingSupplier?.email ?? ""} placeholder="email@exemple.com" />
+          <label>{t("crm.suppliers.969ccbd3cf")}<input name="email" type="email" defaultValue={editingSupplier?.email ?? ""} placeholder={t("crm.suppliers.589eb9cdb5")} />
           </label>
 
-          <label>Téléphone
-            <input name="phone" defaultValue={editingSupplier?.phone ?? ""} placeholder="+33..." />
+          <label>{t("crm.suppliers.cc4c424b57")}<input name="phone" defaultValue={editingSupplier?.phone ?? ""} placeholder="+33..." />
           </label>
 
-          <label>Zone
-            <input name="zone" defaultValue={editingSupplier?.zone ?? ""} placeholder="Cannes, Monaco, Saint-Tropez..." />
+          <label>{t("crm.suppliers.a8a06e4a56")}<input name="zone" defaultValue={editingSupplier?.zone ?? ""} placeholder={t("crm.suppliers.acf73cc1ad")} />
           </label>
 
-          <label>Qualité
-            <select name="quality" defaultValue={editingSupplier?.quality ?? "Standard"}>
-              <option>Standard</option>
-              <option>Premium</option>
-              <option>Très premium</option>
+          <label>{t("crm.suppliers.8dce95eeb4")}<select name="quality" defaultValue={editingSupplier?.quality ?? "Standard"}>
+              <option value="Standard">{t("crm.suppliers.ef6691545d")}</option>
+              <option value="Premium">{t("crm.suppliers.de88c121a8")}</option>
+              <option value="Très premium">{t("crm.suppliers.6e2c957724")}</option>
             </select>
           </label>
 
-          <label>Fiabilité
-            <select name="reliability" defaultValue={editingSupplier?.reliability ?? "À tester"}>
-              <option>À tester</option>
-              <option>Fiable</option>
-              <option>Très fiable</option>
-              <option>À éviter</option>
+          <label>{t("crm.suppliers.10859b8dc3")}<select name="reliability" defaultValue={editingSupplier?.reliability ?? "À tester"}>
+              <option value="À tester">{t("crm.suppliers.437f69fce9")}</option>
+              <option value="Fiable">{t("crm.suppliers.26d5cdf018")}</option>
+              <option value="Très fiable">{t("crm.suppliers.8508f22f87")}</option>
+              <option value="À éviter">{t("crm.suppliers.9c5902593d")}</option>
             </select>
           </label>
 
-          <label>Notes prix
-            <textarea name="priceNotes" defaultValue={editingSupplier?.priceNotes ?? ""} placeholder="Tarifs, minimum spend, conditions..." />
+          <label>{t("crm.suppliers.301b704907")}<textarea name="priceNotes" defaultValue={editingSupplier?.priceNotes ?? ""} placeholder={t("crm.suppliers.1b8f311310")} />
           </label>
 
-          <label>Commission / marge
-            <textarea name="commissionNotes" defaultValue={editingSupplier?.commissionNotes ?? ""} placeholder="Commission, marge, accord partenaire..." />
+          <label>{t("crm.suppliers.c5da356eca")}<textarea name="commissionNotes" defaultValue={editingSupplier?.commissionNotes ?? ""} placeholder={t("crm.suppliers.db3f8197bc")} />
           </label>
 
-          <label>Notes internes
-            <textarea name="notes" defaultValue={editingSupplier?.notes ?? ""} placeholder="Réactivité, points forts, points faibles..." />
+          <label>{t("crm.suppliers.d96ddd0984")}<textarea name="notes" defaultValue={editingSupplier?.notes ?? ""} placeholder={t("crm.suppliers.3aa92a526d")} />
           </label>
 
-          <label>Statut
-            <select name="status" defaultValue={editingSupplier?.status ?? "Actif"}>
-              <option>Actif</option>
-              <option>À vérifier</option>
-              <option>Inactif</option>
+          <label>{t("crm.suppliers.dee377cfd8")}<select name="status" defaultValue={editingSupplier?.status ?? "Actif"}>
+              <option value="Actif">{t("crm.suppliers.ad26287ab6")}</option>
+              <option value="À vérifier">{t("crm.suppliers.03a088312d")}</option>
+              <option value="Inactif">{t("crm.suppliers.cdcf2ea348")}</option>
             </select>
           </label>
 
           <button className="primary-button planning-entry-submit" type="submit">
-            {editingSupplier ? "Enregistrer" : "Ajouter prestataire"}
+            {editingSupplier ? t("crm.suppliers.71dc74873e") : t("crm.suppliers.7e25d1341d")}
           </button>
 
           {editingSupplier && (
-            <button className="secondary-button" type="button" onClick={() => setEditingSupplier(null)}>
-              Annuler modification
-            </button>
+            <button className="secondary-button" type="button" onClick={() => setEditingSupplier(null)}>{t("crm.suppliers.c068486998")}</button>
           )}
         </form>
       </section>
@@ -2557,6 +2596,8 @@ function BookingsView({
   activeActor: string;
   onChange: (quotes: QuoteRequest[]) => void;
 }) {
+  const { t, label, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const confirmedQuotes = quotes.filter((quote) => getQuoteStatus(quote.status) === "Accepted");
   const providerContacts = contacts.filter(isSupplierContact);
@@ -2622,28 +2663,23 @@ function BookingsView({
 
     onChange(nextQuotes);
     if (!business) saveQuotesToBrowser(nextQuotes);
-    if (!business) window.alert("Réservation enregistrée.");
+    if (!business) window.alert(dialogT("crm.bookings.504ef4f778"));
   }
 
   return (
     <section className="card">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Services confirmés</p>
-          <h3>{confirmedQuotes.length} réservation{confirmedQuotes.length > 1 ? "s" : ""}</h3>
+          <p className="eyebrow" data-semantic-text={"Services confirmés"}>{t("crm.bookings.c385e4dc38")}</p>
+          <h3>{t("crm.counts.bookings", { count: confirmedQuotes.length })}</h3>
         </div>
-        <p className="muted-line">
-          Suivez ici les devis gagnés, la marge estimée, les paiements reçus et la préparation opérationnelle.
-        </p>
+        <p className="muted-line">{t("crm.bookings.6367055e62")}</p>
       </div>
 
-      {confirmedQuotes.length === 0 ? (
-        <p className="muted-line">Aucune réservation confirmée pour le moment.</p>
-      ) : (
-        <div className="list-stack oar-contact-list-stack">
+      {confirmedQuotes.length === 0 ? (<p className="muted-line">{t("crm.bookings.de6efe788b")}</p>) : (<div className="list-stack oar-contact-list-stack">
           {confirmedQuotes.map((quote) => {
             const services = getQuoteItems(quote)
-              .map((item) => getQuoteCategoryFrenchLabel(item.category))
+              .map((item) => label(getQuoteCategoryFrenchLabel(item.category), "crm"))
               .join(" · ");
 
             const clientPrice = getQuoteTotal(quote);
@@ -2659,181 +2695,153 @@ function BookingsView({
             return (
               <article className="item-card" key={quote.id} data-notification-target={`booking-${quote.id}`}>
                 <div>
-                  <p className="eyebrow">{services || "Service confirmé"}</p>
+                  <p className="eyebrow" data-semantic-text={"Service confirmé"}>{services || t("crm.bookings.54cc57ed9f")}</p>
                   <h3>{quote.clientName}</h3>
-                  <p>{quote.title || "Réservation confirmée"}</p>
-                  <p className="muted-line">
-                    Du {formatQuoteDate(quote.startDate)} au {formatQuoteDate(quote.endDate)}
+                  <p>{quote.title || t("crm.bookings.7491ed9a17")}</p>
+                  <p className="muted-line">{t("crm.bookings.0b6722a8ad")}{" "}{screen.quoteDate(quote.startDate)}{" "}{t("crm.bookings.632cd2fea7")}{" "}{screen.quoteDate(quote.endDate)}
                   </p>
 
                   <div className="stats-grid oar-contacts-stats" style={{ marginTop: 18 }}>
-                    <div className="mini-stat">
-                      <span>Prix client</span>
-                      <strong>{formatQuotePrice(clientPrice)}</strong>
+                    <div className="mini-stat" data-semantic-text={"Prix client"}>
+                      <span>{t("crm.bookings.c1667fbad1")}</span>
+                      <strong>{screen.money(clientPrice)}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Coût prestataire</span>
-                      <strong>{formatQuotePrice(supplierCost)}</strong>
+                    <div className="mini-stat" data-semantic-text={"Coût prestataire"}>
+                      <span>{t("crm.bookings.7abd37537b")}</span>
+                      <strong>{screen.money(supplierCost)}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Marge estimée</span>
-                      <strong>{formatQuotePrice(margin)}</strong>
+                    <div className="mini-stat" data-semantic-text={"Marge estimée"}>
+                      <span>{t("crm.bookings.c46f57640a")}</span>
+                      <strong>{screen.money(margin)}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Solde restant</span>
-                      <strong>{formatQuotePrice(remainingBalance)}</strong>
+                    <div className="mini-stat" data-semantic-text={"Solde restant"}>
+                      <span>{t("crm.bookings.d2b75aed36")}</span>
+                      <strong>{screen.money(remainingBalance)}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Statut paiement</span>
-                      <strong>{paymentStatus}</strong>
+                    <div className="mini-stat" data-semantic-text={"Statut paiement"}>
+                      <span>{t("crm.bookings.47f14cb075")}</span>
+                      <strong>{label(paymentStatus, "crm")}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Acompte attendu</span>
-                      <strong>{formatQuotePrice(Number(quote.expectedDeposit || 0))}</strong>
+                    <div className="mini-stat" data-semantic-text={"Acompte attendu"}>
+                      <span>{t("crm.bookings.e8506477b3")}</span>
+                      <strong>{screen.money(Number(quote.expectedDeposit || 0))}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Marge %</span>
+                    <div className="mini-stat" data-semantic-text={"Marge %"}>
+                      <span>{t("crm.bookings.ccbdd6f467")}</span>
                       <strong>{marginPercent}%</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Limite paiement</span>
-                      <strong>{quote.paymentDueDate ? formatQuoteDate(quote.paymentDueDate) : "—"}</strong>
+                    <div className="mini-stat" data-semantic-text={"Limite paiement"}>
+                      <span>{t("crm.bookings.5e18a708be")}</span>
+                      <strong>{quote.paymentDueDate ? screen.quoteDate(quote.paymentDueDate) : "—"}</strong>
                     </div>
                   </div>
 
                   {assignedProvider && (
                     <div className="asset-detail-grid" style={{ marginTop: 18 }}>
                       <div>
-                        <span>Prestataire affecté</span>
+                        <span>{t("crm.bookings.a4f049df6c")}</span>
                         <strong>{assignedProvider.name}</strong>
                       </div>
                       <div>
-                        <span>Profession</span>
-                        <strong>{getContactSupplierCategory(assignedProvider)}</strong>
+                        <span>{t("crm.bookings.13a150e3fd")}</span>
+                        <strong>{screen.category(getContactSupplierCategory(assignedProvider))}</strong>
                       </div>
                       <div>
-                        <span>Téléphone</span>
+                        <span>{t("crm.bookings.cc4c424b57")}</span>
                         <strong>{assignedProvider.phone || "—"}</strong>
                       </div>
                       <div>
-                        <span>Email</span>
+                        <span>{t("crm.bookings.969ccbd3cf")}</span>
                         <strong>{assignedProvider.email || "—"}</strong>
                       </div>
                     </div>
                   )}
 
                   <BusinessForm className="form-grid" onSubmit={(event) => updateBookingFinance(event, quote)} style={{ marginTop: 20 }}>
-                    <BusinessLabel>Statut paiement
-                      <select name="paymentStatus" defaultValue={quote.paymentStatus || getPaymentStatus(quote)}>
-                        <option>Non payé</option>
-                        <option>Acompte reçu</option>
-                        <option>Partiel</option>
-                        <option>Payé</option>
-                        <option>Annulé / remboursé</option>
+                    <BusinessLabel>{t("crm.bookings.47f14cb075")}<select name="paymentStatus" defaultValue={quote.paymentStatus || getPaymentStatus(quote)}>
+                        <option value="Non payé">{t("crm.bookings.c972cef081")}</option>
+                        <option value="Acompte reçu">{t("crm.bookings.cf412df173")}</option>
+                        <option value="Partiel">{t("crm.bookings.e9d830119d")}</option>
+                        <option value="Payé">{t("crm.bookings.2542792ee0")}</option>
+                        <option value="Annulé / remboursé">{t("crm.bookings.75cae773d9")}</option>
                       </select>
                     </BusinessLabel>
 
-                    <BusinessLabel>Acompte attendu
-                      <input name="expectedDeposit" type="number" min="0" step="1" defaultValue={quote.expectedDeposit || ""} placeholder="Ex : 1000" />
+                    <BusinessLabel>{t("crm.bookings.e8506477b3")}<input name="expectedDeposit" type="number" min="0" step="1" defaultValue={quote.expectedDeposit || ""} placeholder={t("crm.bookings.9e4cfba30f")} />
                     </BusinessLabel>
 
-                    <BusinessLabel>Date limite paiement
-                      <input name="paymentDueDate" type="date" defaultValue={quote.paymentDueDate || ""} />
+                    <BusinessLabel>{t("crm.bookings.8a2e068f9e")}<input name="paymentDueDate" type="date" defaultValue={quote.paymentDueDate || ""} />
                     </BusinessLabel>
 
-                    <BusinessLabel>Coût prestataire
-                      <input name="supplierCost" type="number" min="0" step="1" defaultValue={quote.supplierCost || ""} placeholder="Ex : 2500" />
+                    <BusinessLabel>{t("crm.bookings.7abd37537b")}<input name="supplierCost" type="number" min="0" step="1" defaultValue={quote.supplierCost || ""} placeholder={t("crm.bookings.8c5304d4c7")} />
                     </BusinessLabel>
 
-                    <BusinessLabel>Acompte reçu
-                      <input name="depositReceived" type="number" min="0" step="1" defaultValue={quote.depositReceived || ""} placeholder="Ex : 1000" />
+                    <BusinessLabel>{t("crm.bookings.cf412df173")}<input name="depositReceived" type="number" min="0" step="1" defaultValue={quote.depositReceived || ""} placeholder={t("crm.bookings.9e4cfba30f")} />
                     </BusinessLabel>
 
-                    <BusinessLabel>Solde reçu
-                      <input name="balanceReceived" type="number" min="0" step="1" defaultValue={quote.balanceReceived || ""} placeholder="Ex : 3000" />
+                    <BusinessLabel>{t("crm.bookings.9241c861e7")}<input name="balanceReceived" type="number" min="0" step="1" defaultValue={quote.balanceReceived || ""} placeholder={t("crm.bookings.494387a2af")} />
                     </BusinessLabel>
 
-                    <BusinessLabel>Notes paiement
-                      <textarea name="paymentNotes" defaultValue={quote.paymentNotes || ""} placeholder="Ex : acompte reçu par virement, solde attendu avant arrivée" />
+                    <BusinessLabel>{t("crm.bookings.0eb206a1fc")}<textarea name="paymentNotes" defaultValue={quote.paymentNotes || ""} placeholder={t("crm.bookings.7cc7fe9c1c")} />
                     </BusinessLabel>
 
-                    <BusinessLabel>Prestataire affecté
-                      <select name="assignedContactId" defaultValue={quote.assignedContactId || ""}>
-                        <option value="">Non affecté</option>
+                    <BusinessLabel>{t("crm.bookings.a4f049df6c")}<select name="assignedContactId" defaultValue={quote.assignedContactId || ""}>
+                        <option value="">{t("crm.bookings.a95639476f")}</option>
                         {providerContacts.map((contact) => (
                           <option key={contact.id} value={contact.id}>
-                            {contact.name} · {getContactSupplierCategory(contact)}{getContactSupplierZone(contact) ? ` · ${getContactSupplierZone(contact)}` : ""}
+                            {contact.name} · {screen.category(getContactSupplierCategory(contact))}{getContactSupplierZone(contact) ? t("crm.bookings.f6b53f9c8a", { value1: displayValue(getContactSupplierZone(contact)) }) : ""}
                           </option>
                         ))}
                       </select>
                     </BusinessLabel>
 
-                    <BusinessLabel>Statut opérationnel
-                      <select name="bookingStatus" defaultValue={quote.bookingStatus || "À préparer"}>
-                        <option>À préparer</option>
-                        <option>Prestataire à confirmer</option>
-                        <option>Confirmé</option>
-                        <option>En cours</option>
-                        <option>Terminé</option>
-                        <option>Annulé</option>
+                    <BusinessLabel>{t("crm.bookings.1cbd4b19c8")}<select name="bookingStatus" defaultValue={quote.bookingStatus || "À préparer"}>
+                        <option value="À préparer">{t("crm.bookings.4e8718301a")}</option>
+                        <option value="Prestataire à confirmer">{t("crm.bookings.392d3f43ee")}</option>
+                        <option value="Confirmé">{t("crm.bookings.1278c77084")}</option>
+                        <option value="En cours">{t("crm.bookings.797f5dcd02")}</option>
+                        <option value="Terminé">{t("crm.bookings.f28acc85bf")}</option>
+                        <option value="Annulé">{t("crm.bookings.58524ce81f")}</option>
                       </select>
                     </BusinessLabel>
 
                     <div className="card" style={{ boxShadow: "none", padding: 16 }}>
-                      <p className="eyebrow">Checklist opérationnelle</p>
+                      <p className="eyebrow" data-semantic-text={"Checklist opérationnelle"}>{t("crm.bookings.480255400c")}</p>
 
                       <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <input name="clientConfirmed" type="checkbox" defaultChecked={Boolean(quote.clientConfirmed)} />
-                        Client confirmé
-                      </BusinessLabel>
+                        <input name="clientConfirmed" type="checkbox" defaultChecked={Boolean(quote.clientConfirmed)} />{t("crm.bookings.94061b8ad9")}</BusinessLabel>
 
                       <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <input name="depositConfirmed" type="checkbox" defaultChecked={Boolean(quote.depositConfirmed)} />
-                        Acompte reçu
-                      </BusinessLabel>
+                        <input name="depositConfirmed" type="checkbox" defaultChecked={Boolean(quote.depositConfirmed)} />{t("crm.bookings.cf412df173")}</BusinessLabel>
 
                       <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <input name="supplierConfirmed" type="checkbox" defaultChecked={Boolean(quote.supplierConfirmed)} />
-                        Prestataire confirmé
-                      </BusinessLabel>
+                        <input name="supplierConfirmed" type="checkbox" defaultChecked={Boolean(quote.supplierConfirmed)} />{t("crm.bookings.0366c80ab8")}</BusinessLabel>
 
                       <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <input name="balanceConfirmed" type="checkbox" defaultChecked={Boolean(quote.balanceConfirmed)} />
-                        Solde reçu
-                      </BusinessLabel>
+                        <input name="balanceConfirmed" type="checkbox" defaultChecked={Boolean(quote.balanceConfirmed)} />{t("crm.bookings.9241c861e7")}</BusinessLabel>
 
                       <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <input name="detailsSent" type="checkbox" defaultChecked={Boolean(quote.detailsSent)} />
-                        Détails envoyés au client
-                      </BusinessLabel>
+                        <input name="detailsSent" type="checkbox" defaultChecked={Boolean(quote.detailsSent)} />{t("crm.bookings.a4167be975")}</BusinessLabel>
 
                       <BusinessLabel style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <input name="serviceCompleted" type="checkbox" defaultChecked={Boolean(quote.serviceCompleted)} />
-                        Service terminé
-                      </BusinessLabel>
+                        <input name="serviceCompleted" type="checkbox" defaultChecked={Boolean(quote.serviceCompleted)} />{t("crm.bookings.9b392e9a8d")}</BusinessLabel>
                     </div>
 
-                    <BusinessLabel>Notes opérationnelles
-                      <textarea name="operationNotes" defaultValue={quote.operationNotes || ""} placeholder="Horaires, adresse, contact sur place, contraintes, préférences client..." />
+                    <BusinessLabel>{t("crm.bookings.c035c76175")}<textarea name="operationNotes" defaultValue={quote.operationNotes || ""} placeholder={t("crm.bookings.350c22e505")} />
                     </BusinessLabel>
 
-                    <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
-                      Enregistrer réservation
-                    </BusinessButton>
+                    <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.bookings.4607c0a797")}</BusinessButton>
                   </BusinessForm>
                 </div>
 
                 <div className="item-actions contact-row-actions oar-contact-actions">
-                  <span className="status-pill">{quote.bookingStatus || "À préparer"}</span>
-                  <BusinessButton permission="export" className="secondary-button" type="button" onClick={async() => { if(business){try{await business.check();}catch{return;}} openQuotePdf(quote); }}>
-                    Ouvrir devis
-                  </BusinessButton>
+                  <span className="status-pill" data-semantic-text={"À préparer"}>{label(quote.bookingStatus, "crm") || t("crm.bookings.4e8718301a")}</span>
+                  <BusinessButton permission="export" className="secondary-button" type="button" onClick={async() => { if(business){try{await business.check();}catch{return;}} openQuotePdf(quote); }} data-crm-auto-scroll="true">{t("crm.bookings.116e108ff7")}</BusinessButton>
                 </div>
               </article>
             );
           })}
-        </div>
-      )}
+        </div>)}
     </section>
   );
 }
@@ -2871,6 +2879,8 @@ function DocumentsView({
   canTrash: boolean;
   sessionUserId: string;
 }) {
+  const { t, label, screen, screenText, dialogText, dialogT } = useCRMDisplay();
+
   const [currentFolderId, setCurrentFolderId] = useState("");
   const [folderName, setFolderName] = useState("");
   const [editingDocument, setEditingDocument] = useState<CRMDocument | null>(null);
@@ -2883,7 +2893,7 @@ function DocumentsView({
   const [dragActive, setDragActive] = useState(false);
   const [trashingDocumentId, setTrashingDocumentId] = useState("");
   const trashInFlight = useRef(false);
-  const [trashMessage, setTrashMessage] = useState("");
+  const [trashMessage, setTrashMessage] = useState<ScreenNotice>("");
 
   useEffect(() => {
     let cancelled = false;
@@ -2967,7 +2977,7 @@ function DocumentsView({
       setPreviewDocument(crmDocument);
       setPreviewDocumentUrl(blobUrl);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Aperçu Google Drive impossible.");
+      window.alert(dialogText(safeCRMError(error)));
     } finally {
       setPreviewingDocument(false);
     }
@@ -2997,7 +3007,7 @@ function DocumentsView({
       link.click();
       URL.revokeObjectURL(blobUrl);
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : "Téléchargement Google Drive impossible.");
+      window.alert(dialogText(safeCRMError(error)));
     }
   }
 
@@ -3012,13 +3022,13 @@ function DocumentsView({
     event.preventDefault();
 
     if (!canManageDocuments) {
-      window.alert("La création de dossiers est réservée aux comptes autorisés.");
+      window.alert(dialogT("crm.documents.d72823e094"));
       return;
     }
 
     const name = folderName.trim();
     if (!name) {
-      window.alert("Ajoutez un nom de dossier.");
+      window.alert(dialogT("crm.documents.9f82fd88cd"));
       return;
     }
 
@@ -3066,7 +3076,7 @@ function DocumentsView({
       onAdd(folderDocument);
       setFolderName("");
     } catch (error) {
-      window.alert(`Dossier non créé : ${error instanceof Error ? error.message : "erreur inconnue"}`);
+      window.alert(dialogText(safeCRMError(error)));
     } finally {
       setCreatingFolder(false);
     }
@@ -3078,12 +3088,12 @@ function DocumentsView({
     if (!selectedFiles.length) return;
 
     if (!canManageDocuments) {
-      window.alert("L’import de documents est réservé aux comptes autorisés.");
+      window.alert(dialogT("crm.documents.f54308358a"));
       return;
     }
 
     if (!targetDriveFolderId) {
-      window.alert("Ouvrez d'abord un dossier avant d'importer un document. Règle CRM : un document doit toujours être rangé dans un dossier.");
+      window.alert(dialogT("crm.documents.9e114598bf"));
       setDragActive(false);
       return;
     }
@@ -3139,7 +3149,7 @@ function DocumentsView({
         onAdd(crmDocument);
       }
     } catch (error) {
-      window.alert(`Document non importé dans Google Drive : ${error instanceof Error ? error.message : "erreur inconnue"}`);
+      window.alert(dialogText(safeCRMError(error)));
     } finally {
       setUploadingDocument(false);
       setDragActive(false);
@@ -3150,17 +3160,17 @@ function DocumentsView({
     if (!canTrash || !canManageDocuments || trashInFlight.current) return;
     const driveId = crmDocument.isFolder ? crmDocument.driveFolderId : crmDocument.driveFileId;
     if (!driveId) {
-      setTrashMessage("Mise à la corbeille refusée : identifiant Google Drive absent.");
+      setTrashMessage(screenNotice("crm.documents.dfcb2ae87e"));
       return;
     }
     if (editingDocument?.id === crmDocument.id) {
-      setTrashMessage("Terminez ou annulez la modification de ce document avant de le mettre à la corbeille. Votre saisie est conservée.");
+      setTrashMessage(screenNotice("crm.documents.a99135a915"));
       return;
     }
     if (crmDocument.isFolder) {
       const hasChildren = documents.some((item) => (item.folderId || item.parentFolderId || "") === crmDocument.id);
       if (hasChildren) {
-        setTrashMessage("Ce dossier contient encore des éléments. Déplacez-les ou mettez-les à la corbeille avant de reprendre. Les sous-dossiers doivent aussi être retirés.");
+        setTrashMessage(screenNotice("crm.documents.43289e5505"));
         return;
       }
     }
@@ -3168,7 +3178,7 @@ function DocumentsView({
     const parent = folders.find((folder) => folder.id === parentId);
     const parentLabel = parent?.title || (parentId ? crmDocument.location || parentId : "CRM Documents");
     const name = crmDocument.fileName || crmDocument.title;
-    const message = `Mettre ${crmDocument.isFolder ? "le dossier" : "le fichier"} « ${name} » à la corbeille Google Drive ?\n\nDossier : ${parentLabel}\n\nGoogle supprime automatiquement les éléments de sa corbeille après 30 jours.${crmDocument.isFolder ? "\nLe serveur vérifiera que ce dossier est vide dans le CRM et dans Drive, y compris les sous-dossiers." : ""}`;
+    const message = t("crm.screen.trashConfirm", { kind: t(crmDocument.isFolder ? "crm.screen.trashFolder" : "crm.screen.trashFile"), name, folder: parentLabel, check: crmDocument.isFolder ? t("crm.screen.trashFolderCheck") : "" });
     if (!window.confirm(message)) return;
 
     const storageKey = `oneaddress-documents-trash:${sessionUserId}:${crmDocument.id}`;
@@ -3189,9 +3199,9 @@ function DocumentsView({
       await onTrash(crmDocument, operationId);
       window.sessionStorage.removeItem(storageKey);
       if (previewDocument?.id === crmDocument.id) closeDrivePreview();
-      setTrashMessage(`${crmDocument.isFolder ? "Dossier" : "Fichier"} « ${name} » mis à la corbeille. Google le supprime automatiquement après 30 jours.`);
+      setTrashMessage(screenNotice("crm.documents.6e5ca2905c", { value1: displayValue(crmDocument.isFolder ? t("crm.documents.2cdf175d11") : t("crm.enums.file")), value2: displayValue(name) }));
     } catch (error) {
-      setTrashMessage(`${error instanceof Error ? error.message : "Mise à la corbeille non confirmée."} La fiche est conservée. Réessayez le même bouton pour reprendre la même opération.`);
+      setTrashMessage(safeCRMError(error));
     } finally {
       trashInFlight.current = false;
       setTrashingDocumentId("");
@@ -3225,17 +3235,17 @@ function DocumentsView({
       <section className="card documents-list-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Drive CRM</p>
-            <h3>{folders.length} dossier{folders.length > 1 ? "s" : ""} · {files.length} document{files.length > 1 ? "s" : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Drive CRM"}>{t("crm.documents.42094b5739")}</p>
+            <h3>{folders.length}{" "}{t("crm.documents.c8ec03ed9c")}{folders.length > 1 ? t("crm.documents.043a718774") : ""} · {files.length}{" "}{t("crm.documents.43cc23fa52")}{files.length > 1 ? t("crm.documents.043a718774") : ""}</h3>
           </div>
           <div>
-            <p className="eyebrow">À vérifier</p>
+            <p className="eyebrow" data-semantic-text={"À vérifier"}>{t("crm.documents.03a088312d")}</p>
             <h3>{documentsToCheck.length}</h3>
           </div>
         </div>
 
         <div className="document-breadcrumbs">
-          <button type="button" className={!currentFolderId ? "primary-button" : "secondary-button"} onClick={() => setCurrentFolderId("")}>CRM Documents</button>
+          <button type="button" className={!currentFolderId ? "primary-button" : "secondary-button"} onClick={() => setCurrentFolderId("")}>{t("crm.documents.35c762079d")}</button>
           {folderPath.map((folder) => (
             <button key={folder.id} type="button" className="secondary-button" onClick={() => setCurrentFolderId(folder.id)}>
               {folder.title}
@@ -3244,11 +3254,7 @@ function DocumentsView({
         </div>
 
         <div className="document-current-folder-note">
-          {currentFolder ? (
-            <span>Dossier ouvert : <strong>{currentFolder.title}</strong></span>
-          ) : (
-            <span>Aucun dossier ouvert. Créez ou ouvrez un dossier avant d’importer.</span>
-          )}
+          {currentFolder ? (<span>{t("crm.documents.32df902c91")}{" "}<strong>{currentFolder.title}</strong></span>) : (<span>{t("crm.documents.4f1493fe26")}</span>)}
         </div>
 
         <div
@@ -3263,18 +3269,13 @@ function DocumentsView({
             void uploadFilesToFolder(event.dataTransfer.files);
           }}
         >
-          <strong>{uploadingDocument ? "Import en cours..." : currentFolder ? `Importer dans : ${currentFolder.title}` : "Ouvrez un dossier avant d'importer"}</strong>
-          <span>{currentFolder ? "Glissez vos fichiers ici. Ils seront stockés dans ce dossier Google Drive." : "Sélectionnez ou créez un dossier. Les documents ne doivent plus être importés à la racine."}</span>
-          <label className={`secondary-button document-upload-button ${!currentFolder ? "is-disabled" : ""}`}>
-            Choisir des fichiers
-            <input type="file" multiple disabled={!currentFolder} onChange={(event) => event.currentTarget.files && void uploadFilesToFolder(event.currentTarget.files)} />
+          <strong>{uploadingDocument ? t("crm.documents.b2d553dc1d") : currentFolder ? t("crm.documents.e00318edb5", { value1: displayValue(currentFolder.title) }) : t("crm.documents.b4460a6e9d")}</strong>
+          <span>{currentFolder ? t("crm.documents.6916b2b143") : t("crm.documents.d19f61ef10")}</span>
+          <label className={`secondary-button document-upload-button ${!currentFolder ? "is-disabled" : ""}`}>{t("crm.documents.477d07ee67")}<input type="file" multiple disabled={!currentFolder} onChange={(event) => event.currentTarget.files && void uploadFilesToFolder(event.currentTarget.files)} />
           </label>
         </div>
 
-        {visibleFolders.length === 0 && visibleDocuments.length === 0 ? (
-          <p className="muted-line">{currentFolder ? "Aucun document dans ce dossier." : "Aucun dossier à ce niveau."}</p>
-        ) : (
-          <div className="documents-grid drive-documents-grid">
+        {visibleFolders.length === 0 && visibleDocuments.length === 0 ? (<p className="muted-line">{currentFolder ? t("crm.documents.b584e70d08") : t("crm.documents.eeaa27d711")}</p>) : (<div className="documents-grid drive-documents-grid">
             {visibleFolders.map((folder) => (
               <article
                 className="item-card document-card document-folder-card"
@@ -3287,14 +3288,14 @@ function DocumentsView({
                 }}
               >
                 <div>
-                  <p className="eyebrow">Dossier</p>
+                  <p className="eyebrow" data-semantic-text={"Dossier"}>{t("crm.documents.2cdf175d11")}</p>
                   <h3>📁 {folder.title}</h3>
-                  <p className="muted-line">Ouvrez-le pour importer ou glissez un fichier directement dessus.</p>
+                  <p className="muted-line">{t("crm.documents.f85f2ec2af")}</p>
                 </div>
                 <div className="item-actions contact-row-actions oar-contact-actions">
-                  <button className="primary-button compact-button" type="button" onClick={() => setCurrentFolderId(folder.id)}>Ouvrir</button>
-                  {folder.driveWebViewLink && <a className="secondary-button compact-button" href={folder.driveWebViewLink} target="_blank" rel="noreferrer">Drive</a>}
-                  {canManageDocuments && canTrash && folder.driveFolderId && <button className="danger-link compact-danger" type="button" disabled={Boolean(trashingDocumentId)} onClick={() => void trashDriveBackedDocument(folder)}>{trashingDocumentId === folder.id ? "Mise à la corbeille…" : "Mettre à la corbeille"}</button>}
+                  <button className="primary-button compact-button" type="button" onClick={() => setCurrentFolderId(folder.id)} data-crm-auto-scroll="true">{t("crm.documents.9fb440435a")}</button>
+                  {folder.driveWebViewLink && <a className="secondary-button compact-button" href={folder.driveWebViewLink} target="_blank" rel="noreferrer">{t("crm.documents.6312b4b9ba")}</a>}
+                  {canManageDocuments && canTrash && folder.driveFolderId && <button className="danger-link compact-danger" type="button" disabled={Boolean(trashingDocumentId)} onClick={() => void trashDriveBackedDocument(folder)}>{trashingDocumentId === folder.id ? t("crm.documents.647dc788e2") : t("crm.documents.a52f470c90")}</button>}
                 </div>
               </article>
             ))}
@@ -3306,37 +3307,32 @@ function DocumentsView({
               return (
                 <article className={`item-card document-card document-file-card ${needsCheck ? "document-card-warning" : ""}`} key={crmDocument.id} id={`document-${crmDocument.id}`}>
                   <div>
-                    <p className="eyebrow">Document · {crmDocument.status}</p>
+                    <p className="eyebrow" data-semantic-text={crmDocument.status}>{t("crm.documents.d8027b2582")}{" "}{label(crmDocument.status, "crm")}</p>
                     <h3>{crmDocument.title}</h3>
-                    <p className="muted-line">
-                      Ajouté le {new Date(crmDocument.addedAt).toLocaleDateString("fr-FR")} par {crmDocument.addedBy}
+                    <p className="muted-line">{t("crm.documents.2b276cb139")}{" "}{screen.date(crmDocument.addedAt)}{" "}{t("crm.documents.c9d9d2c4be")}{" "}{crmDocument.addedBy}
                     </p>
                     {crmDocument.expiryDate && (
-                      <p className="muted-line">Date : {new Date(`${crmDocument.expiryDate}T12:00:00`).toLocaleDateString("fr-FR")}</p>
+                      <p className="muted-line">{t("crm.documents.8e73ccee8a")}{" "}{screen.date(crmDocument.expiryDate)}</p>
                     )}
-                    {crmDocument.fileName && <p className="muted-line">Fichier : {crmDocument.fileName}</p>}
-                    {crmDocument.size ? <p className="muted-line">Taille : {formatDocumentSize(crmDocument.size)}</p> : null}
+                    {crmDocument.fileName && <p className="muted-line">{t("crm.documents.3d8f9f30fa")}{" "}{crmDocument.fileName}</p>}
+                    {crmDocument.size ? <p className="muted-line">{t("crm.documents.5b8c03adde")}{" "}{formatDocumentSize(crmDocument.size)}</p> : null}
                     {crmDocument.location && <p>{crmDocument.location}</p>}
                     {crmDocument.notes && <p className="muted-line">{crmDocument.notes}</p>}
                   </div>
 
                   <div className="item-actions contact-row-actions document-file-actions">
                     {hasDriveFile && (
-                      <button className="secondary-button compact-button" type="button" disabled={previewingDocument} onClick={() => void openDrivePreview(crmDocument)}>
-                        {previewingDocument ? "Ouverture..." : "Voir"}
+                      <button className="secondary-button compact-button" type="button" disabled={previewingDocument} onClick={() => void openDrivePreview(crmDocument)} data-crm-auto-scroll="true">
+                        {previewingDocument ? t("crm.documents.2ccbf9cad2") : t("crm.documents.4a1e847ec4")}
                       </button>
                     )}
 
                     {hasDriveFile && (
-                      <button className="secondary-button compact-button" type="button" onClick={() => void downloadDriveDocument(crmDocument)}>
-                        Télécharger
-                      </button>
+                      <button className="secondary-button compact-button" type="button" onClick={() => void downloadDriveDocument(crmDocument)}>{t("crm.documents.cdaaab442d")}</button>
                     )}
 
                     {crmDocument.driveWebViewLink && (
-                      <a className="secondary-button compact-button" href={crmDocument.driveWebViewLink} target="_blank" rel="noreferrer">
-                        Drive
-                      </a>
+                      <a className="secondary-button compact-button" href={crmDocument.driveWebViewLink} target="_blank" rel="noreferrer">{t("crm.documents.6312b4b9ba")}</a>
                     )}
 
                     {canManageDocuments && (
@@ -3351,12 +3347,10 @@ function DocumentsView({
                               window.globalThis.document.querySelector(".documents-form-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
                             }, 80);
                           }}
-                        >
-                          Modifier
-                        </button>
+                         data-crm-auto-scroll="true">{t("crm.documents.42e37604b6")}</button>
 
                         {canTrash && hasDriveFile && <button className="danger-link compact-danger" type="button" disabled={Boolean(trashingDocumentId)} onClick={() => void trashDriveBackedDocument(crmDocument)}>
-                          {trashingDocumentId === crmDocument.id ? "Mise à la corbeille…" : "Mettre à la corbeille"}
+                          {trashingDocumentId === crmDocument.id ? t("crm.documents.647dc788e2") : t("crm.documents.a52f470c90")}
                         </button>}
                       </>
                     )}
@@ -3364,62 +3358,56 @@ function DocumentsView({
                 </article>
               );
             })}
-          </div>
-        )}
-        {trashMessage && <p role="status">{trashMessage}</p>}
+          </div>)}
+        {trashMessage && <p role="status">{screenText(trashMessage)}</p>}
       </section>
 
       <section className="card form-card documents-form-card">
-        <p className="eyebrow">Gestion Drive</p>
-        <h3>{editingDocument ? "Modifier document" : "Créer un dossier"}</h3>
-        <p className="document-storage-note">Structure simple : dossiers uniquement. Les anciennes catégories sont supprimées.</p>
+        <p className="eyebrow" data-semantic-text={"Gestion Drive"}>{t("crm.documents.fc3351e808")}</p>
+        <h3>{editingDocument ? t("crm.documents.6dfd2b8596") : t("crm.documents.76cbaa6eff")}</h3>
+        <p className="document-storage-note">{t("crm.documents.c3386d770d")}</p>
 
-        {!canManageDocuments && <p className="muted-line">Lecture seule. La modification des documents est réservée aux comptes autorisés.</p>}
+        {!canManageDocuments && <p className="muted-line">{t("crm.documents.06a03295ac")}</p>}
 
         {canManageDocuments && !editingDocument && (
           <>
             <form className="form-grid document-folder-form" onSubmit={createDriveFolder}>
-              <label>Créer un dossier dans {currentFolder?.title || "CRM Documents"}
-                <input value={folderName} onChange={(event) => setFolderName(event.currentTarget.value)} placeholder="Ex : Villa LADIVA, Assurance 2026..." />
+              <label>{t("crm.documents.4c5f19aced")}{" "}{currentFolder?.title || t("crm.documents.35c762079d")}
+                <input value={folderName} onChange={(event) => setFolderName(event.currentTarget.value)} placeholder={t("crm.documents.e3c40ec507")} />
               </label>
-              <button className="primary-button" type="submit" disabled={creatingFolder}>{creatingFolder ? "Création..." : "Créer dossier"}</button>
+              <button className="primary-button" type="submit" disabled={creatingFolder} data-crm-auto-scroll="true">{creatingFolder ? t("crm.documents.460546519e") : t("crm.documents.98c788ec7d")}</button>
             </form>
 
             <div className="document-drive-rules">
-              <strong>Règle propre</strong>
-              <span>Un document doit toujours être rangé dans un dossier. Plus de catégories multiples, plus de filtres inutiles.</span>
+              <strong>{t("crm.documents.534017a8c6")}</strong>
+              <span>{t("crm.documents.0f24a3d760")}</span>
             </div>
           </>
         )}
 
         {canManageDocuments && editingDocument && (
           <form key={editingDocument.id} className="form-grid" onSubmit={submitDocumentMetadata}>
-            <label>Nom du document
-              <input name="title" defaultValue={editingDocument.title} placeholder="Ex : Assurance villa, logo OAR, contrat..." />
+            <label>{t("crm.documents.e60d42974c")}<input name="title" defaultValue={editingDocument.title} placeholder={t("crm.documents.402383e86d")} />
             </label>
 
-            <label>Statut
-              <select name="status" defaultValue={editingDocument.status || "À jour"}>
-                <option>À jour</option>
-                <option>À vérifier</option>
-                <option>Expiré</option>
+            <label>{t("crm.documents.dee377cfd8")}<select name="status" defaultValue={editingDocument.status || "À jour"}>
+                <option value="À jour">{t("crm.documents.50db3d1ee2")}</option>
+                <option value="À vérifier">{t("crm.documents.03a088312d")}</option>
+                <option value="Expiré">{t("crm.documents.4479ef3179")}</option>
               </select>
             </label>
 
-            <label>Emplacement / description
-              <input name="location" defaultValue={editingDocument.location || ""} placeholder="Ex : Villa LADIVA / Assurance" />
+            <label>{t("crm.documents.b3f4d24da5")}<input name="location" defaultValue={editingDocument.location || ""} placeholder={t("crm.documents.fbfc57b311")} />
             </label>
 
-            <label>Date
-              <input name="expiryDate" type="date" defaultValue={editingDocument.expiryDate || ""} />
+            <label>{t("crm.documents.99c40ab405")}<input name="expiryDate" type="date" defaultValue={editingDocument.expiryDate || ""} />
             </label>
 
-            <label>Notes
-              <textarea name="notes" defaultValue={editingDocument.notes || ""} placeholder="Détails, version, remarque..." />
+            <label>{t("crm.documents.8a7525b149")}<textarea name="notes" defaultValue={editingDocument.notes || ""} placeholder={t("crm.documents.75ccd23f1b")} />
             </label>
 
-            <button className="primary-button" type="submit">Enregistrer</button>
-            <button className="secondary-button" type="button" onClick={() => setEditingDocument(null)}>Annuler</button>
+            <button className="primary-button" type="submit">{t("crm.documents.71dc74873e")}</button>
+            <button className="secondary-button" type="button" onClick={() => setEditingDocument(null)} data-crm-dismiss="true">{t("crm.documents.46ad3916f6")}</button>
           </form>
         )}
       </section>
@@ -3429,19 +3417,19 @@ function DocumentsView({
           <div className="document-preview-modal">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">Aperçu document</p>
+                <p className="eyebrow" data-semantic-text={"Aperçu document"}>{t("crm.documents.58a4b83cc1")}</p>
                 <h3>{previewDocument.title}</h3>
               </div>
-              <button className="secondary-button" type="button" onClick={closeDrivePreview}>Fermer</button>
+              <button className="secondary-button" type="button" onClick={closeDrivePreview} data-crm-dismiss="true">{t("crm.documents.711e5f2e19")}</button>
             </div>
             {previewDocumentUrl ? (
               <iframe title={previewDocument.title} src={previewDocumentUrl} className="document-preview-frame" />
             ) : (
-              <p className="muted-line">Aucun aperçu disponible.</p>
+              <p className="muted-line">{t("crm.documents.b8c7ef59af")}</p>
             )}
             <div className="item-actions">
-              {previewDocument.driveWebViewLink && <a className="secondary-button" href={previewDocument.driveWebViewLink} target="_blank" rel="noreferrer">Ouvrir dans Drive</a>}
-              {previewDocument.driveFileId && <button className="primary-button" type="button" onClick={() => void downloadDriveDocument(previewDocument)}>Télécharger</button>}
+              {previewDocument.driveWebViewLink && <a className="secondary-button" href={previewDocument.driveWebViewLink} target="_blank" rel="noreferrer" data-crm-auto-scroll="true">{t("crm.documents.606271c7f0")}</a>}
+              {previewDocument.driveFileId && <button className="primary-button" type="button" onClick={() => void downloadDriveDocument(previewDocument)}>{t("crm.documents.cdaaab442d")}</button>}
             </div>
           </div>
         </div>
@@ -3491,6 +3479,8 @@ function HouseTrackingView({
   onDeletePayment: (id: string) => void;
   focusEntryId?: string;
 }) {
+  const { t, label, screen, screenText, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const today = new Date().toISOString().slice(0, 10);
   const activeWorkers = useMemo(() => workers.filter(isHouseTrackingWorkerActive), [workers]);
@@ -3511,7 +3501,7 @@ function HouseTrackingView({
     note: ""
   });
   const [editingWorkerId, setEditingWorkerId] = useState<string | null>(null);
-  const [rateError, setRateError] = useState("");
+  const [rateError, setRateError] = useState<ScreenNotice>("");
   const hourConfirmation = useConfirmedForm(business?.markDirty);
   const [showAllHoursHistory, setShowAllHoursHistory] = useState(false);
   const [showAllPaymentsHistory, setShowAllPaymentsHistory] = useState(false);
@@ -3803,7 +3793,7 @@ function HouseTrackingView({
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
 
-    if (!name) return window.alert("Ajoutez le nom de la maison.");
+    if (!name) return window.alert(dialogT("crm.house.8d89aeb6e6"));
 
     onAddHouse({
       id: makeId("house"),
@@ -3823,10 +3813,10 @@ function HouseTrackingView({
     const contactInput = String(form.get("contactSearch") ?? "").trim();
     const contact = findHouseTrackingContact(contactInput);
 
-    if (!contact) return window.alert("Choisissez un contact CRM existant. Créez-le d’abord dans Contacts si besoin.");
+    if (!contact) return window.alert(dialogT("crm.house.596f0a21b5"));
 
     const rate = parseHouseHourlyRate(String(form.get("hourlyRate") ?? ""));
-    if (rate === null) return window.alert("Saisissez un taux horaire valide, avec au maximum deux décimales (0 est accepté).");
+    if (rate === null) return window.alert(dialogT("crm.house.d09ba721d3"));
 
     const workerId = makeId("worker");
     onAddWorker({
@@ -3847,16 +3837,16 @@ function HouseTrackingView({
     event.preventDefault();
 
     if (!isQuarterHourTime(hourDraft.startTime) || !isQuarterHourTime(hourDraft.endTime)) {
-      return window.alert("Les heures de début et de fin doivent être saisies par quart d’heure.");
+      return window.alert(dialogT("crm.house.b5727b642e"));
     }
 
     const house = houses.find((item) => item.id === hourDraft.houseId);
     const worker = activeWorkers.find((item) => item.id === hourDraft.workerId);
 
-    if (!house) return window.alert("Choisissez une maison.");
-    if (!worker) return window.alert("Choisissez un intervenant actif.");
-    if (previewHours <= 0) return window.alert("Vérifiez les heures de début et de fin.");
-    if (currentRate === null) { setRateError("Saisissez un taux horaire valide, avec au maximum deux décimales (0 est accepté)."); return; }
+    if (!house) return window.alert(dialogT("crm.house.b480a1ac0e"));
+    if (!worker) return window.alert(dialogT("crm.house.448f15e3f4"));
+    if (previewHours <= 0) return window.alert(dialogT("crm.house.5e7f7eb62a"));
+    if (currentRate === null) { setRateError(screenNotice("crm.house.d09ba721d3")); return; }
     setRateError("");
 
     const entry: HouseTimeEntry = {
@@ -3885,9 +3875,9 @@ function HouseTrackingView({
     const worker = activeWorkers.find((item) => item.id === String(form.get("workerId") ?? ""));
     const amount = safeNumber(form.get("amount"));
 
-    if (!house) return window.alert("Choisissez une maison.");
-    if (!worker) return window.alert("Choisissez un intervenant actif.");
-    if (amount <= 0) return window.alert("Ajoutez un montant payé.");
+    if (!house) return window.alert(dialogT("crm.house.b480a1ac0e"));
+    if (!worker) return window.alert(dialogT("crm.house.448f15e3f4"));
+    if (amount <= 0) return window.alert(dialogT("crm.house.5977ed8bd3"));
 
     onAddPayment({
       id: makeId("payment"),
@@ -3964,55 +3954,50 @@ function HouseTrackingView({
       <section className="card house-control-card">
         <div className="section-heading house-section-heading">
           <div>
-            <p className="eyebrow">Personnel &amp; interventions</p>
-            <h3>Gestion simple des heures et paiements</h3>
+            <p className="eyebrow" data-semantic-text={"Personnel & interventions"}>{t("crm.house.d332e9d924")}</p>
+            <h3>{t("crm.house.3202717277")}</h3>
           </div>
-          <BusinessButton permission="export" className="secondary-button" type="button" onClick={exportHouseCsv}>Export CSV</BusinessButton>
+          <BusinessButton permission="export" className="secondary-button" type="button" onClick={exportHouseCsv}>{t("crm.house.91f71c14c8")}</BusinessButton>
         </div>
 
         <div className="stats-grid house-summary-grid">
-          <StatCard label="Heures" value={formatHours(totalHours)} caption="Période sélectionnée" />
-          <StatCard label="À payer" value={currency.format(totalDue)} caption="Dette créée" />
-          <StatCard label="Payé" value={currency.format(totalPaid)} caption="Paiements imputés" />
-          <StatCard label="Solde" value={formatHouseBalanceLabel(totalBalance)} caption="Delta réel" />
+          <StatCard label={t("crm.house.2aa022f972")} value={formatHours(totalHours)} caption={t("crm.house.7b4c244221")} />
+          <StatCard label={t("crm.house.f86724b3a3")} value={screen.money(totalDue)} caption={t("crm.house.986f5333cf")} />
+          <StatCard label={t("crm.house.2542792ee0")} value={screen.money(totalPaid)} caption={t("crm.house.a986ecc855")} />
+          <StatCard label={t("crm.house.caa3596424")} value={screen.balance(totalBalance)} caption={t("crm.house.efd45db922")} />
         </div>
 
         <div className="house-filter-row">
-          <BusinessLabel>Date début
-            <input
+          <BusinessLabel>{t("crm.house.f12d68908f")}<input
               type="date"
               value={dateRange.start}
               onChange={(event) => setDateRange((current) => ({ ...current, start: event.target.value }))}
             />
           </BusinessLabel>
 
-          <BusinessLabel>Date fin
-            <input
+          <BusinessLabel>{t("crm.house.2382a693af")}<input
               type="date"
               value={dateRange.end}
               onChange={(event) => setDateRange((current) => ({ ...current, end: event.target.value }))}
             />
           </BusinessLabel>
 
-          <BusinessLabel>Maison
-            <select value={houseFilter} onChange={(event) => setHouseFilter(event.target.value)}>
-              <option value="Tous">Toutes les maisons</option>
+          <BusinessLabel>{t("crm.house.686e3f21c3")}<select value={houseFilter} onChange={(event) => setHouseFilter(event.target.value)}>
+              <option value="Tous">{t("crm.house.0fd6f75852")}</option>
               {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
             </select>
           </BusinessLabel>
 
           <div className="house-worker-filter">
-            <span className="house-worker-filter-label">Intervenant</span>
+            <span className="house-worker-filter-label">{t("crm.house.d282bc2490")}</span>
             <div className="house-worker-filter-controls">
-              <div className="house-worker-filter-scroll" role="group" aria-label="Filtrer par intervenant">
+              <div className="house-worker-filter-scroll" role="group" aria-label={t("crm.house.4d1145f1f0")}>
                 <BusinessButton
                   className={workerFilter === "Tous" ? "house-worker-filter-button active" : "house-worker-filter-button"}
                   type="button"
                   aria-pressed={workerFilter === "Tous"}
                   onClick={() => setWorkerFilter("Tous")}
-                >
-                  Tous
-                </BusinessButton>
+                >{t("crm.house.2ff5998143")}</BusinessButton>
                 {activeWorkers.map((worker) => (
                   <BusinessButton
                     className={workerFilter === worker.id ? "house-worker-filter-button active" : "house-worker-filter-button"}
@@ -4032,8 +4017,7 @@ function HouseTrackingView({
                   disabled={archivedWorkers.length === 0}
                   aria-haspopup="dialog"
                   onClick={() => setShowArchivedWorkerPicker(true)}
-                >
-                  Archives ({archivedWorkers.length})
+                >{t("crm.house.2d73aee861")}{archivedWorkers.length})
                 </BusinessButton>
               )}
             </div>
@@ -4041,30 +4025,30 @@ function HouseTrackingView({
         </div>
       </section>
 
-      <nav className="house-tabs" aria-label="Navigation suivi maison">
-        <BusinessButton className={houseSection === "today" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("today")}>Aujourd’hui</BusinessButton>
-        <BusinessButton className={houseSection === "hours" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("hours")}>Heures</BusinessButton>
-        <BusinessButton className={houseSection === "payments" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("payments")}>Paiements</BusinessButton>
-        <BusinessButton className={houseSection === "settings" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("settings")}>Réglages</BusinessButton>
+      <nav className="house-tabs" aria-label={t("crm.house.64e5dfc548")}>
+        <BusinessButton className={houseSection === "today" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("today")}>{t("crm.house.f2de9e072a")}</BusinessButton>
+        <BusinessButton className={houseSection === "hours" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("hours")}>{t("crm.house.2aa022f972")}</BusinessButton>
+        <BusinessButton className={houseSection === "payments" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("payments")}>{t("crm.house.6983e27953")}</BusinessButton>
+        <BusinessButton className={houseSection === "settings" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("settings")}>{t("crm.house.4ed117e09c")}</BusinessButton>
       </nav>
 
       {selectedArchivedWorker && selectedArchivedWorkerHistory && houseSection !== "today" && (
-        <section className="house-archived-filter-banner" aria-label={`Historique de ${selectedArchivedWorker.contactName}`}>
+        <section className="house-archived-filter-banner" aria-label={t("crm.house.d18c07c8ea", { value1: displayValue(selectedArchivedWorker.contactName) })}>
           <div>
             <div className="house-archived-filter-title">
-              <strong>Historique de {selectedArchivedWorker.contactName}</strong>
-              <span className="status-pill house-archived-badge">Archivé</span>
+              <strong>{t("crm.house.04ad4211a1")}{" "}{selectedArchivedWorker.contactName}</strong>
+              <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>
             </div>
-            <span>Intervenant archivé · {selectedArchivedWorker.role}</span>
+            <span>{t("crm.house.d401c40989")}{" "}{selectedArchivedWorker.role}</span>
             <small>
-              {selectedArchivedWorkerHistory.timeEntries} ligne(s) · {formatHours(selectedArchivedWorkerHistory.hours)} · {selectedArchivedWorkerHistory.payments} paiement(s) · {currency.format(selectedArchivedWorkerHistory.paid)} payé · Delta {formatHouseBalanceLabel(selectedArchivedWorkerHistory.balance)}
+              {selectedArchivedWorkerHistory.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(selectedArchivedWorkerHistory.hours)} · {selectedArchivedWorkerHistory.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(selectedArchivedWorkerHistory.paid)}{" "}{t("crm.house.23cabccc65")}{" "}{screen.balance(selectedArchivedWorkerHistory.balance)}
             </small>
           </div>
           <div className="house-archived-filter-actions">
             {houseSection !== "settings" && (
-              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("settings")}>Voir dans Réglages</BusinessButton>
+              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("settings")} data-crm-auto-scroll="true">{t("crm.house.f5e210e42d")}</BusinessButton>
             )}
-            <BusinessButton className="secondary-button" type="button" onClick={() => setWorkerFilter("Tous")}>Effacer le filtre</BusinessButton>
+            <BusinessButton className="secondary-button" type="button" onClick={() => setWorkerFilter("Tous")}>{t("crm.house.987860c426")}</BusinessButton>
           </div>
         </section>
       )}
@@ -4073,41 +4057,41 @@ function HouseTrackingView({
         <section className="card house-tab-panel">
           <div className="section-heading house-section-heading">
             <div>
-              <p className="eyebrow">Vue rapide</p>
-              <h3>Aujourd’hui</h3>
+              <p className="eyebrow" data-semantic-text={"Vue rapide"}>{t("crm.house.aa4b970347")}</p>
+              <h3>{t("crm.house.f2de9e072a")}</h3>
             </div>
             <div className="house-quick-actions">
-              <BusinessButton className="primary-button" type="button" onClick={() => changeHouseSection("hours")}>Ajouter heures</BusinessButton>
-              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("payments")}>Ajouter paiement</BusinessButton>
-              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("settings")}>Réglages</BusinessButton>
+              <BusinessButton className="primary-button" type="button" onClick={() => changeHouseSection("hours")}>{t("crm.house.b2e71697c7")}</BusinessButton>
+              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("payments")}>{t("crm.house.5d28561b1f")}</BusinessButton>
+              <BusinessButton className="secondary-button" type="button" onClick={() => changeHouseSection("settings")}>{t("crm.house.4ed117e09c")}</BusinessButton>
             </div>
           </div>
 
           <div className="house-today-grid">
             <div className="house-mini-panel">
-              <p className="eyebrow">À payer</p>
+              <p className="eyebrow" data-semantic-text={"À payer"}>{t("crm.house.f86724b3a3")}</p>
               {balanceRows.filter((row) => row.balance > 0 && activeWorkerIds.has(row.worker.id)).length === 0 ? (
-                <p className="muted-line">Aucun solde à payer sur la période.</p>
+                <p className="muted-line">{t("crm.house.ecd02a3c6a")}</p>
               ) : balanceRows.filter((row) => row.balance > 0 && activeWorkerIds.has(row.worker.id)).slice(0, 6).map((row) => (
                 <article className="mini-row house-compact-row" key={row.worker.id} data-notification-target={`house-worker-${row.worker.id}`}>
                   <div>
                     <strong>{row.worker.contactName}</strong>
-                    <span>{formatHours(row.hours)} · {currency.format(row.due)} dû · {currency.format(row.paid)} payé</span>
+                    <span>{formatHours(row.hours)} · {screen.money(row.due)}{" "}{t("crm.house.8adbe51aa7")}{" "}{screen.money(row.paid)}{" "}{t("crm.house.36e0bcfd26")}</span>
                   </div>
-                  <strong className="house-balance-positive">{formatHouseBalanceLabel(row.balance)}</strong>
+                  <strong className="house-balance-positive">{screen.balance(row.balance)}</strong>
                 </article>
               ))}
             </div>
 
             <div className="house-mini-panel">
-              <p className="eyebrow">Heures du jour</p>
+              <p className="eyebrow" data-semantic-text={"Heures du jour"}>{t("crm.house.a6e16e3c64")}</p>
               {filteredEntries.filter((entry) => normalizeHouseDateValue(entry.date) === today && activeWorkerIds.has(entry.workerId)).length === 0 ? (
-                <p className="muted-line">Aucune heure saisie aujourd’hui.</p>
+                <p className="muted-line">{t("crm.house.4491cee4c7")}</p>
               ) : filteredEntries.filter((entry) => normalizeHouseDateValue(entry.date) === today && activeWorkerIds.has(entry.workerId)).slice(0, 6).map((entry) => (
                 <article className="mini-row house-compact-row" key={entry.id} id={`house-time-${entry.id}`}>
                   <div>
                     <strong>{entry.workerName}</strong>
-                    <span>{entry.houseName} · {entry.startTime} à {entry.endTime}</span>
+                    <span>{entry.houseName} · {entry.startTime}{" "}{t("crm.house.b3fc9de526")}{" "}{entry.endTime}</span>
                   </div>
                   <strong>{formatHours(getHouseTimeHours(entry))}</strong>
                 </article>
@@ -4120,72 +4104,63 @@ function HouseTrackingView({
       {houseSection === "hours" && (
         <div className="house-two-columns">
           <section className="card house-tab-panel">
-            <p className="eyebrow">Saisie</p>
-            <h3>Ajouter des heures</h3>
+            <p className="eyebrow" data-semantic-text={"Saisie"}>{t("crm.house.611d0882f8")}</p>
+            <h3>{t("crm.house.256880175c")}</h3>
             <BusinessForm className="form-grid house-compact-form" onSubmit={submitTimeEntry} pending={hourConfirmation.saving} onChange={hourConfirmation.changed}>
-              <BusinessLabel>Date
-                <input type="date" value={hourDraft.date} onChange={(event) => setHourDraft((current) => ({ ...current, date: event.target.value }))} />
+              <BusinessLabel>{t("crm.house.99c40ab405")}<input type="date" value={hourDraft.date} onChange={(event) => setHourDraft((current) => ({ ...current, date: event.target.value }))} />
               </BusinessLabel>
-              <BusinessLabel>Maison
-                <select value={hourDraft.houseId} onChange={(event) => setHourDraft((current) => ({ ...current, houseId: event.target.value }))}>
-                  <option value="">Choisir</option>
+              <BusinessLabel>{t("crm.house.686e3f21c3")}<select value={hourDraft.houseId} onChange={(event) => setHourDraft((current) => ({ ...current, houseId: event.target.value }))}>
+                  <option value="">{t("crm.house.3f2aaae201")}</option>
                   {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Intervenant
-                <select value={hourDraft.workerId} onChange={(event) => {
+              <BusinessLabel>{t("crm.house.d282bc2490")}<select value={hourDraft.workerId} onChange={(event) => {
                   const worker = activeWorkers.find((item) => item.id === event.target.value);
                   setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: houseHourlyRateInput(worker) }));
                 }}>
-                  <option value="">Choisir</option>
+                  <option value="">{t("crm.house.3f2aaae201")}</option>
                   {activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Début
-                <select value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))}>
+              <BusinessLabel>{t("crm.house.3c48aa2bdf")}<select value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))}>
                   {QUARTER_HOUR_TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Fin
-                <select value={hourDraft.endTime} onChange={(event) => setHourDraft((current) => ({ ...current, endTime: event.target.value }))}>
+              <BusinessLabel>{t("crm.house.5a2af601e7")}<select value={hourDraft.endTime} onChange={(event) => setHourDraft((current) => ({ ...current, endTime: event.target.value }))}>
                   {QUARTER_HOUR_TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Pause minutes
-                <input type="number" min="0" value={hourDraft.breakMinutes} onChange={(event) => setHourDraft((current) => ({ ...current, breakMinutes: event.target.value }))} />
+              <BusinessLabel>{t("crm.house.286518b073")}<input type="number" min="0" value={hourDraft.breakMinutes} onChange={(event) => setHourDraft((current) => ({ ...current, breakMinutes: event.target.value }))} />
               </BusinessLabel>
-              <BusinessLabel>Taux horaire
-                <input type="text" inputMode="decimal" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />
+              <BusinessLabel>{t("crm.house.18e4968684")}<input type="text" inputMode="decimal" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />
               </BusinessLabel>
-              <BusinessLabel>Note
-                <input value={hourDraft.note} onChange={(event) => setHourDraft((current) => ({ ...current, note: event.target.value }))} placeholder="Ex : ménage complet" />
+              <BusinessLabel>{t("crm.house.d8da2c49df")}<input value={hourDraft.note} onChange={(event) => setHourDraft((current) => ({ ...current, note: event.target.value }))} placeholder={t("crm.house.3189d156a1")} />
               </BusinessLabel>
               <div className="full house-calculation-line">
-                {(rateError || hourConfirmation.message) && <span role="alert">{rateError || hourConfirmation.message} </span>}
-                Calcul immédiat : <strong>{formatHours(previewHours)}</strong> — <strong>{currentRate === null ? "Taux à renseigner" : currency.format(previewAmount)}</strong>
+                {rateError ? <span role="alert">{screenText(rateError)}</span> : <ConfirmedFormMessage message={hourConfirmation.message} inline />} {t("crm.house.0c61feeeed")}{" "}<strong>{formatHours(previewHours)}</strong> — <strong>{currentRate === null ? t("crm.house.8fbded43f0") : screen.money(previewAmount)}</strong>
               </div>
-              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter les heures</BusinessButton>
+              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.house.36b6df45c3")}</BusinessButton>
             </BusinessForm>
           </section>
 
           <section className="card house-tab-panel">
-            <p className="eyebrow">Historique</p>
-            <h3>Heures saisies</h3>
+            <p className="eyebrow" data-semantic-text={"Historique"}>{t("crm.house.865df3324a")}</p>
+            <h3>{t("crm.house.a950998f6e")}</h3>
             <div className="list-stack house-history-list">
-              {filteredEntries.length === 0 ? <p className="muted-line">Aucune heure saisie.</p> : visibleHourEntries.map((entry) => (
+              {filteredEntries.length === 0 ? <p className="muted-line">{t("crm.house.88613b70e0")}</p> : visibleHourEntries.map((entry) => (
                 <article className="mini-row house-compact-row" key={entry.id} id={`house-time-${entry.id}`}>
                   <div>
                     <strong>{entry.workerName}</strong>
-                    {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge">Archivé</span>}
-                    <span>{entry.date} · {entry.houseName} · {entry.startTime} à {entry.endTime} · {formatHours(getHouseTimeHours(entry))} · {currency.format(getHouseTimeAmount(entry))}</span>
+                    {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
+                    <span>{entry.date} · {entry.houseName} · {entry.startTime}{" "}{t("crm.house.b3fc9de526")}{" "}{entry.endTime} · {formatHours(getHouseTimeHours(entry))} · {screen.money(getHouseTimeAmount(entry))}</span>
                   </div>
-                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm("Supprimer ces heures ?") && onDeleteTimeEntry(entry.id)}>Suppr.</BusinessButton>
+                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.09ecd9edc3")) && onDeleteTimeEntry(entry.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
                 </article>
               ))}
             </div>
             {filteredEntries.length > 7 && (
               <BusinessButton className="secondary-button" type="button" onClick={() => setShowAllHoursHistory((current) => !current)}>
-                {showAllHoursHistory ? "Réduire à 7 lignes" : `Afficher tout (${filteredEntries.length})`}
+                {showAllHoursHistory ? t("crm.house.77f77c351c") : t("crm.house.471a4acb30", { value1: displayValue(filteredEntries.length) })}
               </BusinessButton>
             )}
           </section>
@@ -4195,61 +4170,55 @@ function HouseTrackingView({
       {houseSection === "payments" && (
         <div className="house-two-columns">
           <section className="card house-tab-panel">
-            <p className="eyebrow">Paiements</p>
-            <h3>Ajouter un paiement</h3>
+            <p className="eyebrow" data-semantic-text={"Paiements"}>{t("crm.house.6983e27953")}</p>
+            <h3>{t("crm.house.3eb015cda0")}</h3>
             <BusinessForm className="form-grid house-compact-form" onSubmit={submitPayment}>
-              <BusinessLabel>Date
-                <input name="date" type="date" defaultValue={today} />
+              <BusinessLabel>{t("crm.house.99c40ab405")}<input name="date" type="date" defaultValue={today} />
               </BusinessLabel>
-              <BusinessLabel>Maison
-                <select name="houseId" defaultValue={houses[0]?.id || ""}>
-                  <option value="">Choisir</option>
+              <BusinessLabel>{t("crm.house.686e3f21c3")}<select name="houseId" defaultValue={houses[0]?.id || ""}>
+                  <option value="">{t("crm.house.3f2aaae201")}</option>
                   {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Intervenant
-                <select name="workerId" defaultValue={initialActiveWorker?.id || ""}>
-                  <option value="">Choisir</option>
+              <BusinessLabel>{t("crm.house.d282bc2490")}<select name="workerId" defaultValue={initialActiveWorker?.id || ""}>
+                  <option value="">{t("crm.house.3f2aaae201")}</option>
                   {activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Montant
-                <input name="amount" type="text" inputMode="decimal" min="0" step="1" placeholder="Ex : 150" />
+              <BusinessLabel>{t("crm.house.947cc07e2b")}<input name="amount" type="text" inputMode="decimal" min="0" step="1" placeholder={t("crm.house.3b23fa9915")} />
               </BusinessLabel>
-              <BusinessLabel>Moyen
-                <select name="method" defaultValue="Virement">
-                  <option>Virement</option>
-                  <option>Espèces</option>
-                  <option>CB</option>
-                  <option>Chèque</option>
-                  <option>Autre</option>
+              <BusinessLabel>{t("crm.house.28eca2c0e2")}<select name="method" defaultValue="Virement">
+                  <option value="Virement">{t("crm.house.e58f0ffa0e")}</option>
+                  <option value="Espèces">{t("crm.house.351f789647")}</option>
+                  <option value="CB">{t("crm.house.bf7b0ead27")}</option>
+                  <option value="Chèque">{t("crm.house.723a0b78dd")}</option>
+                  <option value="Autre">{t("crm.house.eb72e1683b")}</option>
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Note
-                <input name="note" placeholder="Paiement semaine..." />
+              <BusinessLabel>{t("crm.house.d8da2c49df")}<input name="note" placeholder={t("crm.house.13a71e2ca2")} />
               </BusinessLabel>
-              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter le paiement</BusinessButton>
+              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.house.f85aef82b7")}</BusinessButton>
             </BusinessForm>
           </section>
 
           <section className="card house-tab-panel">
-            <p className="eyebrow">Historique</p>
-            <h3>Paiements saisis</h3>
+            <p className="eyebrow" data-semantic-text={"Historique"}>{t("crm.house.865df3324a")}</p>
+            <h3>{t("crm.house.f96547f753")}</h3>
             <div className="list-stack house-history-list">
-              {filteredPayments.length === 0 ? <p className="muted-line">Aucun paiement saisi.</p> : visiblePaymentEntries.map((payment) => (
+              {filteredPayments.length === 0 ? <p className="muted-line">{t("crm.house.9b8270818a")}</p> : visiblePaymentEntries.map((payment) => (
                 <article className="mini-row house-compact-row" key={payment.id}>
                   <div>
                     <strong>{payment.workerName}</strong>
-                    {isArchivedWorker(payment.workerId) && <span className="status-pill house-archived-badge">Archivé</span>}
-                    <span>{payment.date} · {payment.houseName} · {currency.format(payment.amount)} · {payment.method}</span>
+                    {isArchivedWorker(payment.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
+                    <span>{payment.date} · {payment.houseName} · {screen.money(payment.amount)} · {label(payment.method, "crm")}</span>
                   </div>
-                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm("Supprimer ce paiement ?") && onDeletePayment(payment.id)}>Suppr.</BusinessButton>
+                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.5bcaf17712")) && onDeletePayment(payment.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
                 </article>
               ))}
             </div>
             {filteredPayments.length > 7 && (
               <BusinessButton className="secondary-button" type="button" onClick={() => setShowAllPaymentsHistory((current) => !current)}>
-                {showAllPaymentsHistory ? "Réduire à 7 lignes" : `Afficher tout (${filteredPayments.length})`}
+                {showAllPaymentsHistory ? t("crm.house.77f77c351c") : t("crm.house.471a4acb30", { value1: displayValue(filteredPayments.length) })}
               </BusinessButton>
             )}
           </section>
@@ -4259,50 +4228,44 @@ function HouseTrackingView({
       {houseSection === "settings" && (
         <div className="house-two-columns">
           <section className="card house-tab-panel">
-            <p className="eyebrow">Réglages</p>
-            <h3>Maisons</h3>
+            <p className="eyebrow" data-semantic-text={"Réglages"}>{t("crm.house.4ed117e09c")}</p>
+            <h3>{t("crm.house.58d07cab4d")}</h3>
             <BusinessForm className="form-grid house-compact-form" onSubmit={submitHouse}>
-              <BusinessLabel>Nom
-                <input name="name" placeholder="Maison principale" />
+              <BusinessLabel>{t("crm.house.b2c124536d")}<input name="name" placeholder={t("crm.house.3a4d1efc3f")} />
               </BusinessLabel>
-              <BusinessLabel>Adresse
-                <input name="address" placeholder="Adresse" />
+              <BusinessLabel>{t("crm.house.79e5cf20de")}<input name="address" placeholder={t("crm.house.79e5cf20de")} />
               </BusinessLabel>
-              <BusinessLabel>Notes
-                <textarea name="notes" placeholder="Accès, alarmes, consignes..." />
+              <BusinessLabel>{t("crm.house.8a7525b149")}<textarea name="notes" placeholder={t("crm.house.725032bb63")} />
               </BusinessLabel>
-              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter la maison</BusinessButton>
+              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.house.e43ab9e9e4")}</BusinessButton>
             </BusinessForm>
             <div className="list-stack house-history-list">
-              {houses.length === 0 ? <p className="muted-line">Aucune maison.</p> : houses.map((house) => (
+              {houses.length === 0 ? <p className="muted-line">{t("crm.house.153fc60415")}</p> : houses.map((house) => (
                 <article className="mini-row house-compact-row" key={house.id}>
                   <div>
                     <strong>{house.name}</strong>
-                    <span>{house.address || "Adresse à compléter"}</span>
+                    <span>{house.address || t("crm.house.a8293fde8d")}</span>
                   </div>
-                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm("Supprimer cette maison ?") && onDeleteHouse(house.id)}>Suppr.</BusinessButton>
+                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.efa472048f")) && onDeleteHouse(house.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
                 </article>
               ))}
             </div>
           </section>
 
           <section className="card house-tab-panel">
-            <p className="eyebrow">Réglages</p>
-            <h3>Intervenants actifs</h3>
+            <p className="eyebrow" data-semantic-text={"Réglages"}>{t("crm.house.4ed117e09c")}</p>
+            <h3>{t("crm.house.8e72b6ff33")}</h3>
             <BusinessForm className="form-grid house-compact-form" onSubmit={submitWorker}>
-              <BusinessLabel>Contact CRM
-                <input name="contactSearch" list="house-contact-options" placeholder="Nom, société, email ou téléphone" autoComplete="off" />
+              <BusinessLabel>{t("crm.house.424439cbf0")}<input name="contactSearch" list="house-contact-options" placeholder={t("crm.house.2c2872e46b")} autoComplete="off" />
                 <datalist id="house-contact-options">
                   {sortedHouseContacts.map((contact) => <option key={contact.id} value={getHouseContactSearchLabel(contact)} />)}
                 </datalist>
               </BusinessLabel>
-              <BusinessLabel>Taux horaire
-                <input name="hourlyRate" type="text" inputMode="decimal" required placeholder="Ex : 18,50" />
+              <BusinessLabel>{t("crm.house.18e4968684")}<input name="hourlyRate" type="text" inputMode="decimal" required placeholder={t("crm.house.b9e2dc644a")} />
               </BusinessLabel>
-              <BusinessLabel>Notes
-                <textarea name="notes" placeholder="Disponibilités, conditions, préférences..." />
+              <BusinessLabel>{t("crm.house.8a7525b149")}<textarea name="notes" placeholder={t("crm.house.159f72a01a")} />
               </BusinessLabel>
-              <BusinessButton permission="write" className="primary-button" type="submit">Ajouter l’intervenant</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="submit">{t("crm.house.95b1bf7262")}</BusinessButton>
             </BusinessForm>
 
             {editingWorkerId && onUpdateWorker && (() => {
@@ -4316,35 +4279,31 @@ function HouseTrackingView({
             })()}
 
             <div className="list-stack house-history-list">
-              {activeWorkers.length === 0 ? <p className="muted-line">Aucun intervenant actif.</p> : activeWorkers.map((worker) => {
+              {activeWorkers.length === 0 ? <p className="muted-line">{t("crm.house.af13fc6bb4")}</p> : activeWorkers.map((worker) => {
                 const hasHistory = houseTrackingWorkerHasHistory(worker.id, timeEntries, payments);
 
                 return (
                   <article className="mini-row house-compact-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                     <div>
                       <strong>{worker.contactName}</strong>
-                      <span>{worker.role} · {worker.hourlyRate == null ? "Tarif non renseigné" : `${currency.format(worker.hourlyRate)}/h`}</span>
+                      <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate)) })}</span>
                       {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
-                        <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)}>Ouvrir la fiche contact</button>
+                        <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)} data-crm-auto-scroll="true">{t("crm.house.39bb8b1625")}</button>
                       )}
                     </div>
                     <div className="house-worker-actions">
-                      {onUpdateWorker && <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingWorkerId(worker.id)}>Modifier</BusinessButton>}
+                      {onUpdateWorker && <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingWorkerId(worker.id)} data-crm-auto-scroll="true">{t("crm.house.42e37604b6")}</BusinessButton>}
                       <BusinessButton permission="write"
                         className="secondary-button"
                         type="button"
-                        onClick={() => window.confirm(`Archiver ${worker.contactName} ?\n\nSa fiche, ses heures et ses paiements seront intégralement conservés.`) && onArchiveWorker(worker.id)}
-                      >
-                        Archiver
-                      </BusinessButton>
+                        onClick={() => window.confirm(dialogT("crm.house.f87e5f353a", { value1: displayValue(worker.contactName) })) && onArchiveWorker(worker.id)}
+                      >{t("crm.house.8614cf0058")}</BusinessButton>
                       {!hasHistory && (
                         <BusinessButton permission="remove"
                           className="danger-link"
                           type="button"
-                          onClick={() => window.confirm(`Supprimer définitivement ${worker.contactName} ?\n\nCette action supprimera uniquement sa fiche d’intervenant et ne pourra pas être annulée.`) && onPermanentlyDeleteWorker(worker.id)}
-                        >
-                          Supprimer définitivement
-                        </BusinessButton>
+                          onClick={() => window.confirm(dialogT("crm.house.b832306a3e", { value1: displayValue(worker.contactName) })) && onPermanentlyDeleteWorker(worker.id)}
+                        >{t("crm.house.1a797b980d")}</BusinessButton>
                       )}
                     </div>
                   </article>
@@ -4353,33 +4312,31 @@ function HouseTrackingView({
             </div>
 
             <details className="house-archived-workers">
-              <summary>Intervenants archivés ({archivedWorkers.length})</summary>
+              <summary>{t("crm.house.1d455b99eb")}{archivedWorkers.length})</summary>
               <div className="list-stack house-history-list">
-                {archivedWorkers.length === 0 ? <p className="muted-line">Aucun intervenant archivé.</p> : archivedWorkers.map((worker) => {
+                {archivedWorkers.length === 0 ? <p className="muted-line">{t("crm.house.2a9b5e967e")}</p> : archivedWorkers.map((worker) => {
                   const history = getHouseTrackingWorkerHistorySummary(worker.id, timeEntries, payments);
                   const hasHistory = history.timeEntries > 0 || history.payments > 0;
 
                   return (
                     <article className="mini-row house-compact-row house-archived-worker-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                       <div>
-                        <strong>{worker.contactName} <span className="status-pill house-archived-badge">Archivé</span></strong>
-                        <span>{worker.role} · {worker.hourlyRate == null ? "Tarif non renseigné" : `${currency.format(worker.hourlyRate)}/h`}</span>
-                        <span>{history.timeEntries} ligne(s) · {formatHours(history.hours)} · {history.payments} paiement(s) · {currency.format(history.paid)} payé</span>
-                        <span>Coût {currency.format(history.due)} · Delta {formatHouseBalanceLabel(history.balance)}</span>
+                        <strong>{worker.contactName} <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span></strong>
+                        <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate)) })}</span>
+                        <span>{history.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(history.hours)} · {history.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(history.paid)}{" "}{t("crm.house.36e0bcfd26")}</span>
+                        <span>{t("crm.house.385da126a8")}{" "}{screen.money(history.due)}{" "}{t("crm.house.8580f17f02")}{" "}{screen.balance(history.balance)}</span>
                         {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
-                          <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)}>Ouvrir la fiche contact</button>
+                          <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)} data-crm-auto-scroll="true">{t("crm.house.39bb8b1625")}</button>
                         )}
                       </div>
                       <div className="house-worker-actions">
-                        <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => onReactivateWorker(worker.id)}>Réactiver</BusinessButton>
+                        <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => onReactivateWorker(worker.id)}>{t("crm.house.0efc2e864f")}</BusinessButton>
                         {!hasHistory && (
                           <BusinessButton permission="remove"
                             className="danger-link"
                             type="button"
-                            onClick={() => window.confirm(`Supprimer définitivement ${worker.contactName} ?\n\nCette action supprimera uniquement sa fiche d’intervenant et ne pourra pas être annulée.`) && onPermanentlyDeleteWorker(worker.id)}
-                          >
-                            Supprimer définitivement
-                          </BusinessButton>
+                            onClick={() => window.confirm(dialogT("crm.house.b832306a3e", { value1: displayValue(worker.contactName) })) && onPermanentlyDeleteWorker(worker.id)}
+                          >{t("crm.house.1a797b980d")}</BusinessButton>
                         )}
                       </div>
                     </article>
@@ -4390,33 +4347,33 @@ function HouseTrackingView({
           </section>
 
           <section className="card house-tab-panel full">
-            <p className="eyebrow">Soldes</p>
-            <h3>Delta réel par intervenant</h3>
+            <p className="eyebrow" data-semantic-text={"Soldes"}>{t("crm.house.6804a53c7a")}</p>
+            <h3>{t("crm.house.2e8b9c7bfa")}</h3>
             {balanceRows.length === 0 ? (
-              <p className="muted-line">Aucun delta sur la période sélectionnée.</p>
+              <p className="muted-line">{t("crm.house.bc7e97eb9c")}</p>
             ) : (
               <div className="table-wrapper">
                 <table className="mobile-card-table house-balance-table">
                   <thead>
                     <tr>
-                      <th>Intervenant</th>
-                      <th>Heures</th>
-                      <th>Dette créée</th>
-                      <th>Payé</th>
-                      <th>Delta</th>
+                      <th>{t("crm.house.d282bc2490")}</th>
+                      <th>{t("crm.house.2aa022f972")}</th>
+                      <th>{t("crm.house.986f5333cf")}</th>
+                      <th>{t("crm.house.2542792ee0")}</th>
+                      <th>{t("crm.house.18833da39f")}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {balanceRows.map((row) => (
                       <tr key={row.worker.id}>
-                        <td data-label="Intervenant">
-                          <strong>{row.worker.contactName}</strong>{!isHouseTrackingWorkerActive(row.worker) && <span className="status-pill house-archived-badge">Archivé</span>}
+                        <td data-label={t("crm.house.d282bc2490")}>
+                          <strong>{row.worker.contactName}</strong>{!isHouseTrackingWorkerActive(row.worker) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
                           <br /><span className="muted-line">{row.worker.role}</span>
                         </td>
-                        <td data-label="Heures">{formatHours(row.hours)}</td>
-                        <td data-label="Dette créée">{currency.format(row.due)}</td>
-                        <td data-label="Payé">{currency.format(row.paid)}</td>
-                        <td data-label="Delta"><strong className={row.balance > 0 ? "house-balance-positive" : row.balance < 0 ? "house-balance-negative" : "house-balance-zero"}>{formatHouseBalanceLabel(row.balance)}</strong></td>
+                        <td data-label={t("crm.house.2aa022f972")}>{formatHours(row.hours)}</td>
+                        <td data-label={t("crm.house.986f5333cf")}>{screen.money(row.due)}</td>
+                        <td data-label={t("crm.house.2542792ee0")}>{screen.money(row.paid)}</td>
+                        <td data-label={t("crm.house.18833da39f")}><strong className={row.balance > 0 ? "house-balance-positive" : row.balance < 0 ? "house-balance-negative" : "house-balance-zero"}>{screen.balance(row.balance)}</strong></td>
                       </tr>
                     ))}
                   </tbody>
@@ -4438,19 +4395,18 @@ function HouseTrackingView({
           >
             <div className="house-archive-picker-heading">
               <div>
-                <p className="eyebrow">Archives</p>
-                <h3 id="house-archive-picker-title">Intervenants archivés</h3>
+                <p className="eyebrow" data-semantic-text={"Archives"}>{t("crm.house.e404aa80d8")}</p>
+                <h3 id="house-archive-picker-title">{t("crm.house.7fdb14b092")}</h3>
               </div>
-              <BusinessButton className="secondary-button house-archive-picker-close" type="button" aria-label="Fermer" onClick={closeArchivedWorkerPicker}>×</BusinessButton>
+              <BusinessButton className="secondary-button house-archive-picker-close" type="button" aria-label={t("crm.house.711e5f2e19")} onClick={closeArchivedWorkerPicker}>{t("crm.house.8db71ed28b")}</BusinessButton>
             </div>
 
             {archivedWorkers.length > 1 && (
-              <BusinessLabel className="house-archive-search">Rechercher
-                <input
+              <BusinessLabel className="house-archive-search">{t("crm.house.733d1c7426")}<input
                   autoFocus
                   type="search"
                   value={archivedWorkerSearch}
-                  placeholder="Nom ou rôle"
+                  placeholder={t("crm.house.249e844308")}
                   onChange={(event) => setArchivedWorkerSearch(event.target.value)}
                 />
               </BusinessLabel>
@@ -4458,7 +4414,7 @@ function HouseTrackingView({
 
             <div className="house-archive-picker-list">
               {visibleArchivedWorkers.length === 0 ? (
-                <p className="muted-line">Aucun intervenant archivé ne correspond à cette recherche.</p>
+                <p className="muted-line">{t("crm.house.ddd5df2fdb")}</p>
               ) : visibleArchivedWorkers.map((worker) => {
                 const history = getHouseTrackingWorkerHistorySummary(worker.id, timeEntries, payments);
 
@@ -4466,10 +4422,10 @@ function HouseTrackingView({
                   <BusinessButton className="house-archive-worker-button" key={worker.id} type="button" onClick={() => selectArchivedWorker(worker.id)}>
                     <span className="house-archive-worker-name">
                       <strong>{worker.contactName}</strong>
-                      <span className="status-pill house-archived-badge">Archivé</span>
+                      <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>
                     </span>
-                    <span>{worker.role} · {formatHours(history.hours)} · {currency.format(history.paid)} payé</span>
-                    <small>{history.timeEntries} ligne(s) d’heures · {history.payments} paiement(s) · Delta {formatHouseBalanceLabel(history.balance)}</small>
+                    <span>{worker.role} · {formatHours(history.hours)} · {screen.money(history.paid)}{" "}{t("crm.house.36e0bcfd26")}</span>
+                    <small>{history.timeEntries}{" "}{t("crm.house.c9bf8fc5fb")}{" "}{history.payments}{" "}{t("crm.house.63a6b30eb7")}{" "}{screen.balance(history.balance)}</small>
                   </BusinessButton>
                 );
               })}
@@ -4508,6 +4464,8 @@ function VendorInvoicesView({
   onOpenQuote: (quoteId: string) => void;
   focusInvoiceId?: string;
 }) {
+  const { t, label, screen, screenText, dialogText, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const [bankContactId, setBankContactId] = useState("");
   const bankContact = contacts.find(c => c.id === bankContactId);
@@ -4722,7 +4680,7 @@ function VendorInvoicesView({
           .download(storagePath);
 
         if (error || !fileData) {
-          window.alert(`Aperçu impossible : ${error?.message || "fichier introuvable"}`);
+          window.alert(dialogText(safeCRMError(error)));
           return;
         }
 
@@ -4753,7 +4711,7 @@ function VendorInvoicesView({
       return;
     }
 
-    window.alert("Aucune facture importée sur cette ligne.");
+    window.alert(dialogT("crm.vendorInvoices.de17b50139"));
   }
 
   async function downloadVendorInvoiceDocument(invoice: VendorInvoice) {
@@ -4766,7 +4724,7 @@ function VendorInvoicesView({
         .download(storagePath);
 
       if (error || !fileData) {
-        window.alert(`Téléchargement impossible : ${error?.message || "fichier introuvable"}`);
+        window.alert(dialogText(safeCRMError(error)));
         return;
       }
 
@@ -4784,7 +4742,7 @@ function VendorInvoicesView({
       return;
     }
 
-    window.alert("Aucune facture importée sur cette ligne.");
+    window.alert(dialogT("crm.vendorInvoices.de17b50139"));
   }
 
   const visibleInvoices = statusFilter === "Tous"
@@ -4840,7 +4798,7 @@ function VendorInvoicesView({
         uploadedInvoiceDocument = await uploadVendorInvoiceDocument(invoiceFile, invoiceId);
         if (business) await business.check();
       } catch (error) {
-        window.alert(`Facture non importée : ${error instanceof Error ? error.message : "erreur inconnue"}`);
+        window.alert(dialogText(safeCRMError(error)));
         setUploadingInvoiceDocument(false);
         return;
       } finally {
@@ -4855,7 +4813,7 @@ function VendorInvoicesView({
     );
 
     if (paidAmount > 0 && !hasInvoiceDocument) {
-      window.alert("Importez la facture réelle avant d’enregistrer un paiement.");
+      window.alert(dialogT("crm.vendorInvoices.aad644a6d6"));
       return;
     }
 
@@ -4899,10 +4857,10 @@ function VendorInvoicesView({
     };
 
     if (editingInvoice?.paymentBankAccountId && editingInvoice.contactId !== contactId) {
-      window.alert("Le prestataire ne peut pas changer après sélection d’un compte bancaire."); return;
+      window.alert(dialogT("crm.vendorInvoices.22e9a5602c")); return;
     }
-    if (!invoice.contactName && (!business || business.read("contacts") || !editingInvoice)) return window.alert("Choisissez un contact prestataire.");
-    if (!invoice.amount || invoice.amount <= 0) return window.alert("Ajoutez un montant de facture.");
+    if (!invoice.contactName && (!business || business.read("contacts") || !editingInvoice)) return window.alert(dialogT("crm.vendorInvoices.75e5407945"));
+    if (!invoice.amount || invoice.amount <= 0) return window.alert(dialogT("crm.vendorInvoices.4fdd295172"));
 
     if (editingInvoice) {
       onUpdate(invoice);
@@ -4932,12 +4890,12 @@ function VendorInvoicesView({
       <section className="card vendor-invoices-list-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Factures prestataires</p>
-            <h3>{visibleInvoices.length} facture{visibleInvoices.length > 1 ? "s" : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Factures prestataires"}>{t("crm.vendorInvoices.e3ba7d2e9c")}</p>
+            <h3>{visibleInvoices.length}{" "}{t("crm.vendorInvoices.7007054154")}{visibleInvoices.length > 1 ? t("crm.vendorInvoices.043a718774") : ""}</h3>
           </div>
           <div>
-            <p className="eyebrow">Reste à payer</p>
-            <h3>{formatEuroAmount(totalToPay)}</h3>
+            <p className="eyebrow" data-semantic-text={"Reste à payer"}>{t("crm.vendorInvoices.7d60750d7e")}</p>
+            <h3>{screen.euro(totalToPay)}</h3>
           </div>
         </div>
 
@@ -4949,15 +4907,12 @@ function VendorInvoicesView({
               className={`${statusFilter === status ? "primary-button" : "secondary-button"} ${status === "Payé" ? "invoice-filter-paid" : status === "Tous" ? "" : "invoice-filter-danger"}`}
               onClick={() => setStatusFilter(status)}
             >
-              {status}
+              {label(status, "crm")}
             </BusinessButton>
           ))}
         </div>
 
-        {visibleInvoices.length === 0 ? (
-          <p className="muted-line">Aucune facture prestataire pour ce filtre.</p>
-        ) : (
-          <div className="list-stack oar-contact-list-stack">
+        {visibleInvoices.length === 0 ? (<p className="muted-line">{t("crm.vendorInvoices.6a606c5248")}</p>) : (<div className="list-stack oar-contact-list-stack">
             {visibleInvoices.map((invoice) => {
               const orphan = isOrphanAutomaticVendorInvoice(invoice, quotes);
               const linkedContact = findContactForVendorInvoice(invoice);
@@ -4974,45 +4929,41 @@ function VendorInvoicesView({
               return (
               <article className="item-card vendor-invoice-card" key={invoice.id} id={`vendor-invoice-${invoice.id}`} data-notification-target={`vendor-invoice-${invoice.id}`}>
                 <div>
-                  <p className={`eyebrow ${invoice.status === "Payé" ? "invoice-eyebrow-paid" : invoice.status === "En attente de facture" ? "" : "invoice-eyebrow-danger"}`}>{profession} · {invoice.status}</p>
+                  <p className={`eyebrow ${invoice.status === "Payé" ? "invoice-eyebrow-paid" : invoice.status === "En attente de facture" ? "" : "invoice-eyebrow-danger"}`} data-semantic-text={invoice.status}>{screen.category(profession)} · {label(invoice.status, "crm")}</p>
                   <h3>{businessName}</h3>
                   {contactPersonName && contactPersonName !== businessName ? (
-                    <p className="muted-line">Référent : {contactPersonName}</p>
+                    <p className="muted-line">{t("crm.vendorInvoices.365b32021c")}{" "}{contactPersonName}</p>
                   ) : null}
                   <p>{invoice.title}</p>
-                  {orphan && <p className={`status-pill semantic-danger ${vendorFinanceStyles.orphanNotice}`}>Facture automatique orpheline · Devis d’origine introuvable</p>}
-                  <p className="muted-line">Référence : {invoice.invoiceReference || "Non renseignée"}</p>
-                  <p className="muted-line">Date facture : {invoice.invoiceDate || "À compléter"} · Créée le : {invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString("fr-FR") : "Non renseignée"}</p>
+                  {orphan && <p className={`status-pill semantic-danger ${vendorFinanceStyles.orphanNotice}`} data-semantic-text={"Facture automatique orpheline · Devis d’origine introuvable"}>{t("crm.vendorInvoices.85a96b984f")}</p>}
+                  <p className="muted-line">{t("crm.vendorInvoices.220e95eaf2")}{" "}{invoice.invoiceReference || t("crm.vendorInvoices.831460cb02")}</p>
+                  <p className="muted-line">{t("crm.vendorInvoices.9c176bef48")}{" "}{invoice.invoiceDate || t("crm.vendorInvoices.3160128ee8")}{" "}{t("crm.vendorInvoices.c38799bca4")}{" "}{invoice.createdAt ? screen.date(invoice.createdAt) : t("crm.vendorInvoices.831460cb02")}</p>
                   <p className="muted-line">
-                    {invoice.status === "En attente de facture"
-                      ? "Facture réelle attendue avant mise en paiement"
-                      : `Date de paiement prévue : ${invoice.dueDate || "À compléter"}`}
+                    {invoice.status === "En attente de facture" ? t("crm.vendorInvoices.cd9c6754a4") : t("crm.vendorInvoices.9606bfc819", { value1: displayValue(invoice.dueDate || t("crm.vendorInvoices.3160128ee8")) })}
                   </p>
-                  <p className="muted-line">Devis d’origine : {invoice.sourceQuoteReference || invoice.sourceQuoteId || "Non renseigné"}</p>
+                  <p className="muted-line">{t("crm.vendorInvoices.1f3bf0aac1")}{" "}{invoice.sourceQuoteReference || invoice.sourceQuoteId || t("crm.vendorInvoices.cb6c1fb76c")}</p>
 
                   {!business && <VendorInvoicePayment invoice={invoice} contact={contacts.find(c => c.id === invoice.contactId)} onUpdate={onUpdate} onOpenContact={() => setBankContactId(invoice.contactId)} />}
                   <div className="stats-grid vendor-invoice-stats">
-                    <div className="mini-stat">
-                      <span>Montant</span>
-                      <strong>{formatEuroAmount(invoice.amount)}</strong>
+                    <div className="mini-stat" data-semantic-text={"Montant"}>
+                      <span>{t("crm.vendorInvoices.947cc07e2b")}</span>
+                      <strong>{screen.euro(invoice.amount)}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Payé</span>
-                      <strong>{formatEuroAmount(invoice.paidAmount)}</strong>
+                    <div className="mini-stat" data-semantic-text={"Payé"}>
+                      <span>{t("crm.vendorInvoices.2542792ee0")}</span>
+                      <strong>{screen.euro(invoice.paidAmount)}</strong>
                     </div>
-                    <div className="mini-stat">
-                      <span>Reste</span>
-                      <strong>{formatEuroAmount(getVendorInvoiceRemaining(invoice))}</strong>
+                    <div className="mini-stat" data-semantic-text={"Reste"}>
+                      <span>{t("crm.vendorInvoices.eb3bd48127")}</span>
+                      <strong>{screen.euro(getVendorInvoiceRemaining(invoice))}</strong>
                     </div>
                   </div>
                 </div>
 
                 <div className="item-actions contact-row-actions oar-contact-actions">
-                  <span className={`status-pill vendor-invoice-status ${invoice.status === "Payé" ? "semantic-success invoice-status-paid" : invoice.status === "En attente de facture" ? "semantic-pending" : "semantic-danger invoice-status-danger"}`}>{invoice.status}</span>
+                  <span className={`status-pill vendor-invoice-status ${invoice.status === "Payé" ? "semantic-success invoice-status-paid" : invoice.status === "En attente de facture" ? "semantic-pending" : "semantic-danger invoice-status-danger"}`} data-semantic-text={invoice.status}>{label(invoice.status, "crm")}</span>
                   {invoice.sourceQuoteId && (
-                    <BusinessButton className="secondary-button" type="button" onClick={() => onOpenQuote(invoice.sourceQuoteId || "")}>
-                      Voir devis
-                    </BusinessButton>
+                    <BusinessButton className="secondary-button" type="button" onClick={() => onOpenQuote(invoice.sourceQuoteId || "")} data-crm-auto-scroll="true">{t("crm.vendorInvoices.fd65b6021a")}</BusinessButton>
                   )}
                   {(invoice.invoiceDocumentStoragePath || invoice.invoiceDocumentUrl || documents.find((crmDocument) => crmDocument.id === invoice.linkedDocumentId)?.storagePath || documents.find((crmDocument) => crmDocument.id === invoice.linkedDocumentId)?.url) && (
                     <>
@@ -5021,43 +4972,38 @@ function VendorInvoicesView({
                         type="button"
                         disabled={previewingInvoiceDocument}
                         onClick={() => void openVendorInvoicePreview(invoice)}
-                      >
-                        {previewingInvoiceDocument ? "Ouverture..." : "Voir facture"}
+                       data-crm-auto-scroll="true">
+                        {previewingInvoiceDocument ? t("crm.vendorInvoices.2ccbf9cad2") : t("crm.vendorInvoices.d97023a911")}
                       </BusinessButton>
                       <BusinessButton permission="export"
                         className="secondary-button vendor-invoice-document-button"
                         type="button"
                         onClick={() => void downloadVendorInvoiceDocument(invoice)}
-                      >
-                        Télécharger facture
-                      </BusinessButton>
+                      >{t("crm.vendorInvoices.a1b7982562")}</BusinessButton>
                     </>
                   )}
-                  <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => startEditInvoice(invoice)}>
-                    Modifier
-                  </BusinessButton>
+                  <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => startEditInvoice(invoice)} data-crm-auto-scroll="true">{t("crm.vendorInvoices.42e37604b6")}</BusinessButton>
                   {orphan ? <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => {
-                    if (window.confirm("Supprimer la facture automatique orpheline ? Les liens, documents et paiements seront vérifiés à nouveau.")) onDeleteOrphan(invoice.id);
-                  }}>Supprimer la facture orpheline</BusinessButton> : !isAutomaticVendorInvoice(invoice) && <BusinessButton permission="remove"
+                    if (window.confirm(dialogT("crm.vendorInvoices.3fa1844022"))) onDeleteOrphan(invoice.id);
+                  }}>{t("crm.vendorInvoices.2822bf3afd")}</BusinessButton> : !isAutomaticVendorInvoice(invoice) && <BusinessButton permission="remove"
                     className="danger-link" type="button" onClick={() => {
-                      if (window.confirm("Supprimer cette facture prestataire ?")) onDelete(invoice.id);
-                    }}>Supprimer</BusinessButton>}
+                      if (window.confirm(dialogT("crm.vendorInvoices.a96392b731"))) onDelete(invoice.id);
+                    }}>{t("crm.vendorInvoices.5e5d0216ce")}</BusinessButton>}
                 </div>
               </article>
               );
             })}
-          </div>
-        )}
+          </div>)}
       </section>
 
       <section className="card form-card vendor-invoices-form-card">
-        <p className="eyebrow">{editingInvoice ? "Modification" : "Nouvelle"}</p>
-        <h3>{editingInvoice ? "Modifier facture" : "Ajouter une facture prestataire"}</h3>
+        <p className="eyebrow" data-semantic-text={"Modification Nouvelle"}>{editingInvoice ? t("crm.vendorInvoices.46889b43bc") : t("crm.vendorInvoices.85aea9c936")}</p>
+        <h3>{editingInvoice ? t("crm.vendorInvoices.c5abbbc37f") : t("crm.vendorInvoices.09b3a11f11")}</h3>
         {editingInvoice?.sourceQuoteReference && (
           <div className="card" style={{ boxShadow: "none", marginBottom: 16, padding: 14 }}>
-            <p className="eyebrow">Créée depuis le devis</p>
+            <p className="eyebrow" data-semantic-text={"Créée depuis le devis"}>{t("crm.vendorInvoices.318a8f96a9")}</p>
             <strong>{editingInvoice.sourceQuoteReference}</strong>
-            <p className="muted-line">Importez la facture réelle avant tout paiement.</p>
+            <p className="muted-line">{t("crm.vendorInvoices.81bea8889c")}</p>
           </div>
         )}
 
@@ -5071,65 +5017,55 @@ function VendorInvoicesView({
             fallbackProfession={editingInvoice?.category || ""}
           />
 
-          <BusinessLabel>Objet facture
-            <input name="title" defaultValue={editingInvoice?.title || ""} placeholder="Ex : Entretien jardin juin" />
+          <BusinessLabel>{t("crm.vendorInvoices.3a6c989c2b")}<input name="title" defaultValue={editingInvoice?.title || ""} placeholder={t("crm.vendorInvoices.3b302c9d37")} />
           </BusinessLabel>
 
-          <BusinessLabel>Référence facture<input name="invoiceReference" defaultValue={editingInvoice?.invoiceReference || ""} placeholder="Ex : 001 (facultatif)" /></BusinessLabel>
+          <BusinessLabel>{t("crm.vendorInvoices.5da0462657")}<input name="invoiceReference" defaultValue={editingInvoice?.invoiceReference || ""} placeholder={t("crm.vendorInvoices.7badde962e")} /></BusinessLabel>
 
-          <BusinessLabel>Date facture
-            <input name="invoiceDate" type="date" defaultValue={editingInvoice?.invoiceDate || ""} />
+          <BusinessLabel>{t("crm.vendorInvoices.9da5fd07c5")}<input name="invoiceDate" type="date" defaultValue={editingInvoice?.invoiceDate || ""} />
           </BusinessLabel>
 
-          <BusinessLabel>Date paiement
-            <input name="dueDate" type="date" defaultValue={editingInvoice?.dueDate || ""} />
+          <BusinessLabel>{t("crm.vendorInvoices.5ed5c98430")}<input name="dueDate" type="date" defaultValue={editingInvoice?.dueDate || ""} />
           </BusinessLabel>
 
-          <BusinessLabel>Montant facture
-            <input
+          <BusinessLabel>{t("crm.vendorInvoices.31aca8c4e3")}<input
               name="amount"
               type="text"
               inputMode="decimal"
               defaultValue={editingInvoice ? formatEuroInput(editingInvoice.amount) : ""}
-              placeholder="Ex : 1 023,70"
+              placeholder={t("crm.vendorInvoices.addb26f9f6")}
               required
             />
           </BusinessLabel>
 
-          <BusinessLabel>Montant payé
-            <input
+          <BusinessLabel>{t("crm.vendorInvoices.78d6b0498a")}<input
               name="paidAmount"
               type="text"
               inputMode="decimal"
               defaultValue={editingInvoice ? formatEuroInput(editingInvoice.paidAmount) : ""}
-              placeholder="Ex : 0,00"
+              placeholder={t("crm.vendorInvoices.06919cbdbd")}
             />
-            <span className="field-help">Paiement impossible sans facture réelle importée.</span>
+            <span className="field-help">{t("crm.vendorInvoices.694d6ac668")}</span>
           </BusinessLabel>
 
-          <BusinessLabel>Moyen de paiement
-            <input name="paymentMethod" defaultValue={editingInvoice?.paymentMethod || ""} placeholder="Virement, espèces, CB..." />
+          <BusinessLabel>{t("crm.vendorInvoices.ad4f2ff061")}<input name="paymentMethod" defaultValue={editingInvoice?.paymentMethod || ""} placeholder={t("crm.vendorInvoices.147cb66d23")} />
           </BusinessLabel>
 
-          <BusinessLabel className="vendor-invoice-file-field">Importer la facture
-            <input name="invoiceFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx" />
+          <BusinessLabel className="vendor-invoice-file-field">{t("crm.vendorInvoices.fe5023315e")}<input name="invoiceFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx" />
             <span className="field-help">
-              {editingInvoice?.invoiceDocumentName ? `Fichier actuel : ${editingInvoice.invoiceDocumentName}` : "PDF, image ou document depuis l’ordinateur"}
+              {editingInvoice?.invoiceDocumentName ? t("crm.vendorInvoices.c1ecf9edf2", { value1: displayValue(editingInvoice.invoiceDocumentName) }) : t("crm.vendorInvoices.103087fc58")}
             </span>
           </BusinessLabel>
 
-          <BusinessLabel className="planning-entry-notes">Notes
-            <textarea name="notes" defaultValue={editingInvoice?.notes || ""} placeholder="Détails, facture reçue, remarque..." />
+          <BusinessLabel className="planning-entry-notes">{t("crm.vendorInvoices.8a7525b149")}<textarea name="notes" defaultValue={editingInvoice?.notes || ""} placeholder={t("crm.vendorInvoices.02946ebc26")} />
           </BusinessLabel>
 
           <div className="mobile-form-actions">
             <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit" disabled={uploadingInvoiceDocument}>
-              {uploadingInvoiceDocument ? "Import en cours..." : editingInvoice ? "Enregistrer" : "Ajouter facture"}
+              {uploadingInvoiceDocument ? t("crm.vendorInvoices.b2d553dc1d") : editingInvoice ? t("crm.vendorInvoices.71dc74873e") : t("crm.vendorInvoices.2877a9000d")}
             </BusinessButton>
             {editingInvoice && (
-              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingInvoice(null)}>
-                Annuler
-              </BusinessButton>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingInvoice(null)} data-crm-dismiss="true">{t("crm.vendorInvoices.46ad3916f6")}</BusinessButton>
             )}
           </div>
         </BusinessForm>
@@ -5140,41 +5076,35 @@ function VendorInvoicesView({
           <div className="confirm-dialog vendor-invoice-preview-dialog">
             <div className="section-heading vendor-invoice-preview-heading">
               <div>
-                <p className="eyebrow">Aperçu facture</p>
+                <p className="eyebrow" data-semantic-text={"Aperçu facture"}>{t("crm.vendorInvoices.11157f98e9")}</p>
                 <h3>{invoicePreview.fileName}</h3>
                 <p className="muted-line">{invoicePreview.invoice.contactName} · {invoicePreview.invoice.title}</p>
               </div>
-              <BusinessButton className="secondary-button" type="button" onClick={closeVendorInvoicePreview}>
-                Fermer
-              </BusinessButton>
+              <BusinessButton className="secondary-button" type="button" onClick={closeVendorInvoicePreview} data-crm-dismiss="true">{t("crm.vendorInvoices.711e5f2e19")}</BusinessButton>
             </div>
 
             {isVendorInvoicePreviewable(invoicePreview.fileName, invoicePreview.mimeType) ? (
               invoicePreview.mimeType.startsWith("image/") || /\.(png|jpe?g|webp|gif|svg)$/i.test(invoicePreview.fileName) ? (
                 <div className="vendor-invoice-preview-frame vendor-invoice-preview-image-frame">
-                  <img src={invoicePreview.url} alt={`Facture ${invoicePreview.fileName}`} />
+                  <img src={invoicePreview.url} alt={t("crm.vendorInvoices.2dfbb299fc", { value1: displayValue(invoicePreview.fileName) })} />
                 </div>
               ) : (
                 <iframe
                   className="vendor-invoice-preview-frame"
                   src={invoicePreview.url}
-                  title={`Facture ${invoicePreview.fileName}`}
+                  title={t("crm.vendorInvoices.2dfbb299fc", { value1: displayValue(invoicePreview.fileName) })}
                 />
               )
             ) : (
               <div className="vendor-invoice-preview-frame vendor-invoice-preview-unavailable">
-                <h4>Aperçu non disponible pour ce format.</h4>
-                <p>Les PDF et images peuvent être visualisés directement. Pour ce fichier, utilisez le téléchargement.</p>
+                <h4>{t("crm.vendorInvoices.eeb665c336")}</h4>
+                <p>{t("crm.vendorInvoices.81e14d688d")}</p>
               </div>
             )}
 
             <div className="form-actions vendor-invoice-preview-actions">
-              <BusinessButton className="secondary-button" type="button" onClick={() => window.open(invoicePreview.url, "_blank", "noopener,noreferrer")}>
-                Ouvrir dans un onglet
-              </BusinessButton>
-              <BusinessButton permission="export" className="primary-button" type="button" onClick={() => void downloadVendorInvoiceDocument(invoicePreview.invoice)}>
-                Télécharger
-              </BusinessButton>
+              <BusinessButton className="secondary-button" type="button" onClick={() => window.open(invoicePreview.url, "_blank", "noopener,noreferrer")} data-crm-auto-scroll="true">{t("crm.vendorInvoices.072cf7baa0")}</BusinessButton>
+              <BusinessButton permission="export" className="primary-button" type="button" onClick={() => void downloadVendorInvoiceDocument(invoicePreview.invoice)}>{t("crm.vendorInvoices.cdaaab442d")}</BusinessButton>
             </div>
           </div>
         </div>
@@ -5255,12 +5185,14 @@ function getSemanticToneFromText(text: string) {
 }
 
 function DashboardCommandCard({
+  moduleIds,
   eyebrow,
   title,
   summary,
   children,
   tone = "neutral"
 }: {
+  moduleIds: import("@/lib/access/modules").ModuleId[];
   eyebrow: string;
   title: string;
   summary?: string;
@@ -5268,8 +5200,7 @@ function DashboardCommandCard({
   tone?: "neutral" | "warning" | "danger" | "success";
 }) {
   const access=useBusinessPermissions();
-  const modules:Record<string,import('@/lib/access/modules').ModuleId[]>={'Factures prestataires':['vendorInvoices'],'Aujourd’hui':['planning'],'Argent':['bookings','vendorInvoices','houseTracking'],'Réservations':['bookings'],'Commercial':['leads','quotes'],'Planning':['planning'],'Disponibilités':['properties','vehicles','boats']};
-  if(access&&modules[eyebrow]&&!modules[eyebrow].some(access.read))return null;
+  if (access && moduleIds.length > 0 && !moduleIds.some(access.read)) return null;
   return (
     <section className={`card dashboard-command-card tone-${tone}`}>
       <div className="dashboard-command-card-heading">
@@ -5285,21 +5216,24 @@ function DashboardCommandCard({
 }
 
 function DashboardQuickTile({
+  moduleId,
   label,
   value,
   caption,
   onClick
 }: {
+  moduleId: import("@/lib/access/modules").ModuleId;
   label: string;
   value: string;
   caption: string;
   onClick: () => void;
 }) {
+  const { t } = useCRMDisplay();
+
   const access=useBusinessPermissions();
-  const moduleByCaption:Record<string,import("@/lib/access/modules").ModuleId>={"Factures prestataires":"vendorInvoices","Interventions du jour":"planning","Personnel & interventions":"houseTracking","Paiements clients":"bookings"};
-  if(access&&moduleByCaption[caption]&&!access.read(moduleByCaption[caption]))return null;
+  if (access && !access.read(moduleId)) return null;
   return (
-    <button className="stat-card dashboard-command-kpi-tile" type="button" onClick={onClick} title="Ouvrir le module concerné">
+    <button className="stat-card dashboard-command-kpi-tile" type="button" onClick={onClick} title={t("crm.dashboard.5f7c434e7c")}>
       <p>{label}</p>
       <strong>{value}</strong>
       <span>{caption}</span>
@@ -5316,7 +5250,7 @@ function DashboardQuickTile({
       .replace(/\s+/g, " ");
   }
 
-  function confirmDuplicateContactIn(contacts: Contact[], contact: Contact) {
+  function confirmDuplicateContactIn(contacts: Contact[], contact: Contact, t: UITranslate = defaultCRMTranslate) {
     const candidateName = normalizeDuplicateKey(contact.name);
     const candidateEmail = normalizeDuplicateKey(contact.email);
 
@@ -5330,11 +5264,11 @@ function DashboardQuickTile({
     if (!duplicate) return true;
 
     return window.confirm(
-      `Doublon possible détecté.\n\nContact existant : ${duplicate.name}${duplicate.email ? ` (${duplicate.email})` : ""}\nNouveau contact : ${contact.name}${contact.email ? ` (${contact.email})` : ""}\n\nCréer quand même ?`
+      t("crm.quickEntry.0dd2c1f888", { value1: displayValue(duplicate.name), value2: displayValue(duplicate.email ? ` (${duplicate.email})` : ""), value3: displayValue(contact.name), value4: displayValue(contact.email ? ` (${contact.email})` : "") })
     );
   }
 
-  function confirmDuplicateLeadIn(leads: Lead[], lead: Lead) {
+  function confirmDuplicateLeadIn(leads: Lead[], lead: Lead, t: UITranslate = defaultCRMTranslate) {
     const candidateContact = normalizeDuplicateKey(lead.contactName);
     const candidateCategory = normalizeDuplicateKey(lead.category);
     const candidateStart = normalizeDuplicateKey(lead.rentalStartDate);
@@ -5355,7 +5289,7 @@ function DashboardQuickTile({
     if (!duplicate) return true;
 
     return window.confirm(
-      `Lead similaire déjà existant.\n\nContact : ${duplicate.contactName}\nCatégorie : ${duplicate.category}\nDates : ${duplicate.rentalStartDate || "?"} → ${duplicate.rentalEndDate || "?"}\n\nCréer quand même ?`
+      t("crm.quickEntry.13f3192d0d", { value1: displayValue(duplicate.contactName), value2: displayValue(duplicate.category), value3: displayValue(duplicate.rentalStartDate || "?"), value4: displayValue(duplicate.rentalEndDate || "?") })
     );
   }
 
@@ -5445,11 +5379,11 @@ function DashboardQuickTile({
       notes
     };
   }
-  function createQuickEntryRecords(rawText: string, contacts: Contact[], leads: Lead[]) {
+  function createQuickEntryRecords(rawText: string, contacts: Contact[], leads: Lead[], t: UITranslate = defaultCRMTranslate) {
     const cleanedText = rawText.trim();
 
     if (!cleanedText) {
-      window.alert("Colle d’abord un message client.");
+      window.alert(t("crm.quickEntry.c6a6745777"));
       return;
     }
 
@@ -5463,7 +5397,7 @@ function DashboardQuickTile({
     ];
 
     if (forbiddenPatterns.some((pattern) => pattern.test(cleanedText))) {
-      window.alert("Créer depuis message refusé : ce texte ressemble à du code ou à une commande terminal, pas à une demande client.");
+      window.alert(t("crm.quickEntry.9b2cf6054f"));
       return;
     }
 
@@ -5489,12 +5423,12 @@ function DashboardQuickTile({
 
     if (nameLooksWeak) {
       const manualName = window.prompt(
-        "Nom du client non détecté clairement. Indique le nom complet du client avant de créer la fiche :",
+        t("crm.quickEntry.808a32920a"),
         draft.email ? draft.email.split("@")[0] : ""
       );
 
       if (!manualName?.trim()) {
-        window.alert("Création annulée : nom client obligatoire.");
+        window.alert(t("crm.quickEntry.4473f5d996"));
         return;
       }
 
@@ -5502,7 +5436,7 @@ function DashboardQuickTile({
     }
 
     const confirmed = window.confirm(
-      `Créer un contact + lead pour : ${draft.contactName} ?\n\nEmail : ${draft.email || "À compléter"}\nCatégorie : ${draft.category || "À compléter"}\nDestination / actif : ${draft.destination || "À compléter"}\nDates : ${draft.rentalStartDate || "À compléter"} → ${draft.rentalEndDate || "À compléter"}\nBudget : ${draft.budget ? draft.budget.toLocaleString("fr-FR") + " €" : "À compléter"}\n\nProchaine action :\n${draft.nextAction || "À compléter"}`
+      t("crm.quickEntry.2ff6db7093", { value1: displayValue(draft.contactName), value2: displayValue(draft.email || t("crm.vendorInvoices.3160128ee8")), value3: displayValue(draft.category || t("crm.vendorInvoices.3160128ee8")), value4: displayValue(draft.destination || t("crm.vendorInvoices.3160128ee8")), value5: displayValue(draft.rentalStartDate || t("crm.vendorInvoices.3160128ee8")), value6: displayValue(draft.rentalEndDate || t("crm.vendorInvoices.3160128ee8")), value7: displayValue(draft.budget ? draft.budget.toLocaleString("fr-FR") + " €" : t("crm.vendorInvoices.3160128ee8")), value8: displayValue(draft.nextAction || t("crm.vendorInvoices.3160128ee8")) })
     );
 
     if (!confirmed) return;
@@ -5546,14 +5480,14 @@ function DashboardQuickTile({
       rentalEndDate: draft.rentalEndDate
     } as any;
 
-    if (!confirmDuplicateContactIn(contacts, newContact as Contact)) return;
-    if (!confirmDuplicateLeadIn(leads, newLead as Lead)) return;
+    if (!confirmDuplicateContactIn(contacts, newContact as Contact, t)) return;
+    if (!confirmDuplicateLeadIn(leads, newLead as Lead, t)) return;
 
     return {newContact, newLead};
   }
-  function promptQuickEntryText(savedText = "") {
+  function promptQuickEntryText(savedText = "", t: UITranslate = defaultCRMTranslate) {
     const choice = window.prompt(
-      "Choisis un modèle :\n\n1 = Villa\n2 = Bateau / Yacht\n3 = Voiture\n4 = Conciergerie\n5 = Texte libre",
+      t("crm.quickEntry.c150d23f82"),
       "1"
     );
 
@@ -5570,7 +5504,7 @@ function DashboardQuickTile({
     const selectedTemplate = templates[choice.trim()] || templates["5"];
 
     const text = window.prompt(
-      "Complète le modèle puis valide :",
+      t("crm.quickEntry.489458e7d3"),
       savedText || selectedTemplate
     );
 
@@ -5583,6 +5517,8 @@ function DashboardQuickTile({
 export {createQuickEntryRecords, promptQuickEntryText};
 
 export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => boolean | void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+  const { t, label, locale, screen, screenText, dialogText, dialogT } = useCRMDisplay();
+
   const beginHouseOperation = useScopedOperations("houseTracking");
   const taskApi = useTaskApi();
   const taskStatusRequests = useRef(new TaskRequestLedger());
@@ -5592,6 +5528,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   const taskProjection = useTaskProjection(taskApi, taskSessionKey, taskRights.read);
   const visibleTasks = useMemo(() => taskProjection.tasks.map(taskForBusinessView), [taskProjection.tasks]);
   const currentAccessToken = useCommittedValue(sessionAccessToken);
+  const currentDisplay = useCommittedValue({ t, screenText });
   const identityLifetime = useRef(new AbortController());
   useEffect(() => {
     const controller = new AbortController();
@@ -5627,9 +5564,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
       if (!button) return;
 
-      const label = button.textContent?.trim().toLowerCase() ?? "";
-
-      if (label !== "détails" && label !== "details") return;
+      if (button.dataset.crmAction !== "details") return;
 
       window.setTimeout(() => {
         window.scrollTo({
@@ -5658,9 +5593,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
       if (!button) return;
 
-      const label = button.textContent?.trim().toLowerCase() ?? "";
-
-      if (label !== "détails" && label !== "details") return;
+      if (button.dataset.crmAction !== "details") return;
 
       window.setTimeout(() => {
         window.scrollTo({
@@ -5702,10 +5635,10 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   const currentBusinessData = useCommittedValue(data);
   const [sharedWorkspaceReady, setSharedWorkspaceReady] = useState(false);
   const [sharedWorkspaceStatus, setSharedWorkspaceStatus] = useState<"loading" | "connected" | "local" | "error">("loading");
-  const [sharedWorkspaceMessage, setSharedWorkspaceMessage] = useState("Chargement de la base partagée...");
+  const [sharedWorkspaceMessage, setSharedWorkspaceMessage] = useState<ScreenNotice>(screenNotice("crm.screen.databaseLoading"));
   const [sharedWorkspaceUpdatedAt, setSharedWorkspaceUpdatedAt] = useState("");
   const [toast, setToast] = useState<Toast | null>(() => initialLocalState.unreadable
-    ? { message: "Impossible de lire la sauvegarde locale.", tone: "warning" } : null);
+    ? { message: screenNotice("crm.screen.localBackupUnreadable"), tone: "warning" } : null);
   const workspaceSync = useRef(new WorkspaceSyncGuard());
   const workspaceBusy = useRef(false);
   const failedSaveFingerprint = useRef<string | null>(null);
@@ -5736,7 +5669,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
   const showWorkspaceConflict = useCallback(() => {
     workspaceSync.current.conflict();
     setSharedWorkspaceStatus("error");
-    setSharedWorkspaceMessage("Base partagée modifiée ailleurs. Vos modifications restent en mémoire : exportez-les, puis rechargez le cloud.");
+    setSharedWorkspaceMessage(screenNotice("crm.shell.c056becf03"));
   }, []);
 
   // Every caller uses the same atomic revision check, including manual sync,
@@ -5752,7 +5685,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (signal.aborted) return false;
       if (authError || !verified.user || verified.user.id !== sessionUserId) {
         setSharedWorkspaceStatus("error");
-        setSharedWorkspaceMessage("Sauvegarde impossible : utilisateur Supabase non connecté.");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.8a52595800"));
         return false;
       }
       const { data: row, error } = await supabase.from("crm_workspace_state")
@@ -5766,7 +5699,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (signal.aborted) return false;
       if (error) {
         setSharedWorkspaceStatus("error");
-        setSharedWorkspaceMessage(`Base partagée non sauvegardée : ${error.message}`);
+        setSharedWorkspaceMessage(safeCRMError(error));
         return false;
       }
       if (!row?.updated_at || !workspaceSync.current.saved(write, String(row.updated_at))) {
@@ -5778,7 +5711,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       setAcceptedWorkspaceFingerprint(write.fingerprint);
       failedSaveFingerprint.current = null;
       setSharedWorkspaceStatus("connected");
-      setSharedWorkspaceMessage("Base partagée synchronisée.");
+      setSharedWorkspaceMessage(screenNotice("crm.shell.6159f4160c"));
       setSharedWorkspaceUpdatedAt(String(row.updated_at));
       return true;
     } finally {
@@ -5790,7 +5723,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
 
   function setActiveTab(tab: Tab) {
-    if ((hasUnsavedChanges || formDirty) && tab !== activeTab && !window.confirm("Une saisie est en cours. Quitter ce module ?")) return false;
+    if ((hasUnsavedChanges || formDirty) && tab !== activeTab && !window.confirm(dialogT("crm.shell.63f11792a5"))) return false;
     setFormDirty(false);
     setFocusContactId(undefined);
     setQuery("");
@@ -5813,7 +5746,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (!overlay) return false;
 
       const dismissButton = Array.from(overlay.querySelectorAll<HTMLButtonElement>("button"))
-        .find((button) => /^(fermer|annuler)$/i.test(button.textContent?.trim() ?? ""));
+        .find((button) => button.dataset.crmDismiss === "true");
 
       dismissButton?.click();
       return Boolean(dismissButton);
@@ -5901,7 +5834,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         "semantic-neutral"
       );
 
-      const tone = getSemanticToneFromText(element.textContent || "");
+      const tone = getSemanticToneFromText(element.dataset.semanticText || "");
 
       if (tone) {
         element.classList.add(`semantic-${tone}`);
@@ -5912,15 +5845,6 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
 
   useEffect(() => {
-    function normalizeCrmButtonLabel(value: string) {
-      return value
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-    }
-
     function isVisibleCrmTarget(element: HTMLElement) {
       const rect = element.getBoundingClientRect();
       const style = window.getComputedStyle(element);
@@ -5964,43 +5888,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
     function shouldAutoScroll(button: HTMLElement) {
       if (button.closest("aside, nav, .sidebar")) return false;
 
-      const rawLabel = button.textContent || button.getAttribute("aria-label") || "";
-      const label = normalizeCrmButtonLabel(rawLabel);
-      const type = (button.getAttribute("type") || "").toLowerCase();
-
-      if (!label) return false;
-      if (type === "submit") return false;
-
-      const skipWords = [
-        "supprimer",
-        "deconnexion",
-        "connexion",
-        "export",
-        "import",
-        "sauvegarde",
-        "recharger cloud",
-        "forcer synchro",
-        "annuler",
-        "reset",
-        "reinitialiser"
-      ];
-
-      if (skipWords.some((word) => label.includes(word))) return false;
-
-      const triggerWords = [
-        "modifier",
-        "details",
-        "detail",
-        "ouvrir",
-        "creer",
-        "nouveau",
-        "traiter",
-        "voir",
-        "gerer",
-        "relancer"
-      ];
-
-      return triggerWords.some((word) => label.includes(word));
+      return button.dataset.crmAutoScroll === "true" && button.getAttribute("type") !== "submit";
     }
 
     function handleCrmButtonClick(event: MouseEvent) {
@@ -6058,10 +5946,10 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (cancelled) return;
 
       if (userError || !userData.user || userData.user.id !== sessionUserId) {
-        window.alert("Base CRM partagée non chargée : utilisateur Supabase non connecté.");
+        window.alert(currentDisplay.current.t("crm.shell.e7bc4467bc"));
         setSharedWorkspaceReady(false);
         setSharedWorkspaceStatus("error");
-        setSharedWorkspaceMessage("Base partagée non chargée : utilisateur Supabase non connecté.");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.62974d33f4"));
         return;
       }
 
@@ -6076,10 +5964,10 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (cancelled) return;
 
       if (error) {
-        window.alert(`Base CRM partagée non chargée : ${error.message}`);
+        window.alert(currentDisplay.current.screenText(safeCRMError(error)));
         setSharedWorkspaceReady(false);
         setSharedWorkspaceStatus("error");
-        setSharedWorkspaceMessage(`Base partagée non chargée : ${error.message}`);
+        setSharedWorkspaceMessage(safeCRMError(error));
         return;
       }
 
@@ -6090,7 +5978,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         acceptSharedWorkspace(sharedData, sharedUpdatedAt);
         setSharedWorkspaceReady(true);
         setSharedWorkspaceStatus("connected");
-        setSharedWorkspaceMessage("Base partagée chargée depuis Supabase.");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.430443db9d"));
         setSharedWorkspaceUpdatedAt(sharedUpdatedAt);
         return;
       }
@@ -6101,20 +5989,20 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         acceptSharedWorkspace(emptyData, sharedUpdatedAt);
         setSharedWorkspaceReady(true);
         setSharedWorkspaceStatus("connected");
-        setSharedWorkspaceMessage("Base partagée connectée, mais encore vide.");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.8c19e82429"));
         setSharedWorkspaceUpdatedAt(sharedUpdatedAt);
         return;
       }
 
       const shouldSeedSharedWorkspace = window.confirm(
-        "La base CRM partagée est vide.\n\nCopier CETTE version locale dans la base commune pour toi et Vincent ?\n\nClique OK uniquement si les données visibles dans TON CRM sont les bonnes. Si tu vois une démo, clique Annuler."
+        currentDisplay.current.t("crm.shell.f1c24575bf")
       );
 
       if (!shouldSeedSharedWorkspace) {
         acceptSharedWorkspace(emptyData, sharedUpdatedAt);
         setSharedWorkspaceReady(true);
         setSharedWorkspaceStatus("local");
-        setSharedWorkspaceMessage("Base partagée vide. Données locales non copiées.");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.5c1b82b4c4"));
         setSharedWorkspaceUpdatedAt(sharedUpdatedAt);
         return;
       }
@@ -6135,7 +6023,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       saveQuotesToBrowser(localData.quotes as QuoteRequest[]);
       setSharedWorkspaceReady(true);
       setSharedWorkspaceStatus("connected");
-      setSharedWorkspaceMessage("Base partagée initialisée depuis les données locales.");
+      setSharedWorkspaceMessage(screenNotice("crm.shell.f051a46717"));
 
     }
 
@@ -6148,7 +6036,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [sessionUserId, acceptSharedWorkspace, writeSharedWorkspace, currentAccessToken, setData]);
+  }, [sessionUserId, acceptSharedWorkspace, writeSharedWorkspace, currentAccessToken, currentDisplay, setData]);
 
   useEffect(() => {
     // A queued local edit may conflict when a trash completion is rebased.
@@ -6212,8 +6100,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         if (days === null) {
           items.push({
             id: `task-missing-date-${task.id}`,
-            title: "Tâche sans échéance",
-            detail: task.title || "Tâche à compléter",
+            title: t("crm.shell.274d52d3e0"),
+            detail: task.title || t("crm.shell.21c99ca24b"),
             tab: "tasks" as Tab,
             tone: "warning",
             targetId: `task-${task.id}`
@@ -6224,8 +6112,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         if (days < 0) {
           items.push({
             id: `task-late-${task.id}`,
-            title: "Tâche en retard",
-            detail: `${task.title} · ${task.dueDate}`,
+            title: t("crm.shell.38893c6207"),
+            detail: t("crm.shell.7c639bc99b", { value1: displayValue(task.title), value2: displayValue(task.dueDate) }),
             tab: "tasks" as Tab,
             tone: "danger",
             targetId: `task-${task.id}`
@@ -6236,7 +6124,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         if (days === 0) {
           items.push({
             id: `task-today-${task.id}`,
-            title: "Date aujourd’hui",
+            title: t("crm.shell.67ff76d02e"),
             detail: task.title,
             tab: "tasks" as Tab,
             tone: "warning",
@@ -6248,8 +6136,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         if (days <= 2) {
           items.push({
             id: `task-soon-${task.id}`,
-            title: "Date proche",
-            detail: `${task.title} · dans ${days} jour${days > 1 ? "s" : ""}`,
+            title: t("crm.shell.0c89ee78e8"),
+            detail: t("crm.shell.aebee2197d", { value1: displayValue(task.title), value2: displayValue(days), value3: displayValue(days > 1 ? "s" : "") }),
             tab: "tasks" as Tab,
             tone: "info",
             targetId: `task-${task.id}`
@@ -6263,8 +6151,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         if (!lead.nextAction || !lead.dueDate) {
           items.push({
             id: `lead-incomplete-${lead.id}`,
-            title: "Lead incomplet",
-            detail: `${lead.contactName} · prochaine action ou échéance manquante`,
+            title: t("crm.shell.1290ae149e"),
+            detail: t("crm.shell.dda985d570", { value1: displayValue(lead.contactName) }),
             tab: "leads" as Tab,
             tone: "warning",
             targetId: `lead-${lead.id}`
@@ -6276,8 +6164,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         if (days !== null && days < 0) {
           items.push({
             id: `lead-late-${lead.id}`,
-            title: "Lead en retard",
-            detail: `${lead.contactName} · ${lead.nextAction || "Action à faire"}`,
+            title: t("crm.shell.df2948d79f"),
+            detail: t("crm.shell.7c639bc99b", { value1: displayValue(lead.contactName), value2: displayValue(lead.nextAction || t("crm.enums.actionToDo")) }),
             tab: "leads" as Tab,
             tone: "danger",
             targetId: `lead-${lead.id}`
@@ -6294,8 +6182,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (status === "Sent" && ageDays >= 1) {
         items.push({
           id: `quote-follow-${quote.id}`,
-          title: ageDays >= 3 ? "Relance devis 72h" : "Relance devis 24h",
-          detail: `${quote.clientName} · ${formatQuotePrice(getQuoteTotal(quote))}`,
+          title: ageDays >= 3 ? t("crm.shell.f614709c0d") : t("crm.shell.db5fefb763"),
+          detail: t("crm.shell.7c639bc99b", { value1: displayValue(quote.clientName), value2: displayValue(screen.money(getQuoteTotal(quote))) }),
           tab: "quotes" as Tab,
           tone: ageDays >= 3 ? "danger" : "warning",
           targetId: `quote-${quote.id}`
@@ -6305,8 +6193,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (status === "Negotiation") {
         items.push({
           id: `quote-negotiation-${quote.id}`,
-          title: "Négociation à suivre",
-          detail: `${quote.clientName} · devis en négociation`,
+          title: t("crm.shell.74c441cb39"),
+          detail: t("crm.shell.44dc4b22d2", { value1: displayValue(quote.clientName) }),
           tab: "quotes" as Tab,
           tone: "warning",
           targetId: `quote-${quote.id}`
@@ -6320,8 +6208,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
           if (!quote.supplierConfirmed) {
             items.push({
               id: `booking-supplier-${quote.id}`,
-              title: "Prestataire à confirmer",
-              detail: `${quote.clientName} · ${quote.title || "Réservation"}`,
+              title: t("crm.shell.392d3f43ee"),
+              detail: t("crm.shell.7c639bc99b", { value1: displayValue(quote.clientName), value2: displayValue(quote.title || t("crm.enums.booking")) }),
               tab: "bookings" as Tab,
               tone: "warning",
               targetId: `booking-${quote.id}`
@@ -6331,8 +6219,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
           if (!quote.detailsSent) {
             items.push({
               id: `booking-details-${quote.id}`,
-              title: "Détails client à envoyer",
-              detail: `${quote.clientName} · réservation confirmée`,
+              title: t("crm.shell.9fc5859e9a"),
+              detail: t("crm.shell.3fa0e9ba72", { value1: displayValue(quote.clientName) }),
               tab: "bookings" as Tab,
               tone: "info",
               targetId: `booking-${quote.id}`
@@ -6348,8 +6236,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
           items.push({
             id: `payment-${quote.id}`,
-            title: days !== null && days < 0 ? "Paiement en retard" : "Paiement à suivre",
-            detail: `${quote.clientName} · ${formatQuotePrice(remaining)} restant`,
+            title: days !== null && days < 0 ? t("crm.shell.fe294d352d") : t("crm.shell.4b993c9d0e"),
+            detail: t("crm.shell.7b80e99c68", { value1: displayValue(quote.clientName), value2: displayValue(screen.money(remaining)) }),
             tab: "bookings" as Tab,
             tone: days !== null && days < 0 ? "danger" : "warning",
             targetId: `booking-${quote.id}`
@@ -6375,8 +6263,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (balance > 0) {
         items.push({
           id: `house-balance-${worker.id}`,
-          title: "Intervenant à payer",
-          detail: `${worker.contactName} · ${currency.format(balance)} à payer`,
+          title: t("crm.shell.d84793b512"),
+          detail: t("crm.shell.ac9bef87ec", { value1: displayValue(worker.contactName), value2: displayValue(screen.money(balance)) }),
           tab: "houseTracking" as Tab,
           tone: "warning",
           targetId: `house-worker-${worker.id}`
@@ -6393,8 +6281,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       .forEach((quote) => {
         items.push({
           id: `vendor-quote-validation-${quote.id}`,
-          title: "Devis prestataire à valider",
-          detail: `${quote.contactName} · ${formatEuroAmount(quote.amount)}`,
+          title: t("crm.shell.a24b02b85b"),
+          detail: t("crm.shell.7c639bc99b", { value1: displayValue(quote.contactName), value2: displayValue(screen.euro(quote.amount)) }),
           tab: "vendorQuotes" as Tab,
           tone: "warning",
           targetId: `vendor-quote-${quote.id}`
@@ -6414,8 +6302,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
       if (invoice.status === "En attente de facture") {
         items.push({
           id: `vendor-invoice-awaiting-document-${invoice.id}`,
-          title: "Facture prestataire attendue",
-          detail: `${invoice.contactName} · ${invoice.sourceQuoteReference || invoice.title}`,
+          title: t("crm.shell.d5804f74d8"),
+          detail: t("crm.shell.7c639bc99b", { value1: displayValue(invoice.contactName), value2: displayValue(invoice.sourceQuoteReference || invoice.title) }),
           tab: "vendorInvoices" as Tab,
           tone: "warning",
           targetId: `vendor-invoice-${invoice.id}`
@@ -6427,8 +6315,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
       items.push({
         id: `vendor-invoice-payment-${invoice.id}`,
-        title: days !== null && days < 0 ? "Facture prestataire en retard" : "Facture prestataire à payer",
-        detail: `${invoice.contactName} · ${formatEuroAmount(remaining)} restant`,
+        title: days !== null && days < 0 ? t("crm.shell.3dd08c5734") : t("crm.shell.cbd8f228ea"),
+        detail: t("crm.shell.7b80e99c68", { value1: displayValue(invoice.contactName), value2: displayValue(screen.euro(remaining)) }),
         tab: "vendorInvoices" as Tab,
         tone: days !== null && days < 0 ? "danger" : "warning",
         targetId: `vendor-invoice-${invoice.id}`
@@ -6447,8 +6335,8 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
       items.push({
         id: `document-check-${crmDocument.id}`,
-        title: isExpired ? "Document expiré" : "Document à vérifier",
-        detail: `${crmDocument.title} · ${crmDocument.category}`,
+        title: isExpired ? t("crm.shell.61985e5da2") : t("crm.shell.4fd90f220c"),
+        detail: t("crm.shell.7c639bc99b", { value1: displayValue(crmDocument.title), value2: displayValue(crmDocument.category) }),
         tab: "documents" as Tab,
         tone: isExpired ? "danger" : "warning",
         targetId: `document-${crmDocument.id}`
@@ -6464,7 +6352,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     return items
       .sort((first, second) => toneRank[first.tone] - toneRank[second.tone])
       .slice(0, 20);
-  }, [data, visibleTasks]);
+  }, [data, visibleTasks, t, screen]);
 
   const filteredLeads = useMemo(() => {
     return data.leads.filter((lead) => searchMatch(query, [lead.category, lead.contactName, lead.status, lead.nextAction, lead.rentalStartDate, lead.rentalEndDate]));
@@ -6537,12 +6425,12 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     window.setTimeout(() => runScroll(), activeTab === targetTab ? 80 : 180);
   }
 
-  function notify(message: string, tone: Toast["tone"] = "success") {
+  function notify(message: ScreenNotice, tone: Toast["tone"] = "success") {
     setToast({ message, tone });
   }
 
-  function confirmDuplicateContact(contact: Contact) { return confirmDuplicateContactIn(data.contacts, contact); }
-  function confirmDuplicateLead(lead: Lead) { return confirmDuplicateLeadIn(data.leads, lead); }
+  function confirmDuplicateContact(contact: Contact) { return confirmDuplicateContactIn(data.contacts, contact, t); }
+  function confirmDuplicateLead(lead: Lead) { return confirmDuplicateLeadIn(data.leads, lead, t); }
 
   function confirmDuplicateAsset(kind: "bien" | "voiture" | "bateau", item: { name?: string; city?: string; port?: string }) {
     const candidateName = normalizeDuplicateKey(item.name);
@@ -6566,7 +6454,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     if (!duplicate) return true;
 
     return window.confirm(
-      `Doublon possible détecté.\n\n${kind.charAt(0).toUpperCase() + kind.slice(1)} existant : ${duplicate.name}\nNouveau : ${item.name}\n\nCréer quand même ?`
+      dialogT("crm.shell.4d65d6cfaa", { value1: displayValue(kind.charAt(0).toUpperCase() + kind.slice(1)), value2: displayValue(duplicate.name), value3: displayValue(item.name) })
     );
   }
 
@@ -6576,7 +6464,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
 
   function saveQuickEntryText(rawText: string) {
-    const records = createQuickEntryRecords(rawText, data.contacts, data.leads);
+    const records = createQuickEntryRecords(rawText, data.contacts, data.leads, t);
     if (!records) return;
     const {newContact, newLead} = records;
     setData((current: any) => ({
@@ -6588,7 +6476,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     setQuickEntryText("");
     setQuickEntryOpen(false);
 
-    notify("Contact et lead créés depuis la saisie rapide.");
+    notify(screenNotice("crm.shell.ba41058750"));
   }
 
 
@@ -6621,7 +6509,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
   function openSafeCsvImportPrompt() {
     const choice = window.prompt(
-      "Import sécurisé :\n\n1 = Contacts complets\n2 = Leads complets\n3 = Biens\n4 = Voitures\n5 = Bateaux\n\nChaque ligne doit utiliser le séparateur |.\nAucune donnée existante ne sera écrasée.",
+      dialogT("crm.shell.f601dca9d1"),
       "1"
     );
 
@@ -6638,7 +6526,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     };
 
     const raw = window.prompt(
-      `Colle les lignes à importer.\n\nFormat attendu :\n${examples[type] || examples["1"]}\n\nTu peux coller plusieurs lignes, une par ligne.`,
+      dialogT("crm.shell.63e4c1f657", { value1: displayValue(examples[type] || examples["1"]) }),
       ""
     );
 
@@ -6650,7 +6538,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       .filter((line) => line && line.includes("|"));
 
     if (lines.length === 0) {
-      window.alert("Import refusé : aucune ligne valide avec séparateur |.");
+      window.alert(dialogT("crm.shell.aef75894e5"));
       return;
     }
 
@@ -6869,7 +6757,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     }
 
     if (payload.length === 0) {
-      window.alert("Import refusé : aucune donnée exploitable trouvée.");
+      window.alert(dialogT("crm.shell.5aeb7446fa"));
       return;
     }
 
@@ -6953,14 +6841,14 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
     if (safeImportDuplicateCount > 0) {
       const continueWithDuplicates = window.confirm(
-        `${safeImportDuplicateCount} doublon(s) possible(s) détecté(s) dans cet import.\\n\\nContinuer quand même ?`
+        dialogT("crm.shell.70274af775", { value1: displayValue(safeImportDuplicateCount) })
       );
 
       if (!continueWithDuplicates) return;
     }
 
     const confirmed = window.confirm(
-      `Aperçu import sécurisé\n\nLignes valides : ${payload.length}\n\n${preview}\n\nConfirmer l’ajout ?\n\nAucune donnée existante ne sera écrasée.`
+      dialogT("crm.shell.91e7d10d20", { value1: displayValue(payload.length), value2: displayValue(preview) })
     );
 
     if (!confirmed) return;
@@ -6989,12 +6877,12 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       return current;
     });
 
-    notify(`${payload.length} ligne(s) importée(s) sans écrasement.`);
+    notify(screenNotice("crm.shell.24d8b2b3db", { value1: displayValue(payload.length) }));
   }
 
   function openQuickContactLeadPrompt() {
     const choice = window.prompt(
-      "Ajouter rapidement :\n\n1 = Contact complet\n2 = Lead complet\n\nContact : Nom | Type | Niveau client | Langue préférée | Relation | Email | Téléphone | Ville | Adresse postale | Budget | Source | Préférences | Notes importantes | Notes\n\nLead : Catégorie | Contact | Actif proposé | Début réservation | Fin réservation | Valeur | Statut | Priorité | Date réponse | Prochaine action | Notes internes",
+      dialogT("crm.shell.1594f7c67f"),
       "1"
     );
 
@@ -7010,8 +6898,8 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
     const raw = window.prompt(
       type === "2"
-        ? "Lead complet : Catégorie | Contact | Actif proposé | Début réservation | Fin réservation | Valeur | Statut | Priorité | Date réponse | Prochaine action | Notes internes"
-        : "Contact complet : Nom | Type | Niveau client | Langue préférée | Relation | Email | Téléphone | Ville | Adresse postale | Budget | Source | Préférences | Notes importantes | Notes",
+        ? dialogT("crm.shell.7d404b001c")
+        : dialogT("crm.shell.ba223c937e"),
       type === "2" ? leadExample : contactExample
     );
 
@@ -7056,7 +6944,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       ] = parts;
 
       if (!cleanExpressValue(name)) {
-        window.alert("Ajout refusé : nom du contact manquant.");
+        window.alert(dialogT("crm.shell.1cd0583961"));
         return;
       }
 
@@ -7086,7 +6974,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         contacts: [contact, ...(current.contacts ?? [])]
       }));
 
-      notify("Contact complet ajouté en express.");
+      notify(screenNotice("crm.shell.f96f13465b"));
       return;
     }
 
@@ -7106,7 +6994,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       ] = parts;
 
       if (!cleanExpressValue(contactName)) {
-        window.alert("Ajout refusé : nom du contact manquant.");
+        window.alert(dialogT("crm.shell.1cd0583961"));
         return;
       }
 
@@ -7170,16 +7058,16 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         leads: [lead, ...(current.leads ?? [])]
       }));
 
-      notify("Lead complet ajouté en express.");
+      notify(screenNotice("crm.shell.873a345451"));
       return;
     }
 
-    window.alert("Choix invalide. Utilise 1 pour Contact ou 2 pour Lead.");
+    window.alert(dialogT("crm.shell.fff9a694a9"));
   }
 
   function openQuickInventoryPrompt() {
     const choice = window.prompt(
-      "Ajouter rapidement :\n\n1 = Bien / Villa\n2 = Voiture\n3 = Bateau / Yacht",
+      dialogT("crm.shell.83ce5bce6d"),
       "1"
     );
 
@@ -7200,7 +7088,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     };
 
     const raw = window.prompt(
-      `${labels[type] || labels["1"]}\n\nTu peux coller une seule ligne :`,
+      dialogT("crm.shell.64fb2bf7b7", { value1: displayValue(labels[type] || labels["1"]) }),
       examples[type] || examples["1"]
     );
 
@@ -7209,7 +7097,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     const parts = parseInventoryLine(raw);
 
     if (parts.length < 3) {
-      window.alert("Ajout refusé : il manque des informations. Utilise les séparateurs |");
+      window.alert(dialogT("crm.shell.4d44c504a9"));
       return;
     }
 
@@ -7234,7 +7122,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       } as any;
 
       if (!property.name) {
-        window.alert("Ajout refusé : nom du bien manquant.");
+        window.alert(dialogT("crm.shell.5d51b56a6d"));
         return;
       }
 
@@ -7245,7 +7133,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         properties: [property, ...(current.properties ?? [])]
       }));
 
-      notify("Bien ajouté en express.");
+      notify(screenNotice("crm.shell.b86f17a7eb"));
       return;
     }
 
@@ -7268,7 +7156,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       } as any;
 
       if (!vehicle.name) {
-        window.alert("Ajout refusé : nom de la voiture manquant.");
+        window.alert(dialogT("crm.shell.110bc581c5"));
         return;
       }
 
@@ -7279,7 +7167,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         vehicles: [vehicle, ...(current.vehicles ?? [])]
       }));
 
-      notify("Voiture ajoutée en express.");
+      notify(screenNotice("crm.shell.924bdfa8af"));
       return;
     }
 
@@ -7301,7 +7189,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       } as any;
 
       if (!boat.name) {
-        window.alert("Ajout refusé : nom du bateau manquant.");
+        window.alert(dialogT("crm.shell.044ad2b20c"));
         return;
       }
 
@@ -7312,15 +7200,15 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         boats: [boat, ...(current.boats ?? [])]
       }));
 
-      notify("Bateau ajouté en express.");
+      notify(screenNotice("crm.shell.c961505050"));
       return;
     }
 
-    window.alert("Choix invalide. Utilise 1, 2 ou 3.");
+    window.alert(dialogT("crm.shell.9a8b944c69"));
   }
 
   function openQuickEntryPrompt() {
-    const text = promptQuickEntryText(quickEntryText);
+    const text = promptQuickEntryText(quickEntryText, t);
     if (text) saveQuickEntryText(text);
   }
 
@@ -7333,7 +7221,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     const { data: userData, error: userError } = await supabase.auth.getUser();
 
     if (userError || !userData.user) {
-      notify("Contact cloud non synchronisé : utilisateur Supabase non connecté.", "warning");
+      notify(screenNotice("crm.shell.fbca9a8251"), "warning");
       return "";
     }
 
@@ -7350,7 +7238,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       .upsert(contactToSupabaseRow(contact, userId), { onConflict: "id" });
 
     if (error) {
-      notify(`Contact non sauvegardé dans Supabase : ${error.message}`, "warning");
+      notify(safeCRMError(error), "warning");
       return false;
     }
 
@@ -7369,7 +7257,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       .eq("user_id", userId);
 
     if (error) {
-      notify(`Contact non supprimé dans Supabase : ${error.message}`, "warning");
+      notify(safeCRMError(error), "warning");
       return false;
     }
 
@@ -7388,7 +7276,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       .order("created_at", { ascending: false });
 
     if (error) {
-      notify(`Contacts cloud non chargés : ${error.message}`, "warning");
+      notify(safeCRMError(error), "warning");
       return;
     }
 
@@ -7400,7 +7288,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         contacts: cloudContacts
       }));
 
-      notify("Contacts chargés depuis Supabase.");
+      notify(screenNotice("crm.shell.3200baf2a4"));
       return;
     }
 
@@ -7411,7 +7299,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     if (localContacts.length === 0) return;
 
     const confirmed = window.confirm(
-      `La table Contacts Supabase est vide.\n\nCopier ${localContacts.length} contact(s) locaux vers Supabase maintenant ?\n\nClique OK seulement si les contacts affichés dans le CRM sont les bons.`
+      dialogT("crm.shell.9ce40b2ca4", { value1: displayValue(localContacts.length) })
     );
 
     if (!confirmed) return;
@@ -7427,11 +7315,11 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       .upsert(payload, { onConflict: "id" });
 
     if (upsertError) {
-      notify(`Migration contacts impossible : ${upsertError.message}`, "warning");
+      notify(safeCRMError(upsertError), "warning");
       return;
     }
 
-    notify(`${payload.length} contact(s) copiés dans Supabase.`);
+    notify(screenNotice("crm.shell.1d389c7ebf", { value1: displayValue(payload.length) }));
   }
 
   useEffect(() => {
@@ -7450,22 +7338,22 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
   async function reloadSharedWorkspaceFromCloud() {
     if (workspaceBusy.current) return;
-    if (hasUnsavedChanges && !window.confirm("Des modifications ne sont pas sauvegardées. Exportez-les avant de recharger. Remplacer la version en mémoire par la version cloud ?")) return;
+    if (hasUnsavedChanges && !window.confirm(dialogT("crm.shell.f919eb38df"))) return;
     const requestedFingerprint = workspaceFingerprint(data);
     const signal = identityLifetime.current.signal;
     const token = currentAccessToken.current;
     workspaceBusy.current = true;
     try {
       setSharedWorkspaceStatus("loading");
-      setSharedWorkspaceMessage("Rechargement depuis Supabase...");
+      setSharedWorkspaceMessage(screenNotice("crm.shell.60f2549518"));
 
       const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
       if (signal.aborted) return;
       if (userError || !userData.user || userData.user.id !== sessionUserId) {
         setSharedWorkspaceStatus("error");
-        setSharedWorkspaceMessage("Rechargement impossible : utilisateur Supabase non connecté.");
-        notify("Rechargement cloud impossible : non connecté.", "warning");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.a9faa96fae"));
+        notify(screenNotice("crm.shell.d90c3b85e7"), "warning");
         return;
       }
 
@@ -7480,14 +7368,14 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       if (signal.aborted) return;
       if (error) {
         setSharedWorkspaceStatus("error");
-        setSharedWorkspaceMessage(`Rechargement cloud impossible : ${error.message}`);
-        notify("Rechargement cloud impossible.", "warning");
+        setSharedWorkspaceMessage(safeCRMError(error));
+        notify(screenNotice("crm.shell.12b384f221"), "warning");
         return;
       }
 
       if (workspaceFingerprint(currentBusinessData.current) !== requestedFingerprint) {
         setSharedWorkspaceStatus("local");
-        setSharedWorkspaceMessage("Rechargement annulé : des modifications ont été faites pendant la lecture du cloud.");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.5283fef9d3"));
         return;
       }
       const sharedData = normalizeSharedCRMData(row?.payload);
@@ -7495,9 +7383,9 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       acceptSharedWorkspace(sharedData, String(row?.updated_at || ""));
       setSharedWorkspaceReady(true);
       setSharedWorkspaceStatus("connected");
-      setSharedWorkspaceMessage("Données rechargées depuis la base partagée.");
+      setSharedWorkspaceMessage(screenNotice("crm.shell.ca2cb8e133"));
 
-      notify("CRM rechargé depuis Supabase.");
+      notify(screenNotice("crm.shell.885b7bd716"));
     } finally {
       workspaceBusy.current = false;
       if (!signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
@@ -7507,7 +7395,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   async function forceSaveSharedWorkspaceNow() {
     const signal = identityLifetime.current.signal;
     const token = currentAccessToken.current;
-    if (await writeSharedWorkspace(data, signal, token)) notify("Base partagée synchronisée.");
+    if (await writeSharedWorkspace(data, signal, token)) notify(screenNotice("crm.shell.6159f4160c"));
   }
 
   async function saveCrmBackupToSupabase() {
@@ -7538,12 +7426,12 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       quotesCount;
 
     if (total === 0) {
-      window.alert("Sauvegarde refusée : le CRM est vide.");
+      window.alert(dialogT("crm.shell.149a9c1914"));
       return;
     }
 
     const confirmed = window.confirm(
-      `Créer une sauvegarde Supabase ?\n\nContacts: ${contactsCount}\nLeads: ${leadsCount}\nBiens: ${propertiesCount}\nVoitures: ${vehiclesCount}\nBateaux: ${boatsCount}\nTâches: ${tasksCount}\nDevis: ${quotesCount}`
+      dialogT("crm.shell.78b89480fe", { value1: displayValue(contactsCount), value2: displayValue(leadsCount), value3: displayValue(propertiesCount), value4: displayValue(vehiclesCount), value5: displayValue(boatsCount), value6: displayValue(tasksCount), value7: displayValue(quotesCount) })
     );
 
     if (!confirmed || signal.aborted) return;
@@ -7552,7 +7440,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
     if (signal.aborted) return;
     if (userError || !userData.user || userData.user.id !== sessionUserId) {
-      window.alert("Sauvegarde impossible : utilisateur Supabase non connecté.");
+      window.alert(dialogT("crm.shell.8a52595800"));
       return;
     }
 
@@ -7580,26 +7468,26 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
     if (signal.aborted) return;
     if (error) {
-      window.alert(`Erreur sauvegarde Supabase : ${error.message}`);
+      window.alert(dialogText(safeCRMError(error)));
       return;
     }
 
-    window.alert("Sauvegarde Supabase créée.");
+    window.alert(dialogT("crm.shell.ea1c9c32f9"));
   }
 
   async function exportCsv() {
     try {
       const exportedTasks = taskRights.export ? (await taskApi.export!()).map(taskForBusinessView) : [];
       exportCRMAsCsv({ ...data, tasks: exportedTasks });
-      notify("Export CSV téléchargé.");
-    } catch { notify("Export Tâches refusé ou indisponible.", "warning"); }
+      notify(screenNotice("crm.shell.648d809709"));
+    } catch { notify(screenNotice("crm.shell.8f945a54e3"), "warning"); }
   }
 
   async function exportJson() {
     let exportedTasks: Task[] = [];
     try {
       if (taskRights.export) exportedTasks = (await taskApi.export!()).map(taskForBusinessView);
-    } catch { notify("Export Tâches refusé ou indisponible.", "warning"); return; }
+    } catch { notify(screenNotice("crm.shell.8f945a54e3"), "warning"); return; }
     const exportPayload = {
       ...data,
       tasks: exportedTasks,
@@ -7613,7 +7501,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     link.download = `oneaddress-riviera-crm-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    notify("Export JSON téléchargé.");
+    notify(screenNotice("crm.shell.83274934aa"));
   }
 
   
@@ -7624,7 +7512,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       houseTrackingHouses: [stampCreated(house, activeActor), ...(((current as any).houseTrackingHouses ?? []) as HouseTrackingHouse[])]
     }));
 
-    notify("Maison ajoutée au suivi.");
+    notify(screenNotice("crm.shell.76a6654637"));
   }
 
   function deleteHouseTrackingHouse(id: string) {
@@ -7635,7 +7523,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       housePayments: (((current as any).housePayments ?? []) as HousePayment[]).filter((payment) => payment.houseId !== id)
     }));
 
-    notify("Maison supprimée du suivi.");
+    notify(screenNotice("crm.shell.7f98a469fc"));
   }
 
   function addHouseTrackingWorker(worker: HouseTrackingWorker) {
@@ -7644,7 +7532,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       houseTrackingWorkers: [stampCreated(worker, activeActor), ...(((current as any).houseTrackingWorkers ?? []) as HouseTrackingWorker[])]
     }));
 
-    notify("Intervenant ajouté.");
+    notify(screenNotice("crm.shell.e9e7a14924"));
   }
 
   async function persistHouseRecord(kind: "worker" | "hours", id: string, patch: HouseWorkerEdit | HouseTimeEntry): Promise<FormSaveResult> {
@@ -7699,7 +7587,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       ).map((worker) => worker.id === id ? stampUpdated(worker, activeActor) : worker)
     }));
 
-    notify("Intervenant archivé. Son historique est conservé.");
+    notify(screenNotice("crm.shell.7dd139cf62"));
   }
 
   function reactivateHouseTrackingWorker(id: string) {
@@ -7712,7 +7600,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       ).map((worker) => worker.id === id ? stampUpdated(worker, activeActor) : worker)
     }));
 
-    notify("Intervenant réactivé.");
+    notify(screenNotice("crm.shell.0cc815edac"));
   }
 
   function permanentlyDeleteHouseTrackingWorkerSafely(id: string) {
@@ -7722,7 +7610,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     const initialCheck = permanentlyDeleteHouseTrackingWorker(currentWorkers, currentEntries, currentPayments, id);
 
     if (initialCheck.blocked) {
-      notify("Suppression bloquée : archivez cet intervenant pour conserver son historique.", "warning");
+      notify(screenNotice("crm.shell.a69eb6c676"), "warning");
       return;
     }
 
@@ -7740,7 +7628,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       };
     });
 
-    notify("Fiche d’intervenant supprimée définitivement.");
+    notify(screenNotice("crm.shell.e75a73d1eb"));
   }
 
   function addHouseTimeEntry(entry: HouseTimeEntry) {
@@ -7753,7 +7641,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       houseTimeEntries: (((current as any).houseTimeEntries ?? []) as HouseTimeEntry[]).filter((entry) => entry.id !== id)
     }));
 
-    notify("Heures supprimées.");
+    notify(screenNotice("crm.shell.a4c11b2089"));
   }
 
   function addHousePayment(payment: HousePayment) {
@@ -7762,7 +7650,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       housePayments: [stampCreated(payment, activeActor), ...(((current as any).housePayments ?? []) as HousePayment[])]
     }));
 
-    notify("Paiement ajouté.");
+    notify(screenNotice("crm.shell.e4daf0a6a9"));
   }
 
   function deleteHousePayment(id: string) {
@@ -7771,7 +7659,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       housePayments: (((current as any).housePayments ?? []) as HousePayment[]).filter((payment) => payment.id !== id)
     }));
 
-    notify("Paiement supprimé.");
+    notify(screenNotice("crm.shell.cdd34809de"));
   }
 
   function addCRMDocument(crmDocument: CRMDocument) {
@@ -7780,7 +7668,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       documents: [crmDocument, ...(((current as any).documents ?? []) as CRMDocument[])]
     }));
 
-    notify("Document ajouté.");
+    notify(screenNotice("crm.shell.5826801d6d"));
   }
 
   function updateCRMDocument(updatedDocument: CRMDocument) {
@@ -7791,7 +7679,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       )
     }));
 
-    notify("Document mis à jour.");
+    notify(screenNotice("crm.shell.1dba010cf5"));
   }
 
   async function trashCRMDocument(crmDocument: CRMDocument, operationId: string) {
@@ -7836,10 +7724,10 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       if (merged.conflicted) showWorkspaceConflict();
       else {
         setSharedWorkspaceStatus("connected");
-        setSharedWorkspaceMessage("Mise à la corbeille confirmée et base partagée synchronisée.");
+        setSharedWorkspaceMessage(screenNotice("crm.shell.1266602c1d"));
       }
       // Form drafts are independent from the committed workspace and stay intact.
-      notify(`${crmDocument.isFolder ? "Dossier" : "Fichier"} mis à la corbeille.`);
+      notify(screenNotice("crm.shell.5106beba5c", { value1: displayValue(crmDocument.isFolder ? t("crm.documents.2cdf175d11") : t("crm.enums.file")) }));
     } finally {
       workspaceBusy.current = false;
       if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
@@ -7857,7 +7745,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       vendorQuotes: [createdQuote, ...(((current as any).vendorQuotes ?? []) as VendorQuote[])]
     }));
 
-    notify("Devis prestataire ajouté.");
+    notify(screenNotice("crm.shell.e730183f39"));
   }
 
   function updateVendorQuote(updatedQuote: VendorQuote) {
@@ -7897,13 +7785,13 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       };
     });
 
-    notify("Devis prestataire mis à jour.");
+    notify(screenNotice("crm.shell.adce916a6a"));
   }
 
   function validateVendorQuote(id: string) {
     const invoiceId = makeId("invoice");
     try { validateVendorQuoteIdempotently(data, id, invoiceId); }
-    catch (error) { notify((error as Error).message); return; }
+    catch (error) { notify(safeCRMError(error)); return; }
     setData(current => {
       try {
         const next = validateVendorQuoteIdempotently(current, id, invoiceId);
@@ -7911,7 +7799,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
           ? stampUpdated(quote, activeActor) as VendorQuote : quote) };
       } catch { return current; }
     });
-    notify("Devis validé. Facture liée réutilisée ou créée si nécessaire.");
+    notify(screenNotice("crm.shell.e88c7d9a28"));
   }
 
   function rejectVendorQuote(id: string) {
@@ -7944,27 +7832,27 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       };
     });
 
-    notify("Devis prestataire refusé.");
+    notify(screenNotice("crm.shell.0af6e9a03d"));
   }
 
   function deleteVendorQuote(id: string, choice?: VendorQuoteDeletionChoice) {
     try { deleteVendorQuoteWithDecision(data, id, choice); }
-    catch (error) { window.alert((error as Error).message); return; }
+    catch (error) { window.alert(dialogText(safeCRMError(error))); return; }
     setData(current => {
       try { return deleteVendorQuoteWithDecision(current, id, choice); }
       catch { return current; }
     });
-    notify(choice === "delete-both" ? "Devis et facture automatique supprimés." : "Devis prestataire supprimé.");
+    notify(choice === "delete-both" ? screenNotice("crm.shell.cef28f46d8") : screenNotice("crm.shell.b542d17dcf"));
   }
 
   function deleteOrphanVendorInvoice(id: string) {
     try { deleteOrphanAutomaticVendorInvoice(data, id); }
-    catch (error) { window.alert((error as Error).message); return; }
+    catch (error) { window.alert(dialogText(safeCRMError(error))); return; }
     setData(current => {
       try { return deleteOrphanAutomaticVendorInvoice(current, id); }
       catch { return current; }
     });
-    notify("Facture automatique orpheline supprimée.");
+    notify(screenNotice("crm.shell.92d424bf96"));
   }
 
   function addVendorInvoice(invoice: VendorInvoice) {
@@ -7975,13 +7863,13 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       vendorInvoices: [normalizedInvoice, ...(((current as any).vendorInvoices ?? []) as VendorInvoice[])]
     }));
 
-    notify("Facture prestataire ajoutée.");
+    notify(screenNotice("crm.shell.cba8c3dda7"));
   }
 
   function updateVendorInvoice(updatedInvoice: VendorInvoice) {
     const existing = (data.vendorInvoices || []).find(invoice => invoice.id === updatedInvoice.id);
     if (existing?.paymentBankAccountId && existing.contactId !== updatedInvoice.contactId) {
-      notify("Le prestataire ne peut pas changer après sélection d’un compte bancaire."); return;
+      notify(screenNotice("crm.shell.22e9a5602c")); return;
     }
     const normalizedInvoice = normalizeVendorInvoiceFinancials({
       ...updatedInvoice,
@@ -7997,7 +7885,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       )
     }));
 
-    notify("Facture prestataire mise à jour.");
+    notify(screenNotice("crm.shell.69423a79f5"));
   }
 
   function deleteVendorInvoice(id: string) {
@@ -8006,7 +7894,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       vendorInvoices: (((current as any).vendorInvoices ?? []) as VendorInvoice[]).filter((invoice) => invoice.id !== id)
     }));
 
-    notify("Facture prestataire supprimée.");
+    notify(screenNotice("crm.shell.685710ccd4"));
   }
 
   function addSupplier(supplier: Supplier) {
@@ -8014,7 +7902,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       ...current,
       suppliers: [supplier, ...(((current as any).suppliers ?? []) as Supplier[])]
     }));
-    notify("Prestataire ajouté.");
+    notify(screenNotice("crm.shell.084af8f5bb"));
   }
 
   function updateSupplier(updatedSupplier: Supplier) {
@@ -8024,7 +7912,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         supplier.id === updatedSupplier.id ? updatedSupplier : supplier
       )
     }));
-    notify("Prestataire mis à jour.");
+    notify(screenNotice("crm.shell.b739b9c6ba"));
   }
 
   function deleteSupplier(id: string) {
@@ -8032,7 +7920,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       ...current,
       suppliers: (((current as any).suppliers ?? []) as Supplier[]).filter((supplier) => supplier.id !== id)
     }));
-    notify("Prestataire supprimé.");
+    notify(screenNotice("crm.shell.b800b54958"));
   }
 
 function addContact(event: React.FormEvent<HTMLFormElement>) {
@@ -8074,7 +7962,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
     setData((current) => ({ ...current, contacts: [contact, ...current.contacts] }));
     // Ancienne synchro contact désactivée : crm_workspace_state sauvegarde tout le CRM.
     event.currentTarget.reset();
-    notify("Contact ajouté.");
+    notify(screenNotice("crm.shell.670cd3e9c6"));
 
     window.setTimeout(() => {
       window.scrollTo({
@@ -8105,10 +7993,10 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       notes: String(form.get("notes") ?? "").trim()
     }, activeActor) as Lead;
 
-    if (!lead.contactName) return notify("Sélectionnez un contact pour ce lead.", "warning");
+    if (!lead.contactName) return notify(screenNotice("crm.shell.0f8a9705d1"), "warning");
 
     if (isOpenLead(lead) && (!lead.nextAction.trim() || !lead.dueDate)) {
-      return notify("Un lead ouvert doit avoir une prochaine action et une échéance.", "warning");
+      return notify(screenNotice("crm.shell.49ed09dfc6"), "warning");
     }
 
     if (!confirmDuplicateLead(lead)) return;
@@ -8125,7 +8013,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
     }));
     event.currentTarget.reset();
     setLeadDraftContactName("");
-    notify("Lead ajouté au pipeline.");
+    notify(screenNotice("crm.shell.fed386ea33"));
   }
 
   function addProperty(event: React.FormEvent<HTMLFormElement>) {
@@ -8142,11 +8030,11 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       bedrooms: safeNumber(form.get("bedrooms")),
       surface: safeNumber(form.get("surface"))
     }, activeActor) as Property;
-    if (!property.name) return notify("Ajoutez au minimum un nom de bien.", "warning");
+    if (!property.name) return notify(screenNotice("crm.shell.a88394ebb1"), "warning");
     if (!confirmDuplicateAsset("bien", property)) return;
     setData((current) => ({ ...current, properties: [property, ...current.properties] }));
     event.currentTarget.reset();
-    notify("Bien ajouté.");
+    notify(screenNotice("crm.shell.28b3ab4b6f"));
   }
 
   function addVehicle(event: React.FormEvent<HTMLFormElement>) {
@@ -8164,11 +8052,11 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       year: safeNumber(form.get("year")),
       mileage: safeNumber(form.get("mileage"))
     }, activeActor) as Vehicle;
-    if (!vehicle.name) return notify("Ajoutez au minimum un nom de voiture.", "warning");
+    if (!vehicle.name) return notify(screenNotice("crm.shell.dfb5977de3"), "warning");
     if (!confirmDuplicateAsset("voiture", vehicle)) return;
     setData((current) => ({ ...current, vehicles: [vehicle, ...(current.vehicles ?? [])] }));
     event.currentTarget.reset();
-    notify("Voiture ajoutée.");
+    notify(screenNotice("crm.shell.4735c46154"));
   }
 
   function addBoat(event: React.FormEvent<HTMLFormElement>) {
@@ -8185,11 +8073,11 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       year: safeNumber(form.get("year")),
       length: safeNumber(form.get("length"))
     }, activeActor) as Boat;
-    if (!boat.name) return notify("Ajoutez au minimum un nom de bateau.", "warning");
+    if (!boat.name) return notify(screenNotice("crm.shell.b2bd5ae387"), "warning");
     if (!confirmDuplicateAsset("bateau", boat)) return;
     setData((current) => ({ ...current, boats: [boat, ...(current.boats ?? [])] }));
     event.currentTarget.reset();
-    notify("Bateau ajouté.");
+    notify(screenNotice("crm.shell.c5694babb6"));
   }
 
   function updateProperty(updatedProperty: Property) {
@@ -8200,7 +8088,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       )
     }));
 
-    notify("Bien mis à jour.");
+    notify(screenNotice("crm.shell.bd01a53a9b"));
   }
 
   function updateVehicle(updatedVehicle: Vehicle) {
@@ -8211,7 +8099,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       )
     }));
 
-    notify("Voiture mise à jour.");
+    notify(screenNotice("crm.shell.b375846206"));
   }
 
   function updateBoat(updatedBoat: Boat) {
@@ -8222,7 +8110,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       )
     }));
 
-    notify("Bateau mis à jour.");
+    notify(screenNotice("crm.shell.aa416c5fb5"));
   }
 
   function addPlanningEntry(event: React.FormEvent<HTMLFormElement>) {
@@ -8254,11 +8142,11 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       notes: String(form.get("notes") ?? "").trim()
     }, activeActor) as PlanningEntry;
 
-    if (!entry.title) return notify("Ajoutez au minimum un titre planning.", "warning");
-    if (!isValidPlanningDate(entry.startDate)) return notify("Ajoutez une date de début valide.", "warning");
-    if (!isValidPlanningDate(entry.endDate)) return notify("Ajoutez une date de fin valide.", "warning");
+    if (!entry.title) return notify(screenNotice("crm.shell.9040a5a768"), "warning");
+    if (!isValidPlanningDate(entry.startDate)) return notify(screenNotice("crm.shell.a1dc8b902b"), "warning");
+    if (!isValidPlanningDate(entry.endDate)) return notify(screenNotice("crm.shell.aeec806c05"), "warning");
     if (planningDateValue(entry.endDate) < planningDateValue(entry.startDate)) {
-      return notify("La date de fin ne peut pas être avant la date de début.", "warning");
+      return notify(screenNotice("crm.shell.936b845199"), "warning");
     }
 
     setData((current) => ({
@@ -8267,11 +8155,11 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
     }));
 
     event.currentTarget.reset();
-    notify("Événement ajouté au planning.");
+    notify(screenNotice("crm.shell.02b9b39f14"));
   }
 
   function deletePlanningEntry(id: string) {
-    const confirmed = window.confirm("Supprimer cette entrée du planning ?");
+    const confirmed = window.confirm(dialogT("crm.shell.c2ecdd08e2"));
 
     if (!confirmed) return;
 
@@ -8280,7 +8168,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       planningEntries: (((current as any).planningEntries ?? []) as PlanningEntry[]).filter((entry) => entry.id !== id)
     }));
 
-    notify("Entrée planning supprimée.");
+    notify(screenNotice("crm.shell.20b59dd455"));
   }
 
   function patchPlanningEntry(id: string, patch: Partial<PlanningEntry>) {
@@ -8291,18 +8179,18 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       )
     }));
 
-    notify("Planning mis à jour.");
+    notify(screenNotice("crm.shell.4ce4c056a5"));
   }
 
 
   function patchLeadReservationDates(id: string, startDate: string, endDate: string) {
     if (!isValidPlanningDate(startDate) || !isValidPlanningDate(endDate)) {
-      notify("Dates invalides pour déplacer la réservation.", "warning");
+      notify(screenNotice("crm.shell.d29fe884d5"), "warning");
       return;
     }
 
     if (planningDateValue(endDate) < planningDateValue(startDate)) {
-      notify("La date de fin ne peut pas être avant la date de début.", "warning");
+      notify(screenNotice("crm.shell.936b845199"), "warning");
       return;
     }
 
@@ -8315,7 +8203,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       )
     }));
 
-    notify("Réservation déplacée dans le planning.");
+    notify(screenNotice("crm.shell.001dc764ce"));
   }
 
   function updatePlanningEntry(id: string, event: React.FormEvent<HTMLFormElement>): boolean {
@@ -8347,22 +8235,22 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
     };
 
     if (!nextEntry.title) {
-      notify("Ajoutez au minimum un titre planning.", "warning");
+      notify(screenNotice("crm.shell.9040a5a768"), "warning");
       return false;
     }
 
     if (!isValidPlanningDate(nextEntry.startDate)) {
-      notify("Ajoutez une date de début valide.", "warning");
+      notify(screenNotice("crm.shell.a1dc8b902b"), "warning");
       return false;
     }
 
     if (!isValidPlanningDate(nextEntry.endDate)) {
-      notify("Ajoutez une date de fin valide.", "warning");
+      notify(screenNotice("crm.shell.aeec806c05"), "warning");
       return false;
     }
 
     if (planningDateValue(nextEntry.endDate) < planningDateValue(nextEntry.startDate)) {
-      notify("La date de fin ne peut pas être avant la date de début.", "warning");
+      notify(screenNotice("crm.shell.936b845199"), "warning");
       return false;
     }
 
@@ -8373,7 +8261,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       )
     }));
 
-    notify("Entrée planning mise à jour.");
+    notify(screenNotice("crm.shell.6a9ff2f202"));
     return true;
   }
 
@@ -8385,7 +8273,7 @@ function addContact(event: React.FormEvent<HTMLFormElement>) {
       )
     }));
 
-    notify("Lead mis à jour.");
+    notify(screenNotice("crm.shell.0f2616d6c3"));
   }
 
   function updateLeadStatus(id: string, status: LeadStatus) {
@@ -8490,7 +8378,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         });
       }, 160);
 
-      notify(`Devis existant ouvert pour ${lead.contactName}.`);
+      notify(screenNotice("crm.shell.bb76c9f8d0", { value1: displayValue(lead.contactName) }));
       return;
     }
 
@@ -8516,7 +8404,7 @@ function createQuoteDraftFromLead(lead: Lead) {
       });
     }, 160);
 
-    notify(`Devis prêt pour ${lead.contactName}.`);
+    notify(screenNotice("crm.shell.8c53af4519", { value1: displayValue(lead.contactName) }));
   }
 
 
@@ -8533,7 +8421,7 @@ function createQuoteDraftFromLead(lead: Lead) {
       });
     }, 120);
 
-    notify("Tâche de relance prête.");
+    notify(screenNotice("crm.shell.fe212fbaa1"));
   }
 
 
@@ -8545,10 +8433,10 @@ function createQuoteDraftFromLead(lead: Lead) {
       await taskApi.mutate(taskStatusRequests.current.prepare(id, task.revision, { status }));
       taskStatusRequests.current.confirmed(id);
       await taskProjection.refresh();
-      notify("Statut de la tâche confirmé.");
+      notify(screenNotice("crm.shell.6e69a977bc"));
     } catch (error) {
       await taskProjection.refresh();
-      notify(error instanceof Error ? error.message : "Modification non confirmée.", "warning");
+      notify(safeCRMError(error), "warning");
     } finally { pendingTaskStatus.current.delete(id); }
   }
 
@@ -8562,55 +8450,55 @@ function createQuoteDraftFromLead(lead: Lead) {
 
     // Ancienne synchro contact désactivée : crm_workspace_state sauvegarde tout le CRM.
 
-    notify("Contact mis à jour.");
+    notify(screenNotice("crm.shell.f7577d535d"));
   }
 
   function deleteContact(id: string) {
     if (data.contacts.find(c => c.id === id)?.supplierBankAccounts?.length) {
-      notify("Ce contact possède des RIB : archivez le prestataire pour conserver l’historique."); return;
+      notify(screenNotice("crm.shell.44b47ac1d6")); return;
     }
     setData((current) => ({ ...current, contacts: current.contacts.filter((contact) => contact.id !== id) }));
     // Ancienne suppression contact désactivée : crm_workspace_state sauvegarde tout le CRM.
 
-    notify("Contact supprimé.");
+    notify(screenNotice("crm.shell.3a5b1d6ee1"));
   }
 
   function deleteLead(id: string) {
     setData((current) => ({ ...current, leads: current.leads.filter((lead) => lead.id !== id) }));
-    notify("Lead supprimé.");
+    notify(screenNotice("crm.shell.77d27eba0b"));
   }
 
   function deleteProperty(id: string) {
     const property = data.properties.find((item) => item.id === id);
     const label = property ? getPropertyDisplayName(property) : "ce bien";
-    const confirmed = window.confirm(`Supprimer définitivement "${label}" ?`);
+    const confirmed = window.confirm(dialogT("crm.shell.0220a49224", { value1: displayValue(label) }));
 
     if (!confirmed) return;
 
     setData((current) => ({ ...current, properties: current.properties.filter((property) => property.id !== id) }));
-    notify("Bien supprimé.");
+    notify(screenNotice("crm.shell.54d2ace2f5"));
   }
 
   function deleteVehicle(id: string) {
     const vehicle = (data.vehicles ?? []).find((item) => item.id === id);
     const label = vehicle?.name || "cette voiture";
-    const confirmed = window.confirm(`Supprimer définitivement "${label}" ?`);
+    const confirmed = window.confirm(dialogT("crm.shell.0220a49224", { value1: displayValue(label) }));
 
     if (!confirmed) return;
 
     setData((current) => ({ ...current, vehicles: (current.vehicles ?? []).filter((vehicle) => vehicle.id !== id) }));
-    notify("Voiture supprimée.");
+    notify(screenNotice("crm.shell.b8174d2288"));
   }
 
   function deleteBoat(id: string) {
     const boat = (data.boats ?? []).find((item) => item.id === id);
     const label = boat?.name || "ce bateau";
-    const confirmed = window.confirm(`Supprimer définitivement "${label}" ?`);
+    const confirmed = window.confirm(dialogT("crm.shell.0220a49224", { value1: displayValue(label) }));
 
     if (!confirmed) return;
 
     setData((current) => ({ ...current, boats: (current.boats ?? []).filter((boat) => boat.id !== id) }));
-    notify("Bateau supprimé.");
+    notify(screenNotice("crm.shell.c09369e8d9"));
   }
 
   function handleImportJson(event: React.ChangeEvent<HTMLInputElement>) {
@@ -8620,7 +8508,7 @@ function createQuoteDraftFromLead(lead: Lead) {
     if (!file) return;
 
     const confirmed = window.confirm(
-      "Importer ce fichier JSON va remplacer/compléter les données actuelles du CRM. Continuer ?"
+      dialogT("crm.shell.edcee7b3be")
     );
 
     if (!confirmed) {
@@ -8661,9 +8549,9 @@ function createQuoteDraftFromLead(lead: Lead) {
           saveQuotesToBrowser(importedDeviss);
         }
 
-        window.alert("Import JSON réussi. Recharge la page pour afficher les devis restaurés.");
+        window.alert(dialogT("crm.shell.b42697cee3"));
       } catch (error) {
-        window.alert("Import impossible : le fichier JSON n’est pas valide.");
+        window.alert(dialogT("crm.shell.ca98709cbc"));
       } finally {
         input.value = "";
       }
@@ -8729,18 +8617,19 @@ function createQuoteDraftFromLead(lead: Lead) {
   };
 
   const mobileSecondaryActions: MobileSecondaryAction[] = [
-    { label: "Import sécurisé", onClick: openSafeCsvImportPrompt },
-    { label: "Backup fichier", onClick: exportJson },
-    { label: "Sauvegarde cloud", onClick: saveCrmBackupToSupabase },
-    { label: "Recharger cloud", onClick: reloadSharedWorkspaceFromCloud },
-    { label: "Forcer synchro", onClick: forceSaveSharedWorkspaceNow },
+    { id: "importCsv", label: t("crm.shell.b57e44a28b"), onClick: openSafeCsvImportPrompt },
+    { id: "exportJson", label: t("crm.shell.da0182a80d"), onClick: exportJson },
+    { id: "cloudBackup", label: t("crm.shell.4e41bd5973"), onClick: saveCrmBackupToSupabase },
+    { id: "reloadCloud", label: t("crm.shell.e5f7d1e898"), onClick: reloadSharedWorkspaceFromCloud },
+    { id: "forceSync", label: t("crm.shell.0302574182"), onClick: forceSaveSharedWorkspaceNow },
     {
-      label: "Export CSV",
+      id: "exportCsv",
+      label: t("crm.shell.91f71c14c8"),
       onClick: () => {
         void exportCsv();
       }
     },
-    { label: "Déconnexion", onClick: onLogout, tone: "danger" }
+    { id: "logout", label: t("crm.shell.fb5f9e92c1"), onClick: onLogout, tone: "danger" }
   ];
 
   function navigateToTab(tab: Tab) {
@@ -8772,84 +8661,76 @@ function createQuoteDraftFromLead(lead: Lead) {
 
         <header className="topbar crm-topbar-compact">
           <div className="crm-topbar-title">
-            <p className="eyebrow">CRM interne</p>
-            <h2>{getCRMTabTitle(activeTab)}</h2>
+            <p className="eyebrow" data-semantic-text={"CRM interne"}>{t("crm.shell.f33f4472c1")}</p>
+            <h2>{t(`navigation.module.${activeTab}`)}</h2>
           </div>
           <div className="topbar-actions crm-topbar-actions-compact">
-            {isCRMTabSearchable(activeTab) ? (
-              <input
+            {isCRMTabSearchable(activeTab) ? (<input
                 className="search-input crm-topbar-search"
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder={getCRMTabSearchPlaceholder(activeTab)}
-                aria-label="Recherche"
-              />
-            ) : null}
-            <span className="muted-line crm-session-email">Connecté : {sessionEmail}</span>
+                placeholder={t(`navigation.search.${activeTab}`)}
+                aria-label={t("crm.shell.a12b73cf58")}
+              />) : null}
+            <span className="muted-line crm-session-email">{t("crm.shell.1fb8710935")}{" "}{sessionEmail}</span>
             <label className="actor-select-label crm-actor-select-label">
-              <span>Actions par</span>
+              <span>{t("crm.shell.3db254bfcf")}</span>
               <select value={activeActor} onChange={(event) => setActiveActor(event.target.value as CRMActor)}>
-                <option value="">Non renseigné</option>
-                {crmActors.map((actor) => <option key={actor}>{actor}</option>)}
+                <option value="">{t("crm.shell.cb6c1fb76c")}</option>
+                {crmActors.map((actor) => <option key={actor} value={actor}>{actor}</option>)}
               </select>
             </label>
             <details className="crm-topbar-menu">
-              <summary className="secondary-button crm-topbar-menu-button">Actions</summary>
+              <summary className="secondary-button crm-topbar-menu-button">{t("crm.shell.ff8059dc67")}</summary>
               <div className="crm-topbar-menu-panel">
-                <button type="button" onClick={onLogout}>Déconnexion</button>
-                <button type="button" onClick={openSafeCsvImportPrompt}>Import sécurisé</button>
-                <button type="button" onClick={exportJson}>Backup fichier</button>
-                <button type="button" onClick={saveCrmBackupToSupabase}>Sauvegarde cloud</button>
-                <button type="button" onClick={reloadSharedWorkspaceFromCloud}>Recharger cloud</button>
-                <button type="button" onClick={forceSaveSharedWorkspaceNow}>Forcer synchro</button>
+                <button type="button" onClick={onLogout}>{t("crm.shell.fb5f9e92c1")}</button>
+                <button type="button" onClick={openSafeCsvImportPrompt}>{t("crm.shell.b57e44a28b")}</button>
+                <button type="button" onClick={exportJson}>{t("crm.shell.da0182a80d")}</button>
+                <button type="button" onClick={saveCrmBackupToSupabase}>{t("crm.shell.4e41bd5973")}</button>
+                <button type="button" onClick={reloadSharedWorkspaceFromCloud}>{t("crm.shell.e5f7d1e898")}</button>
+                <button type="button" onClick={forceSaveSharedWorkspaceNow}>{t("crm.shell.0302574182")}</button>
                 <button type="button" onClick={() => {
                   void exportCsv();
-                }}>Export CSV</button>
+                }}>{t("crm.shell.91f71c14c8")}</button>
               </div>
             </details>
           </div>
         </header>
 
-        <section className={`shared-db-status-panel shared-db-status-desktop ${sharedWorkspaceStatus}`}>
+        <section className={`shared-db-status-panel shared-db-status-desktop ${sharedWorkspaceStatus}`} data-semantic-text={sharedWorkspaceStatus === "connected" ? "Connectée" : sharedWorkspaceStatus === "error" ? "Erreur" : "Nouveau"}>
           <div>
-            <p className="eyebrow">Base partagée</p>
+            <p className="eyebrow" data-semantic-text={"Base partagée"}>{t("crm.shell.dc3ad769e0")}</p>
             <strong>
-              {sharedWorkspaceStatus === "connected" ? "Connectée" : sharedWorkspaceStatus === "loading" ? "Synchronisation..." : sharedWorkspaceStatus === "local" ? "Mode local / à vérifier" : "Erreur"}
+              {sharedWorkspaceStatus === "connected" ? t("crm.shell.b996430dbb") : sharedWorkspaceStatus === "loading" ? t("crm.shell.7d4545eb86") : sharedWorkspaceStatus === "local" ? t("crm.shell.e816efeace") : t("crm.shell.46148e250e")}
             </strong>
-            <span>{sharedWorkspaceMessage}</span>
+            <span>{screenText(sharedWorkspaceMessage)}</span>
             {sharedWorkspaceUpdatedAt && (
-              <small>Dernière mise à jour cloud : {new Date(sharedWorkspaceUpdatedAt).toLocaleString("fr-FR")}</small>
+              <small>{t("crm.shell.86335dd6bd")}{" "}{screen.dateTime(sharedWorkspaceUpdatedAt)}</small>
             )}
           </div>
 
           <div>
-            <button className="secondary-button" type="button" onClick={reloadSharedWorkspaceFromCloud}>
-              Recharger cloud
-            </button>
-            <button className="primary-button" type="button" onClick={forceSaveSharedWorkspaceNow}>
-              Forcer synchro
-            </button>
+            <button className="secondary-button" type="button" onClick={reloadSharedWorkspaceFromCloud}>{t("crm.shell.e5f7d1e898")}</button>
+            <button className="primary-button" type="button" onClick={forceSaveSharedWorkspaceNow}>{t("crm.shell.0302574182")}</button>
           </div>
         </section>
 
         <details className={`mobile-shared-db-status ${sharedWorkspaceStatus}`}>
           <summary>
             <span className="mobile-status-dot" aria-hidden="true" />
-            <span>Base partagée</span>
+            <span>{t("crm.shell.dc3ad769e0")}</span>
             <strong>
-              {sharedWorkspaceStatus === "connected" ? "Connectée" : sharedWorkspaceStatus === "loading" ? "Synchronisation…" : sharedWorkspaceStatus === "local" ? "Mode local" : "Erreur"}
+              {sharedWorkspaceStatus === "connected" ? t("crm.shell.b996430dbb") : sharedWorkspaceStatus === "loading" ? t("crm.shell.51bd82a2ef") : sharedWorkspaceStatus === "local" ? t("crm.shell.85eb6e2c32") : t("crm.shell.46148e250e")}
             </strong>
             <span className="mobile-status-chevron" aria-hidden="true">⌄</span>
           </summary>
           <div className="mobile-shared-db-details">
-            <p>{sharedWorkspaceMessage}</p>
-            {sharedWorkspaceUpdatedAt ? (
-              <small>Dernière mise à jour cloud : {new Date(sharedWorkspaceUpdatedAt).toLocaleString("fr-FR")}</small>
-            ) : null}
+            <p>{screenText(sharedWorkspaceMessage)}</p>
+            {sharedWorkspaceUpdatedAt ? (<small>{t("crm.shell.86335dd6bd")}{" "}{screen.dateTime(sharedWorkspaceUpdatedAt)}</small>) : null}
             <div>
-              <button className="secondary-button" type="button" onClick={reloadSharedWorkspaceFromCloud}>Recharger cloud</button>
-              <button className="primary-button" type="button" onClick={forceSaveSharedWorkspaceNow}>Forcer synchro</button>
+              <button className="secondary-button" type="button" onClick={reloadSharedWorkspaceFromCloud}>{t("crm.shell.e5f7d1e898")}</button>
+              <button className="primary-button" type="button" onClick={forceSaveSharedWorkspaceNow}>{t("crm.shell.0302574182")}</button>
             </div>
           </div>
         </details>
@@ -8858,17 +8739,15 @@ function createQuoteDraftFromLead(lead: Lead) {
           <section className="crm-notification-panel">
             <div className="crm-notification-heading">
               <div>
-                <p className="eyebrow">Notifications</p>
-                <h3>{actionNotifications.length} action{actionNotifications.length > 1 ? "s" : ""} à traiter</h3>
+                <p className="eyebrow" data-semantic-text={"Notifications"}>{t("crm.shell.788011833a")}</p>
+                <h3>{t("crm.counts.actions", { count: actionNotifications.length })}</h3>
               </div>
 
               <button
                 className="secondary-button"
                 type="button"
                 onClick={() => handleNotificationAction()}
-              >
-                Traiter maintenant
-              </button>
+               data-crm-auto-scroll="true">{t("crm.shell.8bff1588f1")}</button>
             </div>
 
             <div className="crm-notification-list">
@@ -8930,7 +8809,7 @@ function createQuoteDraftFromLead(lead: Lead) {
                     });
                   }, 120);
 
-                  notify(`Lead prêt pour ${contactName}.`);
+                  notify(screenNotice("crm.shell.7219043fd9", { value1: displayValue(contactName) }));
                 }} onCreateTask={(contactName, contactId) => {
                   setTaskDraftContactId(contactId || "");
                   setTaskDraftLeadId("");
@@ -8944,7 +8823,7 @@ function createQuoteDraftFromLead(lead: Lead) {
                     });
                   }, 120);
 
-                  notify(`Tâche prête pour ${contactName}.`);
+                  notify(screenNotice("crm.shell.4c02a620d5", { value1: displayValue(contactName) }));
                 }} />
         )}
 
@@ -9067,7 +8946,7 @@ function createQuoteDraftFromLead(lead: Lead) {
                     });
                   }, 120);
 
-                  notify(`Tâche prête pour ${lead.contactName}.`);
+                  notify(screenNotice("crm.shell.4c02a620d5", { value1: displayValue(lead.contactName) }));
                 }} />
         )}
 
@@ -9088,7 +8967,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
       </section>
 
-      {toast && <div className={`toast ${toast.tone}`}>{toast.message}</div>}
+      {toast && <div className={`toast ${toast.tone}`}>{screenText(toast.message)}</div>}
     </main>
   );
 }
@@ -9398,16 +9277,18 @@ function formatPlanningShortDate(value?: string) {
   }).format(new Date(`${dateValue}T00:00:00`));
 }
 
-function getPlanningCalendarDaySegmentStatus(event: any, dayIso?: string): { status: PlanningEntryStatus; label: string; explanation: string } {
+function getPlanningCalendarDaySegmentStatus(event: any, dayIso?: string, display?: PlanningDisplay): { status: PlanningEntryStatus; label: string; explanation: string } {
+  const t = display?.t || defaultCRMTranslate;
+  const enumLabel = display?.enum || ((value: string) => value);
   const rawStatus = String(event?.status || "Prévu");
   const normalizedStatus = getPlanningStatusClass(rawStatus);
 
   if (normalizedStatus === "annule") {
-    return { status: "Annulé", label: "Annulé", explanation: "Intervention annulée." };
+    return { status: "Annulé", label: enumLabel("Annulé"), explanation: t("crm.screen.cancelledVisit") };
   }
 
   if (normalizedStatus === "termine") {
-    return { status: "Terminé", label: "Terminé", explanation: "Intervention marquée terminée." };
+    return { status: "Terminé", label: enumLabel("Terminé"), explanation: t("crm.screen.completedVisit") };
   }
 
   const startDate = String(event?.startDate || "");
@@ -9415,13 +9296,13 @@ function getPlanningCalendarDaySegmentStatus(event: any, dayIso?: string): { sta
   const day = String(dayIso || startDate || "");
 
   if (!isValidPlanningDate(startDate) || !isValidPlanningDate(endDate) || !isValidPlanningDate(day)) {
-    return { status: getPlanningEventOperationalStatus(event), label: getPlanningEventOperationalStatus(event), explanation: "Date à compléter." };
+    return { status: getPlanningEventOperationalStatus(event), label: enumLabel(getPlanningEventOperationalStatus(event)), explanation: t("crm.enums.dateRequired") };
   }
 
   // Les leads / réservations restent gérés comme des plages de séjour continues.
   if (event?.source !== "planning") {
     const status = getPlanningEventOperationalStatus(event);
-    return { status, label: status, explanation: status === "À confirmer" ? "Demande ou option à confirmer." : `Statut réservation : ${status}.` };
+    return { status, label: enumLabel(status), explanation: status === "À confirmer" ? t("crm.screen.optionConfirm") : t("crm.screen.bookingStatus", { status: enumLabel(status) }) };
   }
 
   const todayIso = formatPlanningDateValue(new Date());
@@ -9432,23 +9313,23 @@ function getPlanningCalendarDaySegmentStatus(event: any, dayIso?: string): { sta
   const startMinutes = parsePlanningTimeToMinutes(event?.startTime);
   const endMinutes = parsePlanningTimeToMinutes(event?.endTime);
   const rangeLabel = event?.startTime || event?.endTime
-    ? formatPlanningTimeRange(event?.startTime, event?.endTime)
-    : "journée";
-  const dayPrefix = dayCount > 1 ? `J${dayNumber}/${dayCount}` : "Intervention";
+    ? (display?.timeRange || formatPlanningTimeRange)(event?.startTime, event?.endTime)
+    : t("crm.enums.day");
+  const dayPrefix = dayCount > 1 ? t("crm.screen.dayPrefix", { day: dayNumber, count: dayCount }) : t("crm.enums.serviceVisit");
 
   if (dayValue < todayValue) {
     return {
       status: "Terminé",
-      label: "Terminé",
-      explanation: `${dayPrefix} terminé : cette journée d’intervention est passée.`
+      label: enumLabel("Terminé"),
+      explanation: t("crm.screen.segmentPast", { prefix: dayPrefix })
     };
   }
 
   if (dayValue > todayValue) {
     return {
       status: "Prévu",
-      label: "À faire",
-      explanation: `${dayPrefix} à faire : cette journée d’intervention n’a pas encore eu lieu.`
+      label: enumLabel("À faire"),
+      explanation: t("crm.screen.segmentFuture", { prefix: dayPrefix })
     };
   }
 
@@ -9457,70 +9338,73 @@ function getPlanningCalendarDaySegmentStatus(event: any, dayIso?: string): { sta
   if (startMinutes !== null && nowMinutes < startMinutes) {
     return {
       status: "Prévu",
-      label: "À faire",
-      explanation: `${dayPrefix} à faire aujourd’hui · début prévu à ${event.startTime}.`
+      label: enumLabel("À faire"),
+      explanation: t("crm.screen.segmentStart", { prefix: dayPrefix, time: event.startTime })
     };
   }
 
   if (endMinutes !== null && nowMinutes > endMinutes) {
     return {
       status: "Terminé",
-      label: "Terminé",
-      explanation: `${dayPrefix} terminé aujourd’hui · heure de fin ${event.endTime} dépassée.`
+      label: enumLabel("Terminé"),
+      explanation: t("crm.screen.segmentEnd", { prefix: dayPrefix, time: event.endTime })
     };
   }
 
   if (startMinutes !== null || endMinutes !== null) {
     return {
       status: "En cours",
-      label: "En cours",
-      explanation: `${dayPrefix} en cours maintenant · créneau ${rangeLabel}.`
+      label: enumLabel("En cours"),
+      explanation: t("crm.screen.segmentNow", { prefix: dayPrefix, range: rangeLabel })
     };
   }
 
   return {
     status: "En cours",
-    label: "En cours",
-    explanation: `${dayPrefix} en cours aujourd’hui · aucune heure de fin renseignée.`
+    label: enumLabel("En cours"),
+    explanation: t("crm.screen.segmentToday", { prefix: dayPrefix })
   };
 }
 
-function getPlanningTimingExplanation(item: any) {
+function getPlanningTimingExplanation(item: any, display?: PlanningDisplay) {
+  const t = display?.t || defaultCRMTranslate;
+  const shortDate = display?.shortDate || formatPlanningShortDate;
   const startDate = String(item?.startDate || "");
   const endDate = String(item?.endDate || item?.startDate || "");
   const dayCount = getPlanningInclusiveDayCount(startDate, endDate);
 
-  if (!isValidPlanningDate(startDate)) return "Dates à compléter.";
+  if (!isValidPlanningDate(startDate)) return t("crm.screen.dateRequired");
 
   if (dayCount > 1) {
     const todayIso = formatPlanningDateValue(new Date());
     const todayInsideRange = planningRangesOverlap(todayIso, todayIso, startDate, endDate);
-    const todaySegment = todayInsideRange ? getPlanningCalendarDaySegmentStatus(item, todayIso) : null;
-    const endLabel = `${formatPlanningShortDate(endDate)}${item?.endTime ? ` à ${item.endTime}` : ""}`;
+    const todaySegment = todayInsideRange ? getPlanningCalendarDaySegmentStatus(item, todayIso, display) : null;
+    const endLabel = `${shortDate(endDate)}${item?.endTime ? t("crm.screen.atTime", { time: item.endTime }) : ""}`;
 
     if (todaySegment) {
-      return `${todaySegment.explanation} Intervention totale sur ${dayCount} jours · fin globale ${endLabel}.`;
+      return t("crm.screen.totalTiming", { explanation: todaySegment.explanation, count: dayCount, end: endLabel });
     }
 
-    return `Intervention sur ${dayCount} jours · du ${formatPlanningShortDate(startDate)} au ${endLabel}. Chaque journée a son propre statut dans le calendrier.`;
+    return t("crm.screen.rangeTiming", { count: dayCount, start: shortDate(startDate), end: endLabel });
   }
 
-  return getPlanningCalendarDaySegmentStatus(item, startDate).explanation;
+  return getPlanningCalendarDaySegmentStatus(item, startDate, display).explanation;
 }
 
-function getPlanningCalendarEventLabel(event: any, dayIso?: string) {
+function getPlanningCalendarEventLabel(event: any, dayIso?: string, display?: PlanningDisplay) {
+  const t = display?.t || defaultCRMTranslate;
   const startDate = String(event?.startDate || "");
   const endDate = String(event?.endDate || event?.startDate || "");
   const dayCount = getPlanningInclusiveDayCount(startDate, endDate);
   const dayNumber = getPlanningDayNumberInRange(startDate, dayIso || startDate);
-  const segment = getPlanningCalendarDaySegmentStatus(event, dayIso || startDate);
+  const segment = getPlanningCalendarDaySegmentStatus(event, dayIso || startDate, display);
   const title = event?.source === "planning" ? event?.title : event?.contactName;
   const owner = event?.source === "planning" ? event?.contactName : event?.assetLabel;
   const asset = event?.source === "planning" ? event?.assetLabel : "";
-  const timeLabel = formatPlanningTimeRange(event?.startTime, event?.endTime) || "journée";
-  const dayPrefix = event?.source === "planning" && dayCount > 1 ? `J${dayNumber}/${dayCount}` : "";
+  const timeLabel = (display?.timeRange || formatPlanningTimeRange)(event?.startTime, event?.endTime) || t("crm.enums.day");
+  const dayPrefix = event?.source === "planning" && dayCount > 1 ? t("crm.screen.dayPrefix", { day: dayNumber, count: dayCount }) : "";
 
-  const firstLine = [dayPrefix, timeLabel, segment.label].filter(Boolean).join(" · ");
+  const firstLine = [dayPrefix, timeLabel].filter(Boolean).join(" · ");
   const secondLine = [title, owner, asset].filter(Boolean).join(" · ");
 
   return [firstLine, secondLine].filter(Boolean).join("\\n");
@@ -9565,8 +9449,6 @@ function getPlanningCalendarWeeks(monthValue: string) {
 function cleanPlanningCalendarVisibleLabel(value: string) {
   return value
     .replace(/\\n/g, " · ")
-    .replace(/\s*[·•-]\s*(terminée|terminé|à faire|a faire|en cours|à confirmer|a confirmer)\b/gi, "")
-    .replace(/\b(terminée|terminé|à faire|a faire|en cours|à confirmer|a confirmer)\s*[·•-]?\s*/gi, "")
     .replace(/\s*·\s*·\s*/g, " · ")
     .replace(/\s{2,}/g, " ")
     .replace(/^\s*[·•-]\s*/, "")
@@ -9599,6 +9481,8 @@ function PlanningView({
   onPatchPlanningEntry: (id: string, patch: Partial<PlanningEntry>) => void;
   onPatchLeadReservationDates: (id: string, startDate: string, endDate: string) => void;
 }) {
+  const { t, label, locale, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [assetFilter, setAssetFilter] = useState("Tous");
@@ -9737,10 +9621,10 @@ function PlanningView({
   const assetOptions = useMemo(() => {
     return assets.map((asset) => ({
       key: `${asset.type}:${asset.id}`,
-      label: `${asset.label} · ${getAssetPlanningCategory(asset) || asset.category}`,
+      label: `${asset.label} · ${label(getAssetPlanningCategory(asset) || asset.category, "crm")}`,
       planningCategory: getAssetPlanningCategory(asset)
     }));
-  }, [assets]);
+  }, [assets, label]);
 
 
   function getPlanningContactDisplayName(contact: Contact) {
@@ -9756,8 +9640,8 @@ function PlanningView({
       .map((contact) => {
         const displayName = getPlanningContactDisplayName(contact);
         const meta = [
-          contact.kind,
-          contact.supplierCategory,
+          label(contact.kind, "crm"),
+          contact.supplierCategory ? screen.category(contact.supplierCategory) : "",
           contact.companyName && contact.companyName !== displayName ? contact.companyName : "",
           contact.email,
           contact.phone
@@ -9770,7 +9654,7 @@ function PlanningView({
         };
       })
       .sort((a, b) => a.value.localeCompare(b.value, "fr"));
-  }, [contacts]);
+  }, [contacts, label, screen]);
 
   const confirmedBookings = useMemo(() => {
     return leads
@@ -9997,16 +9881,16 @@ function PlanningView({
   }
 
   function cancelPlanningEntryOperationally(entry: PlanningEntry) {
-    const confirmed = window.confirm("Annuler cette intervention ? Elle restera dans l'historique.");
+    const confirmed = window.confirm(dialogT("crm.planning.3a1b65a246"));
     if (!confirmed) return;
     patchPlanningEntryFromView(entry, { status: "Annulé" });
   }
 
   function postponePlanningEntry(entry: PlanningEntry) {
-    const nextStartDate = window.prompt("Nouvelle date de début (AAAA-MM-JJ)", entry.startDate || formatPlanningDateValue(new Date()));
+    const nextStartDate = window.prompt(dialogT("crm.planning.fb0132e053"), entry.startDate || formatPlanningDateValue(new Date()));
     if (!nextStartDate) return;
     if (!isValidPlanningDate(nextStartDate)) {
-      window.alert("Date invalide. Utilisez le format AAAA-MM-JJ.");
+      window.alert(dialogT("crm.planning.e7b1fe3d65"));
       return;
     }
 
@@ -10033,17 +9917,15 @@ function PlanningView({
 
     return (
       <div className="planning-quick-actions planning-quick-actions-clean">
-        <BusinessButton permission="write" className="asset-edit-button planning-edit-main" type="button" onClick={() => startPlanningEntryEdit(entry)}>Modifier</BusinessButton>
+        <BusinessButton permission="write" className="asset-edit-button planning-edit-main" type="button" onClick={() => startPlanningEntryEdit(entry)} data-crm-auto-scroll="true">{t("crm.planning.42e37604b6")}</BusinessButton>
         <details className="planning-entry-more planning-entry-more-clean">
-          <summary aria-label="Plus d'actions">•••</summary>
+          <summary aria-label={t("crm.planning.e42e39629b")}>•••</summary>
           <div className="planning-entry-more-menu">
-            {!isClosed ? (
-              <>
-                <BusinessButton type="button" onClick={() => markPlanningEntryDone(entry)}>Terminer</BusinessButton>
-                <BusinessButton type="button" onClick={() => postponePlanningEntry(entry)}>Reporter</BusinessButton>
-                <BusinessButton type="button" onClick={() => cancelPlanningEntryOperationally(entry)}>Annuler</BusinessButton>
-              </>
-            ) : null}
+            {!isClosed ? (<>
+                <BusinessButton type="button" onClick={() => markPlanningEntryDone(entry)}>{t("crm.planning.b4d92528f8")}</BusinessButton>
+                <BusinessButton type="button" onClick={() => postponePlanningEntry(entry)}>{t("crm.planning.ed738fe883")}</BusinessButton>
+                <BusinessButton type="button" onClick={() => cancelPlanningEntryOperationally(entry)} data-crm-dismiss="true">{t("crm.planning.46ad3916f6")}</BusinessButton>
+              </>) : null}
             <BusinessButton permission="remove"
               className="planning-delete-button"
               type="button"
@@ -10053,7 +9935,7 @@ function PlanningView({
                 }
                 onDeletePlanningEntry(entry.id);
               }}
-            >Supprimer définitivement</BusinessButton>
+            >{t("crm.planning.1a797b980d")}</BusinessButton>
           </div>
         </details>
       </div>
@@ -10190,15 +10072,15 @@ function PlanningView({
           secondContact: second.contactName,
           firstStatus: first.status,
           secondStatus: second.status,
-          firstDates: `${formatDateFR(first.startDate)} → ${formatDateFR(first.endDate)}`,
-          secondDates: `${formatDateFR(second.startDate)} → ${formatDateFR(second.endDate)}`,
+          firstDates: `${screen.date(first.startDate)} → ${screen.date(first.endDate)}`,
+          secondDates: `${screen.date(second.startDate)} → ${screen.date(second.endDate)}`,
           severity: hasConfirmed ? "Conflit confirmé" : "Conflit option"
         });
       }
     }
 
     return conflicts;
-  }, [leads, assets]);
+  }, [leads, assets, screen]);
 
   function getEventsForCalendarDay(dayIso: string) {
     return calendarEvents.filter((event) =>
@@ -10217,8 +10099,8 @@ function PlanningView({
 
       return {
         iso,
-        dayLabel: new Intl.DateTimeFormat("fr-FR", { weekday: "short" }).format(date),
-        dateLabel: formatDateFR(iso),
+        dayLabel: new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "Europe/Paris" }).format(date),
+        dateLabel: screen.date(iso),
         events: getEventsForCalendarDay(iso)
       };
     });
@@ -10242,14 +10124,14 @@ function PlanningView({
   })();
 
   function getPlanningAgendaPrimary(event: any) {
-    return String(event.contactName || event.assetLabel || event.title || "Intervention").trim();
+    return String(event.contactName || event.assetLabel || event.title || t("crm.enums.serviceVisit")).trim();
   }
 
   function getPlanningAgendaSecondary(event: any) {
     return [
       event.source === "planning" ? event.title : event.assetLabel,
       event.source === "planning" ? event.assetLabel : event.contactName,
-      event.planningLabel
+      label(event.planningLabel, "crm")
     ].filter(Boolean).join(" · ");
   }
 
@@ -10261,21 +10143,19 @@ function PlanningView({
     return (
       <article className={`planning-agenda-item ${event.blocksAvailability ? "is-blocking" : "is-option"} status-${getPlanningStatusClass(getPlanningEventOperationalStatus(event))}`} key={`${event.source}-${event.id}-${event.startDate}`}>
         <div className="planning-agenda-time">
-          <strong>{formatDateFR(event.startDate)}</strong>
-          <span>{formatPlanningTimeRange(event.startTime, event.endTime) || "Toute la journée"}</span>
+          <strong>{screen.date(event.startDate)}</strong>
+          <span>{screen.timeRange(event.startTime, event.endTime) || t("crm.planning.a0c9ab274d")}</span>
         </div>
 
         <div className="planning-agenda-main">
           <strong>{getPlanningAgendaPrimary(event)}</strong>
           <span>{getPlanningAgendaSecondary(event)}</span>
-          <span className="planning-agenda-explanation">{getPlanningTimingExplanation(event)}</span>
+          <span className="planning-agenda-explanation">{screen.planningExplanation(event)}</span>
         </div>
 
         <div className="planning-agenda-actions">
-          <Badge>{getPlanningEventOperationalStatus(event)}</Badge>
-          {matchingPlanningEntry ? (
-            <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(matchingPlanningEntry)}>Modifier</BusinessButton>
-          ) : null}
+          <Badge>{label(getPlanningEventOperationalStatus(event), "crm")}</Badge>
+          {matchingPlanningEntry ? (<BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(matchingPlanningEntry)} data-crm-auto-scroll="true">{t("crm.planning.42e37604b6")}</BusinessButton>) : null}
         </div>
       </article>
     );
@@ -10421,38 +10301,34 @@ function PlanningView({
       <section className="card planning-filter-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Planning</p>
-            <h3>Disponibilités, réservations & interventions</h3>
+            <p className="eyebrow" data-semantic-text={"Planning"}>{t("crm.planning.21cc305095")}</p>
+            <h3>{t("crm.planning.f00f4b2ad2")}</h3>
           </div>
         </div>
 
         <BusinessForm className="form-grid compact">
-          <BusinessLabel>Planning
-            <select value={categoryFilter} onChange={(event) => {
+          <BusinessLabel>{t("crm.planning.21cc305095")}<select value={categoryFilter} onChange={(event) => {
               setCategoryFilter(event.target.value);
               setAssetFilter("Tous");
             }}>
               {categories.map((category) => (
-                <option key={category}>{category}</option>
+                <option key={category} value={category}>{screen.category(category)}</option>
               ))}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Actif précis
-            <select value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}>
-              <option value="Tous">Tous les actifs</option>
+          <BusinessLabel>{t("crm.planning.ed605ab50c")}<select value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}>
+              <option value="Tous">{t("crm.planning.204aa09406")}</option>
               {assetFilterOptions.map((asset) => (
                 <option key={asset.key} value={asset.key}>{asset.label}</option>
               ))}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Date début
-            <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <BusinessLabel>{t("crm.planning.f12d68908f")}<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </BusinessLabel>
 
-          <BusinessLabel>Date fin
-            <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <BusinessLabel>{t("crm.planning.2382a693af")}<input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </BusinessLabel>
 
           <BusinessButton
@@ -10464,53 +10340,43 @@ function PlanningView({
               setStartDate("");
               setEndDate("");
             }}
-          >
-            Réinitialiser les filtres
-          </BusinessButton>
+          >{t("crm.planning.442c7f653b")}</BusinessButton>
         </BusinessForm>
 
         <div className="planning-scope-notice">
-          <strong>Planning actuel : {categoryFilter === "Tous" ? "Vue globale" : categoryFilter}</strong>
-          <span>{categoryFilter === "Tous" ? "Vue globale : choisissez un planning dans le formulaire si vous ajoutez une intervention." : `Les nouveaux événements seront rangés dans le planning ${categoryFilter}.`}</span>
+          <strong>{t("crm.planning.358acd18da")}{" "}{categoryFilter === "Tous" ? t("crm.planning.5b98d2b868") : categoryFilter}</strong>
+          <span>{categoryFilter === "Tous" ? t("crm.planning.11efb79ad5") : t("crm.planning.b6a85f0b7e", { value1: displayValue(categoryFilter) })}</span>
         </div>
       </section>
 
       <section className="card planning-agenda-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Vue opérationnelle</p>
-            <h3>Aujourd’hui / 7 prochains jours</h3>
+            <p className="eyebrow" data-semantic-text={"Vue opérationnelle"}>{t("crm.planning.90b0ae7795")}</p>
+            <h3>{t("crm.planning.6ce09cd975")}</h3>
           </div>
         </div>
 
         <div className="planning-agenda-grid">
           <div className="planning-agenda-column">
             <div className="planning-agenda-column-heading">
-              <span>Aujourd’hui</span>
+              <span>{t("crm.planning.f2de9e072a")}</span>
               <strong>{todayPlanningAgendaItems.length}</strong>
             </div>
 
             <div className="planning-agenda-list">
-              {todayPlanningAgendaItems.length === 0 ? (
-                <p className="muted-line">Aucune intervention prévue aujourd’hui.</p>
-              ) : (
-                todayPlanningAgendaItems.map((event) => renderPlanningAgendaItem(event))
-              )}
+              {todayPlanningAgendaItems.length === 0 ? (<p className="muted-line">{t("crm.planning.9cf48dd7d4")}</p>) : (todayPlanningAgendaItems.map((event) => renderPlanningAgendaItem(event)))}
             </div>
           </div>
 
           <div className="planning-agenda-column">
             <div className="planning-agenda-column-heading">
-              <span>7 prochains jours</span>
+              <span>{t("crm.planning.ed29742d3f")}</span>
               <strong>{nextPlanningAgendaItems.length}</strong>
             </div>
 
             <div className="planning-agenda-list">
-              {nextPlanningAgendaItems.length === 0 ? (
-                <p className="muted-line">Aucune intervention prévue sur les 7 prochains jours.</p>
-              ) : (
-                nextPlanningAgendaItems.map((event) => renderPlanningAgendaItem(event))
-              )}
+              {nextPlanningAgendaItems.length === 0 ? (<p className="muted-line">{t("crm.planning.0643b2381a")}</p>) : (nextPlanningAgendaItems.map((event) => renderPlanningAgendaItem(event)))}
             </div>
           </div>
         </div>
@@ -10519,16 +10385,13 @@ function PlanningView({
       <section className="card planning-priority-cockpit-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Priorité planning</p>
-            <h3>Prochaines interventions importantes</h3>
+            <p className="eyebrow" data-semantic-text={"Priorité planning"}>{t("crm.planning.a5a246c2f6")}</p>
+            <h3>{t("crm.planning.ee0524fefb")}</h3>
           </div>
         </div>
 
         <div className="planning-priority-cockpit-list">
-          {importantPlanningEntries.length === 0 ? (
-            <p className="muted-line">Aucune intervention prioritaire à traiter dans ce planning.</p>
-          ) : (
-            importantPlanningEntries.map((entry) => {
+          {importantPlanningEntries.length === 0 ? (<p className="muted-line">{t("crm.planning.78e367ceb7")}</p>) : (importantPlanningEntries.map((entry) => {
               const asset = assets.find((item) => item.type === entry.assetType && item.id === entry.assetId);
               const missing = getPlanningEntryMissingFields(entry);
 
@@ -10536,54 +10399,49 @@ function PlanningView({
                 <article className={`mini-row planning-priority-cockpit-row status-${getPlanningStatusClass(getPlanningEntryStatus(entry))}`} key={`priority-${entry.id}`}>
                   <div>
                     <strong>{entry.title}</strong>
-                    <span>{formatPlanningDateTimeRange(entry)} · {entry.contactName || "Aucun contact lié"}{asset ? ` · ${asset.label}` : ""}</span>
-                    <span>{entry.priority || "Normal"}{missing.length ? ` · À compléter : ${missing.join(", ")}` : ""}</span>
+                    <span>{screen.planningRange(entry)} · {entry.contactName || t("crm.planning.9fa7db0383")}{asset ? t("crm.planning.f6b53f9c8a", { value1: displayValue(asset.label) }) : ""}</span>
+                    <span>{label(entry.priority, "crm") || t("crm.planning.a7248eeb45")}{missing.length ? t("crm.planning.f518cce630", { value1: displayValue(missing.map(field => label(field, "crm")).join(", ")) }) : ""}</span>
                   </div>
                   {renderPlanningQuickActions(entry)}
                 </article>
               );
-            })
-          )}
+            }))}
         </div>
       </section>
 
       <section className="card planning-completion-alerts-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Qualité données</p>
-            <h3>{incompletePlanningEntries.length} intervention{incompletePlanningEntries.length > 1 ? "s" : ""} à compléter</h3>
+            <p className="eyebrow" data-semantic-text={"Qualité données"}>{t("crm.planning.37a898d966")}</p>
+            <h3>{t("crm.counts.serviceVisits", { count: incompletePlanningEntries.length })}</h3>
           </div>
         </div>
 
-        {incompletePlanningEntries.length === 0 ? (
-          <p className="muted-line">Aucune alerte : les prochaines interventions ont contact, actif et heure renseignés.</p>
-        ) : (
-          <div className="list-stack planning-alert-list">
+        {incompletePlanningEntries.length === 0 ? (<p className="muted-line">{t("crm.planning.2d3fc7362b")}</p>) : (<div className="list-stack planning-alert-list">
             {incompletePlanningEntries.map(({ entry, missing }) => (
               <article className="mini-row planning-alert-row" key={`missing-${entry.id}`}>
                 <div>
                   <strong>{entry.title}</strong>
-                  <span>{formatDateFR(entry.startDate)} · manque : {missing.join(", ")}</span>
+                  <span>{screen.date(entry.startDate)}{" "}{t("crm.planning.59be1daf02")}{" "}{missing.map(field => label(field, "crm")).join(", ")}</span>
                 </div>
-                <BusinessButton className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(entry)}>Compléter</BusinessButton>
+                <BusinessButton className="asset-edit-button" type="button" onClick={() => startPlanningEntryEdit(entry)}>{t("crm.planning.6ef4b7a589")}</BusinessButton>
               </article>
             ))}
-          </div>
-        )}
+          </div>)}
       </section>
 
       <section id="planning-entry-form" className={`card planning-entry-form-card ${editingPlanningEntry ? "is-editing" : ""}`} data-planning-entry-form="true">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Planning interne</p>
-            <h3>{editingPlanningEntry ? "Modifier une intervention" : "Ajouter une intervention ou une maintenance"}</h3>
+            <p className="eyebrow" data-semantic-text={"Planning interne"}>{t("crm.planning.a783ed5075")}</p>
+            <h3>{editingPlanningEntry ? t("crm.planning.1087b87d57") : t("crm.planning.939931cc85")}</h3>
           </div>
         </div>
 
         {quickPlanningDate && !editingPlanningEntry && (
           <div className="planning-quick-add-banner">
-            <strong>Création rapide</strong>
-            <span>{formatDateFR(quickPlanningDate)} · complétez le titre, l’heure et l’actif si nécessaire.</span>
+            <strong>{t("crm.planning.7aab54dc35")}</strong>
+            <span>{screen.date(quickPlanningDate)}{" "}{t("crm.planning.b74990988f")}</span>
           </div>
         )}
 
@@ -10604,40 +10462,35 @@ function PlanningView({
             }
           }}
         >
-          <BusinessLabel>Titre
-            <input name="title" defaultValue={editingPlanningEntry?.title ?? (quickPlanningDate ? "Rendez-vous" : "")} placeholder="Gardens Jardinier · entretien jardin" required />
+          <BusinessLabel>{t("crm.planning.78e7920010")}<input name="title" defaultValue={editingPlanningEntry?.title ?? (quickPlanningDate ? "Rendez-vous" : "")} placeholder={t("crm.planning.014fb4507d")} required />
           </BusinessLabel>
 
-          <BusinessLabel>Type
-            <select name="type" defaultValue={editingPlanningEntry?.type ?? (quickPlanningDate ? "Autre" : "Intervention prestataire")}>
+          <BusinessLabel>{t("crm.planning.baaddf70fb")}<select name="type" defaultValue={editingPlanningEntry?.type ?? (quickPlanningDate ? "Autre" : "Intervention prestataire")}>
               {planningEntryTypes.map((type) => (
-                <option key={type}>{type}</option>
+                <option key={type} value={type}>{label(type, "crm")}</option>
               ))}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Planning
-            <select name="planningCategory" defaultValue={editingPlanningCategory}>
+          <BusinessLabel>{t("crm.planning.21cc305095")}<select name="planningCategory" defaultValue={editingPlanningCategory}>
               {planningCategoryOptions.map((category) => (
-                <option key={category}>{category}</option>
+                <option key={category} value={category}>{screen.category(category)}</option>
               ))}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Statut
-            <select name="status" defaultValue={editingPlanningEntry ? getPlanningEntryStatus(editingPlanningEntry) : "Prévu"}>
+          <BusinessLabel>{t("crm.planning.dee377cfd8")}<select name="status" defaultValue={editingPlanningEntry ? getPlanningEntryStatus(editingPlanningEntry) : "Prévu"}>
               {planningEntryStatuses.map((status) => (
-                <option key={status}>{status}</option>
+                <option key={status} value={status}>{label(status, "crm")}</option>
               ))}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Contact lié
-            <input
+          <BusinessLabel>{t("crm.planning.16a7ec6358")}<input
               name="contactName"
               list="planning-contact-options"
               defaultValue={editingPlanningEntry?.contactName ?? ""}
-              placeholder="Nom, société ou email"
+              placeholder={t("crm.planning.c10669d9f2")}
               autoComplete="off"
             />
             <datalist id="planning-contact-options">
@@ -10647,85 +10500,69 @@ function PlanningView({
             </datalist>
           </BusinessLabel>
 
-          <BusinessLabel>Actif lié
-            <select name="assetKey" defaultValue={editingPlanningAssetKey}>
-              <option value="">Aucun actif lié</option>
+          <BusinessLabel>{t("crm.planning.833fcb6f22")}<select name="assetKey" defaultValue={editingPlanningAssetKey}>
+              <option value="">{t("crm.planning.1ceb66fe96")}</option>
               {visibleAssetOptions.map((asset) => (
                 <option key={asset.key} value={asset.key}>{asset.label}</option>
               ))}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Date début
-            <input type="date" name="startDate" defaultValue={editingPlanningEntry?.startDate ?? quickPlanningDate} required />
+          <BusinessLabel>{t("crm.planning.f12d68908f")}<input type="date" name="startDate" defaultValue={editingPlanningEntry?.startDate ?? quickPlanningDate} required />
           </BusinessLabel>
 
-          <BusinessLabel>Date fin
-            <input type="date" name="endDate" defaultValue={editingPlanningEntry?.endDate ?? quickPlanningDate} />
+          <BusinessLabel>{t("crm.planning.2382a693af")}<input type="date" name="endDate" defaultValue={editingPlanningEntry?.endDate ?? quickPlanningDate} />
           </BusinessLabel>
 
-          <BusinessLabel>Heure arrivée
-            <input type="time" name="startTime" defaultValue={editingPlanningEntry?.startTime ?? ""} />
+          <BusinessLabel>{t("crm.planning.717a6ee471")}<input type="time" name="startTime" defaultValue={editingPlanningEntry?.startTime ?? ""} />
           </BusinessLabel>
 
-          <BusinessLabel>Heure départ
-            <input type="time" name="endTime" defaultValue={editingPlanningEntry?.endTime ?? ""} />
+          <BusinessLabel>{t("crm.planning.28e11f988c")}<input type="time" name="endTime" defaultValue={editingPlanningEntry?.endTime ?? ""} />
           </BusinessLabel>
 
-          <BusinessLabel>Bloque la disponibilité
-            <select name="blocksAvailability" defaultValue={editingPlanningEntry?.blocksAvailability ? "true" : "false"}>
-              <option value="false">Non</option>
-              <option value="true">Oui</option>
+          <BusinessLabel>{t("crm.planning.1da985c0b1")}<select name="blocksAvailability" defaultValue={editingPlanningEntry?.blocksAvailability ? "true" : "false"}>
+              <option value="false">{t("crm.planning.7f62496b0c")}</option>
+              <option value="true">{t("crm.planning.0a90407639")}</option>
             </select>
           </BusinessLabel>
 
-          <BusinessLabel className="planning-entry-notes">Notes
-            <textarea name="notes" defaultValue={editingPlanningEntry?.notes ?? ""} placeholder="Détails internes, horaires, consignes..." />
+          <BusinessLabel className="planning-entry-notes">{t("crm.planning.8a7525b149")}<textarea name="notes" defaultValue={editingPlanningEntry?.notes ?? ""} placeholder={t("crm.planning.baf4fd9766")} />
           </BusinessLabel>
 
           <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
-            {editingPlanningEntry ? "Enregistrer les modifications" : "Ajouter au planning"}
+            {editingPlanningEntry ? t("crm.planning.45951f6ac1") : t("crm.planning.6800f275a4")}
           </BusinessButton>
 
           {editingPlanningEntry && (
-            <BusinessButton className="ghost-button" type="button" onClick={cancelPlanningEntryEdit}>
-              Annuler
-            </BusinessButton>
+            <BusinessButton className="ghost-button" type="button" onClick={cancelPlanningEntryEdit} data-crm-dismiss="true">{t("crm.planning.46ad3916f6")}</BusinessButton>
           )}
         </BusinessForm>
 
         <div className="planning-legend">
-          <span><i className="legend-dot status-finished" /> Vert = terminé</span>
-          <span><i className="legend-dot status-active" /> Jaune = en cours / à confirmer</span>
-          <span><i className="legend-dot status-upcoming" /> Rouge = à venir</span>
+          <span><i className="legend-dot status-finished" />{" "}{t("crm.planning.dea28c46fd")}</span>
+          <span><i className="legend-dot status-active" />{" "}{t("crm.planning.140b715af5")}</span>
+          <span><i className="legend-dot status-upcoming" />{" "}{t("crm.planning.2774f327bd")}</span>
         </div>
 
         <div className="planning-list-summary">
           <div>
-            <strong>{activePlanningEntries.length} intervention{activePlanningEntries.length > 1 ? "s" : ""} à venir / en cours</strong>
-            <span>{completedPlanningEntries.length} terminée{completedPlanningEntries.length > 1 ? "s" : ""} ou annulée{completedPlanningEntries.length > 1 ? "s" : ""} masquée{completedPlanningEntries.length > 1 ? "s" : ""} par défaut.</span>
+            <strong>{activePlanningEntries.length}{" "}{t("crm.planning.77f4c0b60e")}{activePlanningEntries.length > 1 ? t("crm.planning.043a718774") : ""}{" "}{t("crm.planning.cce72bcc7c")}</strong>
+            <span>{completedPlanningEntries.length}{" "}{t("crm.planning.bae4a7b343")}{completedPlanningEntries.length > 1 ? t("crm.planning.043a718774") : ""}{" "}{t("crm.planning.80f754d964")}{completedPlanningEntries.length > 1 ? t("crm.planning.043a718774") : ""}{" "}{t("crm.planning.6d26b50653")}{completedPlanningEntries.length > 1 ? t("crm.planning.043a718774") : ""}{" "}{t("crm.planning.c43f941a71")}</span>
           </div>
 
           <div className="planning-list-summary-actions">
-            {activePlanningEntries.length > 7 ? (
-              <BusinessButton className="ghost-button" type="button" onClick={() => setShowAllUpcomingPlanningEntries((value) => !value)}>
-                {showAllUpcomingPlanningEntries ? "Réduire aux 7 prochaines" : `Afficher toutes les à venir (${activePlanningEntries.length})`}
-              </BusinessButton>
-            ) : null}
+            {activePlanningEntries.length > 7 ? (<BusinessButton className="ghost-button" type="button" onClick={() => setShowAllUpcomingPlanningEntries((value) => !value)}>
+                {showAllUpcomingPlanningEntries ? t("crm.planning.478f8909b0") : t("crm.planning.3051041719", { value1: displayValue(activePlanningEntries.length) })}
+              </BusinessButton>) : null}
 
-            {completedPlanningEntries.length > 0 ? (
-              <BusinessButton className="ghost-button muted-action-button" type="button" onClick={() => setShowCompletedPlanningEntries((value) => !value)}>
-                {showCompletedPlanningEntries ? "Masquer les terminées" : `Afficher les terminées (${completedPlanningEntries.length})`}
-              </BusinessButton>
-            ) : null}
+            {completedPlanningEntries.length > 0 ? (<BusinessButton className="ghost-button muted-action-button" type="button" onClick={() => setShowCompletedPlanningEntries((value) => !value)}>
+                {showCompletedPlanningEntries ? t("crm.planning.be042d51da") : t("crm.planning.b90ce6bb46", { value1: displayValue(completedPlanningEntries.length) })}
+              </BusinessButton>) : null}
           </div>
         </div>
 
         <div className="list-stack planning-priority-list">
-          {planningEntriesToDisplay.length === 0 ? (
-            <p className="muted-line">Aucune intervention à venir dans ce planning. Les interventions terminées sont masquées par défaut.</p>
-          ) : (
-            planningEntriesToDisplay
+          {planningEntriesToDisplay.length === 0 ? (<p className="muted-line">{t("crm.planning.ab4f644dc0")}</p>) : (planningEntriesToDisplay
               .map((entry) => {
                 const asset = assets.find((item) => item.type === entry.assetType && item.id === entry.assetId);
 
@@ -10734,100 +10571,83 @@ function PlanningView({
                     <div className="planning-entry-info-clean">
                       <strong>{entry.title}</strong>
                       <span className="planning-entry-main-line">
-                        {formatPlanningDateTimeRange(entry)} · {entry.contactName || "Aucun contact lié"}{asset ? ` · ${asset.label}` : ""}
+                        {screen.planningRange(entry)} · {entry.contactName || t("crm.planning.9fa7db0383")}{asset ? t("crm.planning.f6b53f9c8a", { value1: displayValue(asset.label) }) : ""}
                       </span>
-                      <span className="planning-entry-secondary-line">{entry.type}{entry.notes ? ` · ${entry.notes}` : ""}</span>
-                      <span className="planning-entry-timing-explanation">{getPlanningTimingExplanation(entry)}</span>
+                      <span className="planning-entry-secondary-line">{entry.type}{entry.notes ? t("crm.planning.f6b53f9c8a", { value1: displayValue(entry.notes) }) : ""}</span>
+                      <span className="planning-entry-timing-explanation">{screen.planningExplanation(entry)}</span>
                       <ActionMeta item={entry} />
                     </div>
                     <div className="planning-entry-side-clean">
                       <div className="planning-entry-badges-clean">
-                        <Badge>{getPlanningEntryStatus(entry)}</Badge>
+                        <Badge>{label(getPlanningEntryStatus(entry), "crm")}</Badge>
                         {getPlanningInclusiveDayCount(entry.startDate, entry.endDate || entry.startDate) > 1 ? (
-                          <Badge>{`Sur ${getPlanningInclusiveDayCount(entry.startDate, entry.endDate || entry.startDate)} jours`}</Badge>
+                          <Badge>{t("crm.planning.bcc8462ba4", { value1: displayValue(getPlanningInclusiveDayCount(entry.startDate, entry.endDate || entry.startDate)) })}</Badge>
                         ) : null}
-                        <Badge>{entry.blocksAvailability ? "Bloquant" : "Non bloquant"}</Badge>
-                        {entry.priority && entry.priority !== "Normal" ? <Badge>{entry.priority}</Badge> : null}
+                        <Badge>{entry.blocksAvailability ? t("crm.planning.d95dc51829") : t("crm.planning.81e809b3b9")}</Badge>
+                        {entry.priority && entry.priority !== "Normal" ? <Badge>{label(entry.priority, "crm")}</Badge> : null}
                       </div>
                       {renderPlanningQuickActions(entry)}
                     </div>
                   </article>
                 );
-              })
-          )}
+              }))}
         </div>
       </section>
 
       <section className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Conflits planning</p>
-            <h3>{planningConflicts.length} conflit{planningConflicts.length > 1 ? "s" : ""} détecté{planningConflicts.length > 1 ? "s" : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Conflits planning"}>{t("crm.planning.2bcb054039")}</p>
+            <h3>{planningConflicts.length}{" "}{t("crm.planning.ef6bb5ad81")}{planningConflicts.length > 1 ? t("crm.planning.043a718774") : ""}{" "}{t("crm.planning.413cf9ae9a")}{planningConflicts.length > 1 ? t("crm.planning.043a718774") : ""}</h3>
           </div>
         </div>
 
         <div className="list-stack oar-contact-list-stack">
-          {planningConflicts.length === 0 ? (
-            <p className="muted-line">Aucun conflit détecté sur les actifs liés aux leads.</p>
-          ) : (
-            planningConflicts.map((conflict) => (
+          {planningConflicts.length === 0 ? (<p className="muted-line">{t("crm.planning.60dd946c2d")}</p>) : (planningConflicts.map((conflict) => (
               <article className="mini-row" key={conflict.key}>
                 <div>
                   <strong>{conflict.assetLabel}</strong>
-                  <span>{conflict.firstContact} · {conflict.firstDates} · {conflict.firstStatus}</span>
-                  <span>{conflict.secondContact} · {conflict.secondDates} · {conflict.secondStatus}</span>
+                  <span>{conflict.firstContact} · {conflict.firstDates} · {label(conflict.firstStatus, "crm")}</span>
+                  <span>{conflict.secondContact} · {conflict.secondDates} · {label(conflict.secondStatus, "crm")}</span>
                 </div>
-                <Badge>{conflict.severity}</Badge>
+                <Badge>{label(conflict.severity, "crm")}</Badge>
               </article>
-            ))
-          )}
+            )))}
         </div>
       </section>
 
       <section className="card planning-calendar-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Calendrier mensuel</p>
-            <h3>{getPlanningMonthTitle(calendarMonth)}</h3>
+            <p className="eyebrow" data-semantic-text={"Calendrier mensuel"}>{t("crm.planning.e4a0656f45")}</p>
+            <h3>{screen.monthTitle(calendarMonth)}</h3>
           </div>
 
           <div className="quote-actions">
-            <BusinessButton className="ghost-button" type="button" onClick={() => moveCalendarMonth(-1)}>
-              Mois précédent
-            </BusinessButton>
+            <BusinessButton className="ghost-button" type="button" onClick={() => moveCalendarMonth(-1)}>{t("crm.planning.ce294cc82b")}</BusinessButton>
 
-            <BusinessButton className="ghost-button" type="button" onClick={() => moveCalendarMonth(1)}>
-              Mois suivant
-            </BusinessButton>
+            <BusinessButton className="ghost-button" type="button" onClick={() => moveCalendarMonth(1)}>{t("crm.planning.2e82fa5d91")}</BusinessButton>
           </div>
         </div>
 
         <BusinessForm className="form-grid compact planning-view-controls">
-          <BusinessLabel>Vue
-            <select value={planningViewMode} onChange={(event) => setPlanningViewMode(event.target.value as "month" | "week")}>
-              <option value="month">Mois</option>
-              <option value="week">Semaine</option>
+          <BusinessLabel>{t("crm.planning.b111a2a218")}<select value={planningViewMode} onChange={(event) => setPlanningViewMode(event.target.value as "month" | "week")}>
+              <option value="month">{t("crm.planning.709ceef6d9")}</option>
+              <option value="week">{t("crm.planning.0934d42938")}</option>
             </select>
           </BusinessLabel>
 
-          {planningViewMode === "month" ? (
-            <BusinessLabel>Mois
-              <input type="month" value={calendarMonth} onChange={(event) => setCalendarMonth(event.target.value)} />
-            </BusinessLabel>
-          ) : (
-            <BusinessLabel>Semaine du
-              <input type="date" value={planningWeekStart} onChange={(event) => setPlanningWeekStart(event.target.value)} />
-            </BusinessLabel>
-          )}
+          {planningViewMode === "month" ? (<BusinessLabel>{t("crm.planning.709ceef6d9")}<input type="month" value={calendarMonth} onChange={(event) => setCalendarMonth(event.target.value)} />
+            </BusinessLabel>) : (<BusinessLabel>{t("crm.planning.e84c48c2b2")}<input type="date" value={planningWeekStart} onChange={(event) => setPlanningWeekStart(event.target.value)} />
+            </BusinessLabel>)}
         </BusinessForm>
 
-        {planningViewMode === "month" ? (
-          <div className="table-wrap planning-month-table-wrap">
+        {planningViewMode === "month" ? (<div className="table-wrap planning-month-table-wrap">
             <table className="planning-month-table">
             <thead>
               <tr>
                 {calendarWeekDays.map((day) => (
-                  <th key={day}>{day}</th>
+                  <th key={day}>{label(day, "crm")}</th>
                 ))}
               </tr>
             </thead>
@@ -10865,8 +10685,8 @@ function PlanningView({
                                 const matchingPlanningEntry = event.source === "planning"
                                   ? planningEntries.find((entry) => entry.id === event.id)
                                   : null;
-                                const eventLabel = getPlanningCalendarEventLabel(event, day.iso);
-                                const eventSegment = getPlanningCalendarDaySegmentStatus(event, day.iso);
+                                const eventLabel = screen.planningEventLabel(event, day.iso);
+                                const eventSegment = screen.planningSegment(event, day.iso);
                                 const eventExplanation = eventSegment.explanation;
 
                                 return matchingPlanningEntry ? (
@@ -10897,7 +10717,7 @@ function PlanningView({
                             )}
 
                             {events.length > 4 && (
-                              <small>+ {events.length - 4} autre{events.length - 4 > 1 ? "s" : ""}</small>
+                              <small>+ {events.length - 4}{" "}{t("crm.planning.e996f29149")}{events.length - 4 > 1 ? t("crm.planning.043a718774") : ""}</small>
                             )}
                           </div>
                         ) : (
@@ -10910,13 +10730,11 @@ function PlanningView({
               ))}
             </tbody>
           </table>
-          </div>
-        ) : (
-          <div className="planning-week-view">
+          </div>) : (<div className="planning-week-view">
             <div className="planning-week-toolbar">
-              <BusinessButton className="ghost-button" type="button" onClick={() => movePlanningWeek(-1)}>Semaine précédente</BusinessButton>
-              <strong>{formatDateFR(planningWeekDays[0]?.iso)} → {formatDateFR(planningWeekDays[6]?.iso)}</strong>
-              <BusinessButton className="ghost-button" type="button" onClick={() => movePlanningWeek(1)}>Semaine suivante</BusinessButton>
+              <BusinessButton className="ghost-button" type="button" onClick={() => movePlanningWeek(-1)}>{t("crm.planning.514db0d416")}</BusinessButton>
+              <strong>{screen.date(planningWeekDays[0]?.iso)} → {screen.date(planningWeekDays[6]?.iso)}</strong>
+              <BusinessButton className="ghost-button" type="button" onClick={() => movePlanningWeek(1)}>{t("crm.planning.fa063d47c1")}</BusinessButton>
             </div>
 
             <div className="planning-week-grid">
@@ -10935,14 +10753,14 @@ function PlanningView({
 
                   <div className="planning-week-events">
                     {day.events.length === 0 ? (
-                      <span className="planning-week-empty">Libre</span>
+                      <span className="planning-week-empty">{t("crm.planning.162d92c98a")}</span>
                     ) : (
                       day.events.map((event) => {
                         const matchingPlanningEntry = event.source === "planning"
                           ? planningEntries.find((entry) => entry.id === event.id)
                           : null;
-                        const eventLabel = getPlanningCalendarEventLabel(event, day.iso);
-                        const eventSegment = getPlanningCalendarDaySegmentStatus(event, day.iso);
+                        const eventLabel = screen.planningEventLabel(event, day.iso);
+                        const eventSegment = screen.planningSegment(event, day.iso);
                         const eventExplanation = eventSegment.explanation;
 
                         return matchingPlanningEntry ? (
@@ -10975,15 +10793,14 @@ function PlanningView({
                 </article>
               ))}
             </div>
-          </div>
-        )}
+          </div>)}
       </section>
 
       <section className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Disponibilités</p>
-            <h3>{visibleAssets.length} actif{visibleAssets.length > 1 ? "s" : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Disponibilités"}>{t("crm.planning.f13a7f6816")}</p>
+            <h3>{visibleAssets.length}{" "}{t("crm.planning.92b2bce8d3")}{visibleAssets.length > 1 ? t("crm.planning.043a718774") : ""}</h3>
           </div>
         </div>
 
@@ -10991,11 +10808,11 @@ function PlanningView({
           <table className="mobile-card-table planning-availability-table">
             <thead>
               <tr>
-                <th>Actif</th>
-                <th>Catégorie</th>
-                <th>Lieu</th>
-                <th>Statut période</th>
-                <th>Prochaines locations</th>
+                <th>{t("crm.planning.ad26287ab6")}</th>
+                <th>{t("crm.planning.68a5341fc6")}</th>
+                <th>{t("crm.planning.49dd011dd8")}</th>
+                <th>{t("crm.planning.53a0db54e4")}</th>
+                <th>{t("crm.planning.b0d4321c23")}</th>
               </tr>
             </thead>
 
@@ -11006,24 +10823,24 @@ function PlanningView({
 
                 return (
                   <tr key={`${asset.type}-${asset.id}`}>
-                    <td data-label="Actif">
+                    <td data-label={t("crm.planning.ad26287ab6")}>
                       <strong>{asset.label}</strong>
                       <small>
-                        {bookings.length} confirmée{bookings.length > 1 ? "s" : ""} · {options.length} option{options.length > 1 ? "s" : ""}
+                        {bookings.length}{" "}{t("crm.planning.2b21bab38e")}{bookings.length > 1 ? t("crm.planning.043a718774") : ""} · {options.length}{" "}{t("crm.planning.a11a75e0fe")}{options.length > 1 ? t("crm.planning.043a718774") : ""}
                       </small>
                     </td>
-                    <td data-label="Catégorie">{asset.category}</td>
-                    <td data-label="Lieu">{asset.location}</td>
-                    <td data-label="Statut période">
-                      <Badge>{getAvailabilityLabel(asset)}</Badge>
+                    <td data-label={t("crm.planning.68a5341fc6")}>{label(asset.category, "crm")}</td>
+                    <td data-label={t("crm.planning.49dd011dd8")}>{asset.location}</td>
+                    <td data-label={t("crm.planning.53a0db54e4")}>
+                      <Badge>{label(getAvailabilityLabel(asset), "crm")}</Badge>
                     </td>
-                    <td data-label="Prochaines locations">
+                    <td data-label={t("crm.planning.b0d4321c23")}>
                       {bookings.length === 0 ? (
-                        <span className="muted-line">Aucune location confirmée</span>
+                        <span className="muted-line">{t("crm.planning.f48e7a7f72")}</span>
                       ) : (
                         bookings.slice(0, 3).map((booking) => (
                           <span className="muted-line" key={booking.id}>
-                            {formatDateFR(booking.startDate)} → {formatDateFR(booking.endDate)} · {booking.contactName}
+                            {screen.date(booking.startDate)} → {screen.date(booking.endDate)} · {booking.contactName}
                           </span>
                         ))
                       )}
@@ -11039,53 +10856,45 @@ function PlanningView({
       <section className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Options / demandes en cours</p>
-            <h3>{visiblePendingBookings.length} demande{visiblePendingBookings.length > 1 ? "s" : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Options / demandes en cours"}>{t("crm.planning.58b471b978")}</p>
+            <h3>{visiblePendingBookings.length}{" "}{t("crm.planning.d956eafa6f")}{visiblePendingBookings.length > 1 ? t("crm.planning.043a718774") : ""}</h3>
           </div>
         </div>
 
         <div className="list-stack oar-contact-list-stack">
-          {visiblePendingBookings.length === 0 ? (
-            <p className="muted-line">Aucune option en cours. Ajoutez un lead avec dates, actif lié et statut Contacté / Devis / Négociation pour le voir ici.</p>
-          ) : (
-            visiblePendingBookings.map((booking) => (
+          {visiblePendingBookings.length === 0 ? (<p className="muted-line">{t("crm.planning.c72143bfbd")}</p>) : (visiblePendingBookings.map((booking) => (
               <article className="mini-row" key={booking.id}>
                 <div>
                   <strong>{booking.assetLabel}</strong>
-                  <span>{booking.contactName} · {formatDateFR(booking.startDate)} → {formatDateFR(booking.endDate)}</span>
-                  <span>{booking.assetCategory} · {currency.format(booking.value)}</span>
+                  <span>{booking.contactName} · {screen.date(booking.startDate)} → {screen.date(booking.endDate)}</span>
+                  <span>{label(booking.assetCategory, "crm")} · {screen.money(booking.value)}</span>
                   {booking.nextAction && <span>{booking.nextAction}</span>}
                 </div>
-                <Badge>{booking.status}</Badge>
+                <Badge>{label(booking.status, "crm")}</Badge>
               </article>
-            ))
-          )}
+            )))}
         </div>
       </section>
 
       <section className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Locations confirmées</p>
-            <h3>{visibleConfirmedBookings.length} réservation{visibleConfirmedBookings.length > 1 ? "s" : ""}</h3>
+            <p className="eyebrow" data-semantic-text={"Locations confirmées"}>{t("crm.planning.4202fd751d")}</p>
+            <h3>{visibleConfirmedBookings.length}{" "}{t("crm.planning.836162ece7")}{visibleConfirmedBookings.length > 1 ? t("crm.planning.043a718774") : ""}</h3>
           </div>
         </div>
 
         <div className="list-stack oar-contact-list-stack">
-          {visibleConfirmedBookings.length === 0 ? (
-            <p className="muted-line">Aucune location confirmée pour le moment. Quand un lead est gagné avec dates et actif lié, il apparaîtra ici.</p>
-          ) : (
-            visibleConfirmedBookings.map((booking) => (
+          {visibleConfirmedBookings.length === 0 ? (<p className="muted-line">{t("crm.planning.e3ade5ce33")}</p>) : (visibleConfirmedBookings.map((booking) => (
               <article className="mini-row" key={booking.id}>
                 <div>
                   <strong>{booking.assetLabel}</strong>
-                  <span>{booking.contactName} · {formatDateFR(booking.startDate)} → {formatDateFR(booking.endDate)}</span>
-                  <span>{booking.assetCategory} · {currency.format(booking.value)}</span>
+                  <span>{booking.contactName} · {screen.date(booking.startDate)} → {screen.date(booking.endDate)}</span>
+                  <span>{label(booking.assetCategory, "crm")} · {screen.money(booking.value)}</span>
                 </div>
-                <Badge>Confirmé</Badge>
+                <Badge>{t("crm.planning.1278c77084")}</Badge>
               </article>
-            ))
-          )}
+            )))}
         </div>
       </section>
     </div>
@@ -11131,6 +10940,20 @@ function FollowUpsPanel({
   quotes: QuoteRequest[];
   onCreateTask: (recommendation: FollowUpRecommendation) => void;
 }) {
+  const { t, label, screen } = useCRMDisplay();
+
+  // The canonical recommendation still seeds the existing task title and notes.
+  function displayRecommendation(recommendation: FollowUpRecommendation) {
+    const lead = recommendation.leadId ? leads.find(item => item.id === recommendation.leadId) : undefined;
+    if (lead && recommendation.id.startsWith("lead-due-")) return { title: t("crm.screen.followLead", { name: lead.contactName }), detail: [label(lead.category, "crm"), label(lead.status, "crm"), screen.due(lead.dueDate)].join(" · ") };
+    if (lead && recommendation.id.startsWith("lead-action-")) return { title: t("crm.screen.defineAction", { name: lead.contactName }), detail: t("crm.screen.noAction", { category: label(lead.category, "crm"), status: label(label(lead.status, "crm"), "crm") }) };
+    const quoteId = recommendation.id.replace(/^quote-(sent|accepted)-/, "");
+    const quote = quotes.find(item => item.id === quoteId);
+    if (quote && recommendation.id.startsWith("quote-sent-")) return { title: t("crm.screen.followQuote", { name: quote.clientName }), detail: t("crm.counts.daysSent", { title: quote.title || t("crm.enums.quote"), count: getQuoteStatusAgeDays(quote) }) };
+    if (quote && recommendation.id.startsWith("quote-accepted-")) return { title: t("crm.screen.acceptedNext", { name: quote.clientName }), detail: t("crm.screen.acceptedDetail", { title: quote.title || t("crm.screen.acceptedQuote") }) };
+    return recommendation;
+  }
+
   const recommendations = useMemo<FollowUpRecommendation[]>(() => {
     const items: FollowUpRecommendation[] = [];
 
@@ -11197,36 +11020,30 @@ function FollowUpsPanel({
     <section className="card">
       <div className="section-heading">
         <div>
-          <p className="eyebrow">Relances recommandées</p>
-          <h3>{recommendations.length} action{recommendations.length > 1 ? "s" : ""} à traiter</h3>
+          <p className="eyebrow" data-semantic-text={"Relances recommandées"}>{t("crm.followUps.b1971b8fa2")}</p>
+          <h3>{t("crm.counts.actions", { count: recommendations.length })}</h3>
         </div>
       </div>
 
       <div className="list-stack oar-contact-list-stack">
-        {recommendations.length === 0 ? (
-          <p className="muted-line">Aucune relance urgente pour le moment. Les leads en retard, sans action ou les devis à suivre apparaîtront ici.</p>
-        ) : (
-          recommendations.map((recommendation) => (
+        {recommendations.length === 0 ? (<p className="muted-line">{t("crm.followUps.a16b9a541c")}</p>) : (recommendations.map((recommendation) => (
             <article className="mini-row" key={recommendation.id}>
               <div>
-                <strong>{recommendation.title}</strong>
-                <span>{recommendation.detail}</span>
+                <strong>{displayRecommendation(recommendation).title}</strong>
+                <span>{displayRecommendation(recommendation).detail}</span>
               </div>
 
               <div className="quote-actions">
-                <Badge>{recommendation.priority}</Badge>
+                <Badge>{label(recommendation.priority, "crm")}</Badge>
 
                 <button
                   className="secondary-button"
                   type="button"
                   onClick={() => onCreateTask(recommendation)}
-                >
-                  Créer tâche
-                </button>
+                 data-crm-auto-scroll="true">{t("crm.followUps.4aff416a21")}</button>
               </div>
             </article>
-          ))
-        )}
+          )))}
       </div>
     </section>
   );
@@ -11256,6 +11073,8 @@ function Dashboard({
   onCloudBackup: () => void;
   onDashboardAction: (tab: Tab, targetId?: string) => void;
 }) {
+  const { t, label, screen } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   type DashboardItem = {
     id: string;
@@ -11338,7 +11157,7 @@ function Dashboard({
               key={item.id}
               type="button"
               onClick={() => item.action ? item.action() : item.tab ? onDashboardAction(item.tab, item.targetId) : undefined}
-              title="Ouvrir le module concerné"
+              title={t("crm.dashboard.5f7c434e7c")}
             >
               {rowContent}
             </BusinessButton>
@@ -11462,26 +11281,26 @@ function Dashboard({
   const urgentItems: DashboardItem[] = [
     ...overdueVendorInvoices.slice(0, 3).map((invoice) => ({
       id: `vendor-late-${invoice.id}`,
-      title: "Facture prestataire en retard",
-      detail: `${invoice.contactName || invoice.title} · ${formatEuroAmount(getVendorInvoiceRemaining(invoice))} restant`,
-      badge: "Retard",
+      title: t("crm.dashboard.3dd08c5734"),
+      detail: t("crm.dashboard.7b80e99c68", { value1: displayValue(invoice.contactName || invoice.title), value2: displayValue(screen.euro(getVendorInvoiceRemaining(invoice))) }),
+      badge: t("crm.dashboard.040413ac34"),
       tone: "danger" as const,
       tab: "vendorInvoices" as Tab,
       targetId: `vendor-invoice-${invoice.id}`
     })),
     ...clientPaymentsLate.slice(0, 2).map((quote) => ({
       id: `client-payment-late-${quote.id}`,
-      title: "Paiement client en retard",
-      detail: `${quote.clientName} · ${currency.format(paymentRemaining(quote))} restant`,
-      badge: "Client",
+      title: t("crm.dashboard.d8e36b3a27"),
+      detail: t("crm.dashboard.7b80e99c68", { value1: displayValue(quote.clientName), value2: displayValue(screen.money(paymentRemaining(quote))) }),
+      badge: t("crm.dashboard.0c77fe09ab"),
       tone: "danger" as const,
       tab: "bookings" as Tab,
       targetId: `booking-${quote.id}`
     })),
     ...blockingPlanning.slice(0, 2).map((entry) => ({
       id: `planning-blocking-${entry.id}`,
-      title: "Intervention bloquante",
-      detail: `${entry.title} · ${entry.startDate || "Date à compléter"}`,
+      title: t("crm.dashboard.f3c18e799d"),
+      detail: t("crm.dashboard.7c639bc99b", { value1: displayValue(entry.title), value2: displayValue(entry.startDate || t("crm.enums.dateRequired")) }),
       badge: getPlanningEntryStatus(entry),
       tone: "warning" as const,
       tab: "planning" as Tab,
@@ -11489,9 +11308,9 @@ function Dashboard({
     })),
     ...houseDueItems.slice(0, 2).map((item, index) => ({
       id: `house-due-${index}-${item.workerName}`,
-      title: "Intervenant à payer",
-      detail: `${item.workerName} · ${currency.format(item.due)}`,
-      badge: "À payer",
+      title: t("crm.dashboard.d84793b512"),
+      detail: t("crm.dashboard.7c639bc99b", { value1: displayValue(item.workerName), value2: displayValue(screen.money(item.due)) }),
+      badge: t("crm.dashboard.f86724b3a3"),
       tone: "warning" as const,
       tab: "houseTracking" as Tab
     }))
@@ -11511,9 +11330,9 @@ function Dashboard({
 
       return {
         id: `vendor-alert-${invoice.id}`,
-        title: isLate ? "Facture prestataire en retard" : "Facture prestataire à payer",
-        detail: `${invoice.contactName || invoice.title} · ${formatEuroAmount(getVendorInvoiceRemaining(invoice))} restant`,
-        badge: isLate ? "Retard" : "À payer",
+        title: isLate ? t("crm.dashboard.3dd08c5734") : t("crm.dashboard.cbd8f228ea"),
+        detail: t("crm.dashboard.7b80e99c68", { value1: displayValue(invoice.contactName || invoice.title), value2: displayValue(screen.euro(getVendorInvoiceRemaining(invoice))) }),
+        badge: isLate ? t("crm.dashboard.040413ac34") : t("crm.dashboard.f86724b3a3"),
         tone: isLate ? "danger" as const : "warning" as const,
         tab: "vendorInvoices" as Tab,
         targetId: `vendor-invoice-${invoice.id}`
@@ -11521,8 +11340,8 @@ function Dashboard({
     });
 const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
     id: `today-${entry.id}`,
-    title: `${entry.startTime || "journée"}${entry.endTime ? ` → ${entry.endTime}` : ""} · ${entry.title}`,
-    detail: `${entry.contactName || "Aucun contact lié"}${entry.notes ? ` · ${entry.notes}` : ""}`,
+    title: t("crm.dashboard.e34da93361", { value1: displayValue(entry.startTime || t("crm.enums.day")), value2: displayValue(entry.endTime ? ` → ${entry.endTime}` : ""), value3: displayValue(entry.title) }),
+    detail: t("crm.dashboard.9989fa2d2c", { value1: displayValue(entry.contactName || t("crm.planning.9fa7db0383")), value2: displayValue(entry.notes ? ` · ${entry.notes}` : "") }),
     badge: getPlanningEntryStatus(entry),
     tone: getPlanningEntryStatus(entry) === "En cours" ? "warning" : getPlanningEntryStatus(entry) === "Terminé" ? "success" : "neutral",
     tab: "planning" as Tab,
@@ -11532,25 +11351,25 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
   const moneyItems: DashboardItem[] = [
     supplierAmountToPay > 0 ? {
       id: "money-supplier-payments",
-      title: `${formatEuroAmount(supplierAmountToPay)} à payer`,
-      detail: `${unpaidVendorInvoices.length} facture(s) prestataire · ${houseDueItems.length} intervenant(s) maison`,
-      badge: "Sortie",
+      title: t("crm.dashboard.21bbf7e76d", { value1: displayValue(screen.euro(supplierAmountToPay)) }),
+      detail: t("crm.dashboard.c235e2597b", { value1: displayValue(unpaidVendorInvoices.length), value2: displayValue(houseDueItems.length) }),
+      badge: t("crm.dashboard.987ce358af"),
       tone: supplierAmountToPay > 0 ? "warning" as const : "neutral" as const,
       action: () => onDashboardAction(vendorAmountToPay > 0 ? "vendorInvoices" : "houseTracking")
     } : null,
     clientAmountToReceive > 0 ? {
       id: "money-client-payments",
-      title: `${currency.format(clientAmountToReceive)} à recevoir`,
-      detail: `${clientPaymentsToFollow.length} paiement(s) client à suivre`,
-      badge: "Entrée",
+      title: t("crm.dashboard.953022dd27", { value1: displayValue(screen.money(clientAmountToReceive)) }),
+      detail: t("crm.dashboard.d050477aef", { value1: displayValue(clientPaymentsToFollow.length) }),
+      badge: t("crm.dashboard.d9c7efe130"),
       tone: clientPaymentsLate.length > 0 ? "danger" as const : "warning" as const,
       tab: "bookings" as Tab
     } : null,
     {
       id: "money-confirmed-margin",
-      title: `${currency.format(estimatedMargin)} de marge estimée`,
-      detail: `${currency.format(confirmedRevenue)} de chiffre confirmé`,
-      badge: "Confirmé",
+      title: t("crm.dashboard.d941051dd4", { value1: displayValue(screen.money(estimatedMargin)) }),
+      detail: t("crm.dashboard.014516e1f9", { value1: displayValue(screen.money(confirmedRevenue)) }),
+      badge: t("crm.dashboard.1278c77084"),
       tone: confirmedRevenue > 0 ? "success" as const : "neutral" as const,
       tab: "bookings" as Tab
     }
@@ -11558,9 +11377,9 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
 
   const bookingItems: DashboardItem[] = upcomingBookings.map((quote) => ({
     id: `booking-upcoming-${quote.id}`,
-    title: `${quote.clientName} · ${quote.title || "Réservation"}`,
-    detail: `${shortDate(quote.startDate)} → ${shortDate(quote.endDate)} · ${quote.bookingStatus || "À préparer"}`,
-    badge: paymentRemaining(quote) > 0 ? "Paiement" : "OK",
+    title: t("crm.dashboard.7c639bc99b", { value1: displayValue(quote.clientName), value2: displayValue(quote.title || t("crm.enums.booking")) }),
+    detail: t("crm.dashboard.cf0b450d49", { value1: displayValue(shortDate(quote.startDate)), value2: displayValue(shortDate(quote.endDate)), value3: displayValue(label(quote.bookingStatus, "crm") || "À préparer") }),
+    badge: paymentRemaining(quote) > 0 ? t("crm.dashboard.5d9e9e44e1") : t("crm.dashboard.565339bc4d"),
     tone: paymentRemaining(quote) > 0 ? "warning" as const : "success" as const,
     tab: "bookings" as Tab,
     targetId: `booking-${quote.id}`
@@ -11569,8 +11388,8 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
   const commercialItems: DashboardItem[] = [
     ...leadsToTreat.slice(0, 3).map((lead) => ({
       id: `lead-treat-${lead.id}`,
-      title: `${lead.contactName || "Lead sans contact"} · ${lead.category}`,
-      detail: `${lead.nextAction || "Action à définir"} · ${currency.format(Number(lead.value || 0))}`,
+      title: t("crm.dashboard.7c639bc99b", { value1: displayValue(lead.contactName || t("crm.enums.noContact")), value2: displayValue(lead.category) }),
+      detail: t("crm.dashboard.7c639bc99b", { value1: displayValue(lead.nextAction || t("crm.enums.actionRequired")), value2: displayValue(screen.money(Number(lead.value || 0))) }),
       badge: lead.priority,
       tone: lead.priority === "Haute" ? "danger" as const : "warning" as const,
       tab: "leads" as Tab,
@@ -11578,9 +11397,9 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
     })),
     ...quotesToFollow.slice(0, 3).map((quote) => ({
       id: `quote-follow-${quote.id}`,
-      title: `${quote.clientName} · devis à relancer`,
-      detail: `${getQuoteStatusFrenchLabel(getQuoteStatus(quote.status))} · ${currency.format(getQuoteTotal(quote))}`,
-      badge: "Devis",
+      title: t("crm.dashboard.f313f37238", { value1: displayValue(quote.clientName) }),
+      detail: t("crm.dashboard.7c639bc99b", { value1: displayValue(label(getQuoteStatusFrenchLabel(getQuoteStatus(label(quote.status, "crm"))), "crm")), value2: displayValue(screen.money(getQuoteTotal(quote))) }),
+      badge: t("crm.dashboard.44c4105cc3"),
       tone: "warning" as const,
       tab: "quotes" as Tab,
       targetId: `quote-${quote.id}`
@@ -11590,25 +11409,25 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
   const planningItems: DashboardItem[] = [
     activePlanning.length > 0 ? {
       id: "planning-active",
-      title: `${activePlanning.length} intervention(s) en cours`,
+      title: t("crm.dashboard.970c1cc56c", { value1: displayValue(activePlanning.length) }),
       detail: activePlanning.slice(0, 2).map((entry) => entry.title).join(" · "),
-      badge: "En cours",
+      badge: t("crm.dashboard.797f5dcd02"),
       tone: "warning" as const,
       tab: "planning" as Tab
     } : null,
     blockingPlanning.length > 0 ? {
       id: "planning-blocking-count",
-      title: `${blockingPlanning.length} intervention(s) bloquante(s)`,
-      detail: "Contrôle des disponibilités à vérifier.",
-      badge: "Bloquant",
+      title: t("crm.dashboard.4f158d2727", { value1: displayValue(blockingPlanning.length) }),
+      detail: t("crm.dashboard.9ea83b55e2"),
+      badge: t("crm.dashboard.d95dc51829"),
       tone: "danger" as const,
       tab: "planning" as Tab
     } : null,
     planningWithoutContact.length > 0 ? {
       id: "planning-no-contact",
-      title: `${planningWithoutContact.length} intervention(s) sans contact lié`,
-      detail: "À compléter pour éviter les pertes d’information.",
-      badge: "Données",
+      title: t("crm.dashboard.46195595dd", { value1: displayValue(planningWithoutContact.length) }),
+      detail: t("crm.dashboard.41eb635b1a"),
+      badge: t("crm.dashboard.6ef4db3c1d"),
       tone: "warning" as const,
       tab: "planning" as Tab
     } : null
@@ -11617,25 +11436,25 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
   const availabilityItems: DashboardItem[] = [
     {
       id: "availability-properties",
-      title: `${availableProperties.length} villa(s) disponible(s)`,
-      detail: availableProperties.slice(0, 3).map((property) => property.name).join(" · ") || "Aucune villa disponible renseignée.",
-      badge: "Villas",
+      title: t("crm.dashboard.b45d0882f1", { value1: displayValue(availableProperties.length) }),
+      detail: availableProperties.slice(0, 3).map((property) => property.name).join(" · ") || t("crm.dashboard.ced203b87e"),
+      badge: t("crm.dashboard.aead050ab9"),
       tone: availableProperties.length > 0 ? "success" : "neutral",
       tab: "properties" as Tab
     },
     {
       id: "availability-vehicles-boats",
-      title: `${availableVehicles.length + availableBoats.length} véhicule(s) / bateau(x) disponible(s)`,
-      detail: `${availableVehicles.length} voiture(s) · ${availableBoats.length} bateau(x)`,
-      badge: "Actifs",
+      title: t("crm.dashboard.35b215bdc3", { value1: displayValue(availableVehicles.length + availableBoats.length) }),
+      detail: t("crm.dashboard.911dcad3e9", { value1: displayValue(availableVehicles.length), value2: displayValue(availableBoats.length) }),
+      badge: t("crm.dashboard.9eaa2a1e77"),
       tone: availableVehicles.length + availableBoats.length > 0 ? "success" : "neutral",
       action: () => onDashboardAction(availableVehicles.length > 0 ? "vehicles" : "boats")
     },
     assetsInMaintenance.length > 0 ? {
       id: "availability-maintenance",
-      title: `${assetsInMaintenance.length} actif(s) en maintenance`,
+      title: t("crm.dashboard.db891ae96c", { value1: displayValue(assetsInMaintenance.length) }),
       detail: assetsInMaintenance.slice(0, 3).join(" · "),
-      badge: "Maintenance",
+      badge: t("crm.dashboard.17ccfa5b68"),
       tone: "warning" as const,
       action: () => onDashboardAction("vehicles" as Tab)
     } : null
@@ -11644,25 +11463,25 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
   const dataQualityItems: DashboardItem[] = [
     contactsIncomplete.length > 0 ? {
       id: "quality-contacts",
-      title: `${contactsIncomplete.length} contact(s) incomplet(s)`,
-      detail: "Email ou téléphone manquant.",
-      badge: "Contacts",
+      title: t("crm.dashboard.1888d14b10", { value1: displayValue(contactsIncomplete.length) }),
+      detail: t("crm.dashboard.11dda8efb7"),
+      badge: t("crm.dashboard.b450645deb"),
       tone: "warning" as const,
       tab: "contacts" as Tab
     } : null,
     leadsWithoutBudget.length > 0 ? {
       id: "quality-leads-budget",
-      title: `${leadsWithoutBudget.length} lead(s) sans budget`,
-      detail: "Valeur commerciale à compléter.",
-      badge: "Demandes clients",
+      title: t("crm.dashboard.5f886080b0", { value1: displayValue(leadsWithoutBudget.length) }),
+      detail: t("crm.dashboard.000e8b73ad"),
+      badge: t("crm.dashboard.7bcb6fb014"),
       tone: "warning" as const,
       tab: "leads" as Tab
     } : null,
     documentsToCheck.length > 0 ? {
       id: "quality-documents",
-      title: `${documentsToCheck.length} document(s) à vérifier`,
+      title: t("crm.dashboard.9f3e037119", { value1: displayValue(documentsToCheck.length) }),
       detail: documentsToCheck.slice(0, 3).map((document) => document.title).join(" · "),
-      badge: "Docs",
+      badge: t("crm.dashboard.7af023c430"),
       tone: "warning" as const,
       tab: "documents" as Tab
     } : null
@@ -11672,63 +11491,63 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
     <div className="stack dashboard-workspace dashboard-command-center">
       <div className="dashboard-command-hero">
         <section className="card dashboard-command-summary-card">
-          <p className="eyebrow">Vue rapide</p>
-          <h3>Centre de commandement</h3>
-          <p className="muted-line">Ce tableau affiche uniquement ce qui aide à décider, relancer, payer, préparer ou compléter.</p>
+          <p className="eyebrow" data-semantic-text={"Vue rapide"}>{t("crm.dashboard.aa4b970347")}</p>
+          <h3>{t("crm.dashboard.5da9dc9041")}</h3>
+          <p className="muted-line">{t("crm.dashboard.894a73fb8c")}</p>
         </section>
 
         <div className="dashboard-command-kpis">
-          <DashboardQuickTile label="À traiter" value={String(vendorInvoiceAlertItems.length)} caption="Factures prestataires" onClick={() => {
+          <DashboardQuickTile moduleId="vendorInvoices" label={t("crm.dashboard.f8569bf0fb")} value={String(vendorInvoiceAlertItems.length)} caption={t("crm.dashboard.e3ba7d2e9c")} onClick={() => {
             const firstUrgent = vendorInvoiceAlertItems.find((item) => item.action || item.tab);
             if (firstUrgent?.action) firstUrgent.action();
             else if (firstUrgent?.tab) onDashboardAction(firstUrgent.tab, firstUrgent.targetId);
             else onDashboardAction("vendorInvoices" as Tab);
           }} />
-          <DashboardQuickTile label="Aujourd’hui" value={String(todayPlanning.length)} caption="Interventions du jour" onClick={() => onDashboardAction("planning" as Tab)} />
-          <DashboardQuickTile label="Maison à payer" value={currency.format(houseAmountToPay)} caption="Personnel & interventions" onClick={() => onDashboardAction("houseTracking" as Tab)} />
-          <DashboardQuickTile label="À recevoir" value={currency.format(clientAmountToReceive)} caption="Paiements clients" onClick={() => onDashboardAction("bookings" as Tab)} />
+          <DashboardQuickTile moduleId="planning" label={t("crm.dashboard.f2de9e072a")} value={String(todayPlanning.length)} caption={t("crm.dashboard.358029e806")} onClick={() => onDashboardAction("planning" as Tab)} />
+          <DashboardQuickTile moduleId="houseTracking" label={t("crm.dashboard.3453f57f66")} value={screen.money(houseAmountToPay)} caption={t("crm.dashboard.d332e9d924")} onClick={() => onDashboardAction("houseTracking" as Tab)} />
+          <DashboardQuickTile moduleId="bookings" label={t("crm.dashboard.dbdbf99dae")} value={screen.money(clientAmountToReceive)} caption={t("crm.dashboard.4e1ae32840")} onClick={() => onDashboardAction("bookings" as Tab)} />
         </div>
       </div>
 
       <div className="dashboard-command-grid dashboard-command-grid-priority">
-        <DashboardCommandCard eyebrow="Factures prestataires" title="À traiter" summary={`${vendorInvoiceAlertItems.length} facture${vendorInvoiceAlertItems.length > 1 ? "s" : ""}`} tone={vendorInvoiceAlertItems.some((item) => item.tone === "danger") ? "danger" : vendorInvoiceAlertItems.length > 0 ? "warning" : "success"}>
-          {renderDashboardList(vendorInvoiceAlertItems, "Aucune alerte urgente pour le moment.", 6)}
+        <DashboardCommandCard moduleIds={["vendorInvoices"]} eyebrow={t("crm.dashboard.e3ba7d2e9c")} title={t("crm.dashboard.f8569bf0fb")} summary={t("crm.counts.invoiceCount", { count: vendorInvoiceAlertItems.length })} tone={vendorInvoiceAlertItems.some((item) => item.tone === "danger") ? "danger" : vendorInvoiceAlertItems.length > 0 ? "warning" : "success"}>
+          {renderDashboardList(vendorInvoiceAlertItems, t("crm.dashboard.2f1074767b"), 6)}
         </DashboardCommandCard>
 
-        <DashboardCommandCard eyebrow="Aujourd’hui" title="Planning du jour" summary={`${todayPlanning.length} élément${todayPlanning.length > 1 ? "s" : ""}`} tone={activePlanning.length > 0 ? "warning" : "neutral"}>
-          {renderDashboardList(todayItems, "Aucune intervention active aujourd’hui.", 6)}
+        <DashboardCommandCard moduleIds={["planning"]} eyebrow={t("crm.dashboard.f2de9e072a")} title={t("crm.dashboard.acf6043014")} summary={t("crm.counts.itemCount", { count: todayPlanning.length })} tone={activePlanning.length > 0 ? "warning" : "neutral"}>
+          {renderDashboardList(todayItems, t("crm.dashboard.70bb237063"), 6)}
         </DashboardCommandCard>
 
-        <DashboardCommandCard eyebrow="Argent" title="Paiements à suivre" summary={formatEuroAmount(paymentsBalance)} tone={clientPaymentsLate.length > 0 || overdueVendorInvoices.length > 0 ? "danger" : "neutral"}>
-          {renderDashboardList(moneyItems, "Aucun paiement urgent à suivre.", 5)}
+        <DashboardCommandCard moduleIds={["bookings", "vendorInvoices", "houseTracking"]} eyebrow={t("crm.dashboard.eb38f871c5")} title={t("crm.dashboard.8c4e895090")} summary={screen.euro(paymentsBalance)} tone={clientPaymentsLate.length > 0 || overdueVendorInvoices.length > 0 ? "danger" : "neutral"}>
+          {renderDashboardList(moneyItems, t("crm.dashboard.1b97272abc"), 5)}
         </DashboardCommandCard>
       </div>
 
       <div className="dashboard-command-grid">
-        <DashboardCommandCard eyebrow="Réservations" title="À préparer" summary={`${upcomingBookings.length} proche${upcomingBookings.length > 1 ? "s" : ""}`}>
-          {renderDashboardList(bookingItems, "Aucune réservation confirmée à préparer dans les 14 prochains jours.", 5)}
+        <DashboardCommandCard moduleIds={["bookings"]} eyebrow={t("crm.dashboard.9cc256a335")} title={t("crm.dashboard.4e8718301a")} summary={t("crm.counts.upcomingCount", { count: upcomingBookings.length })}>
+          {renderDashboardList(bookingItems, t("crm.dashboard.2c9b68e9f7"), 5)}
         </DashboardCommandCard>
 
-        <DashboardCommandCard eyebrow="Commercial" title="Leads et devis" summary={`${commercialItems.length} sujet${commercialItems.length > 1 ? "s" : ""}`}>
-          {renderDashboardList(commercialItems, "Aucun lead ou devis urgent à relancer.", 6)}
+        <DashboardCommandCard moduleIds={["leads", "quotes"]} eyebrow={t("crm.dashboard.ea7d0b7634")} title={t("crm.dashboard.2129f1f69e")} summary={t("crm.counts.topicCount", { count: commercialItems.length })}>
+          {renderDashboardList(commercialItems, t("crm.dashboard.4d4e4cd211"), 6)}
           <div className="dashboard-command-actions">
-            <BusinessButton disabled={Boolean(business&&!business.read("leads"))} className="secondary-button compact-button" type="button" onClick={onShowLeads}>Voir les demandes clients</BusinessButton>
-            <BusinessButton disabled={Boolean(business&&(!business.canWrite("contacts")||!business.canWrite("leads")))} className="secondary-button compact-button" type="button" onClick={onStartMessage}>Créer depuis message</BusinessButton>
+            <BusinessButton disabled={Boolean(business&&!business.read("leads"))} className="secondary-button compact-button" type="button" onClick={onShowLeads} data-crm-auto-scroll="true">{t("crm.dashboard.9f95a9e15b")}</BusinessButton>
+            <BusinessButton disabled={Boolean(business&&(!business.canWrite("contacts")||!business.canWrite("leads")))} className="secondary-button compact-button" type="button" onClick={onStartMessage} data-crm-auto-scroll="true">{t("crm.dashboard.b3b4c2ca9d")}</BusinessButton>
           </div>
         </DashboardCommandCard>
       </div>
 
       <div className="dashboard-command-grid dashboard-command-grid-control">
-        <DashboardCommandCard eyebrow="Planning" title="Anomalies" summary={`${planningItems.length} point${planningItems.length > 1 ? "s" : ""}`} tone={blockingPlanning.length > 0 ? "danger" : planningItems.length > 0 ? "warning" : "success"}>
-          {renderDashboardList(planningItems, "Aucune anomalie planning détectée.", 5)}
+        <DashboardCommandCard moduleIds={["planning"]} eyebrow={t("crm.dashboard.21cc305095")} title={t("crm.dashboard.ac2064ecc2")} summary={t("crm.counts.pointCount", { count: planningItems.length })} tone={blockingPlanning.length > 0 ? "danger" : planningItems.length > 0 ? "warning" : "success"}>
+          {renderDashboardList(planningItems, t("crm.dashboard.832931f7e2"), 5)}
         </DashboardCommandCard>
 
-        <DashboardCommandCard eyebrow="Disponibilités" title="Biens proposables" summary={`${availableProperties.length + availableVehicles.length + availableBoats.length} actif${availableProperties.length + availableVehicles.length + availableBoats.length > 1 ? "s" : ""}`}>
-          {renderDashboardList(availabilityItems, "Aucun actif disponible renseigné.", 5)}
+        <DashboardCommandCard moduleIds={["properties", "vehicles", "boats"]} eyebrow={t("crm.dashboard.f13a7f6816")} title={t("crm.dashboard.deeefa0dc4")} summary={t("crm.counts.assetCount", { count: availableProperties.length + availableVehicles.length + availableBoats.length })}>
+          {renderDashboardList(availabilityItems, t("crm.dashboard.b45004cea7"), 5)}
         </DashboardCommandCard>
 
-        <DashboardCommandCard eyebrow="Données" title="À compléter" summary={`${dataQualityItems.length} sujet${dataQualityItems.length > 1 ? "s" : ""}`} tone={dataQualityItems.length > 0 ? "warning" : "success"}>
-          {renderDashboardList(dataQualityItems, "Les données essentielles sont propres.", 5)}
+        <DashboardCommandCard moduleIds={[]} eyebrow={t("crm.dashboard.6ef4db3c1d")} title={t("crm.dashboard.3160128ee8")} summary={t("crm.counts.topicCount", { count: dataQualityItems.length })} tone={dataQualityItems.length > 0 ? "warning" : "success"}>
+          {renderDashboardList(dataQualityItems, t("crm.dashboard.ee25f4bd34"), 5)}
         </DashboardCommandCard>
       </div>
     </div>
@@ -11773,6 +11592,8 @@ function ContactsView({
   onCreateLead: (contactName: string) => void;
   onCreateTask: (contactName: string, contactId?: string) => void;
 }) {
+  const { t, label, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const creation = useConfirmedForm(business?.markDirty);
   const [creationRecordId,setCreationRecordId] = useState<string|null>(null);
@@ -11916,29 +11737,29 @@ function ContactsView({
 
   function typeLabel(contact: Contact) {
     const kind = String((contact as any).kind || "Client");
-    if (isSupplierContact(contact) || kind === "Partenaire") return "Prestataire";
-    return contact.kind;
+    if (isSupplierContact(contact) || kind === "Partenaire") return t("crm.enums.supplier");
+    return label(contact.kind, "crm");
   }
 
   return (
-    <div className="stack contacts-workspace oar-contacts-workspace">
+    <div className="stack contacts-workspace oar-contacts-workspace" data-crm-module="contacts">
       <section className="card contacts-toolbar contacts-toolbar-desktop-stable" data-contacts-desktop-version="stable-1">
         <div className="contacts-toolbar-stable-main">
           <div className="contacts-toolbar-stable-title">
-            <p className="eyebrow">Contacts</p>
+            <p className="eyebrow" data-semantic-text={"Contacts"}>{t("crm.contacts.b450645deb")}</p>
             <div className="contacts-toolbar-stable-count">
               <strong data-contact-direct-count>{visibleContacts.length}</strong>
-              <span>{searching ? `résultat${visibleContacts.length > 1 ? "s" : ""} direct${visibleContacts.length > 1 ? "s" : ""}` : `contact${visibleContacts.length > 1 ? "s" : ""}`}</span>
+              <span>{t(searching ? "crm.counts.directLabel" : "crm.counts.contactLabel", { count: visibleContacts.length })}</span>
             </div>
-            {searching && <p className="muted-line"><strong data-contact-suggestion-count>{closeContacts.length}</strong> correspondance{closeContacts.length > 1 ? "s" : ""} proche{closeContacts.length > 1 ? "s" : ""}</p>}
-            <p className="muted-line">Clients, prestataires, propriétaires et membres de l’organisation. Lecture rapide, action uniquement si nécessaire.</p>
+            {searching && <p className="muted-line"><strong data-contact-suggestion-count>{closeContacts.length}</strong>{" "}{t("crm.counts.closeLabel", { count: closeContacts.length })}</p>}
+            <p className="muted-line">{t("crm.contacts.2c10e7e39d")}</p>
           </div>
 
-          <div className="contacts-toolbar-stable-metrics" aria-label={searching ? "Synthèse des résultats directs" : "Synthèse contacts"}>
-            <div><span>Clients</span><strong>{clientCount}</strong></div>
-            <div><span>Prestataires</span><strong>{supplierCount}</strong></div>
-            <div><span>Propriétaires</span><strong>{ownerCount}</strong></div>
-            <div className="contact-organization-metric"><span>Membres de l’organisation</span><strong>{memberCount}</strong></div>
+          <div className="contacts-toolbar-stable-metrics" aria-label={searching ? t("crm.contacts.373aae7fb9") : t("crm.contacts.876725d1b8")}>
+            <div><span>{t("crm.contacts.65a7256542")}</span><strong>{clientCount}</strong></div>
+            <div><span>{t("crm.contacts.5eb8027af2")}</span><strong>{supplierCount}</strong></div>
+            <div><span>{t("crm.contacts.590bf7cbda")}</span><strong>{ownerCount}</strong></div>
+            <div className="contact-organization-metric"><span>{t("crm.contacts.99f07df843")}</span><strong>{memberCount}</strong></div>
           </div>
         </div>
 
@@ -11950,18 +11771,17 @@ function ContactsView({
               className={contactFilter === option ? "primary-button" : "secondary-button"}
               onClick={() => setContactFilter(option)}
             >
-              {option}
+              {label(option, "crm")}
             </BusinessButton>
           ))}
         </div>
 
         {contactFilter === "Prestataires" && (
           <div className="contacts-toolbar-stable-supplier-filter">
-            <BusinessLabel>Profession / activité
-              <select value={supplierCategoryFilter} onChange={(event) => setSupplierCategoryFilter(event.target.value)}>
-                <option>Toutes</option>
+            <BusinessLabel>{t("crm.contacts.306854f806")}<select value={supplierCategoryFilter} onChange={(event) => setSupplierCategoryFilter(event.target.value)}>
+                <option value="Toutes">{t("crm.contacts.42623b97b4")}</option>
                 {supplierProfessionOptions.map((category) => (
-                  <option key={category}>{category}</option>
+                  <option key={category} value={category}>{screen.category(category)}</option>
                 ))}
               </select>
             </BusinessLabel>
@@ -11971,82 +11791,67 @@ function ContactsView({
 
       <div className="contacts-layout oar-contacts-layout">
         <section className="card contacts-list-card oar-contacts-list-card">
-          {visibleContacts.length === 0 ? (
-            <p className="muted-line">{searching ? "Aucun résultat direct dans ce filtre." : "Aucun contact dans ce filtre."}</p>
-          ) : (
-            <div className="list-stack oar-contact-list-stack">
+          {visibleContacts.length === 0 ? (<p className="muted-line">{searching ? t("crm.contacts.157c5868b0") : t("crm.contacts.facc0b3cf5")}</p>) : (<div className="list-stack oar-contact-list-stack">
               {visibleContacts.map((contact) => (
                 <article className="item-card contact-row oar-contact-row" key={contact.id}>
                   <div>
-                    <p className="eyebrow">
-                      {typeLabel(contact)}{isSupplierContact(contact) ? ` · ${getContactSupplierCategory(contact)}` : ""}
+                    <p className="eyebrow" data-semantic-text={" · {value1}"}>
+                      {typeLabel(contact)}{isSupplierContact(contact) ? t("crm.contacts.f6b53f9c8a", { value1: displayValue(screen.category(getContactSupplierCategory(contact))) }) : ""}
                     </p>
                     <h3>{getContactActionLabel(contact)}</h3>
                     {contact.companyName && (
-                      <p className="muted-line">Société : {contact.companyName}</p>
+                      <p className="muted-line">{t("crm.contacts.79671d846d")}{" "}{contact.companyName}</p>
                     )}
                     <p className="muted-line">
-                      {contact.city || getContactSupplierZone(contact) || "Ville / zone à compléter"}
+                      {contact.city || getContactSupplierZone(contact) || t("crm.contacts.75f0592b2b")}
                     </p>
                     <p className="muted-line">
-                      {contact.email || "Email à compléter"} · {contact.phone || "Téléphone à compléter"}
+                      {contact.email || t("crm.contacts.4e96a0cfdb")} · {contact.phone || t("crm.contacts.321d88bc1d")}
                     </p>
                     <ActionMeta item={contact} />
                     {isSupplierContact(contact) ? (
-                      <p className="muted-line">
-                        Fiabilité : {contact.supplierReliability || "À tester"} · Statut : {contact.supplierStatus || "Actif"}
+                      <p className="muted-line">{t("crm.contacts.6b84e395fb")}{" "}{label(contact.supplierReliability, "crm") || t("crm.contacts.437f69fce9")}{" "}{t("crm.contacts.941ce89abc")}{" "}{label(contact.supplierStatus, "crm") || t("crm.contacts.ad26287ab6")}
                       </p>
                     ) : contact.kind === "Membre de l’organisation" ? (
-                      <p className="muted-line">Fonction : {contact.organizationFunction || "Non renseignée"}</p>
+                      <p className="muted-line">{t("crm.contacts.18eb36dd98")}{" "}{contact.organizationFunction || t("crm.contacts.831460cb02")}</p>
                     ) : (
                       <p className="muted-line">
-                        {getContactClientLevel(contact)} · {getContactRelationshipStatus(contact)} · {getContactLeads(contact).length} lead{getContactLeads(contact).length > 1 ? "s" : ""}
+                        {label(getContactClientLevel(contact), "crm")} · {label(getContactRelationshipStatus(contact), "crm")} · {t("crm.contacts.linkedEnquiries", { count: getContactLeads(contact).length })}
                       </p>
                     )}
                   </div>
 
                   <div className="item-actions contact-row-actions oar-contact-actions">
-                    {contact.phone && <a className="secondary-button" href={`tel:${contact.phone}`}>Appeler</a>}
-                    {contact.email && <a className="secondary-button" href={`mailto:${contact.email}`}>Email</a>}
-                    <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => onCreateLead(getContactActionLabel(contact))}>
-                      Créer lead
-                    </BusinessButton>
-                    <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contact)}>
-                      Détails
-                    </BusinessButton>
-                    <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => openEdit(contact)}>
-                      Modifier
-                    </BusinessButton>
+                    {contact.phone && <a className="secondary-button" href={`tel:${contact.phone}`}>{t("crm.contacts.16d93e3764")}</a>}
+                    {contact.email && <a className="secondary-button" href={`mailto:${contact.email}`}>{t("crm.contacts.969ccbd3cf")}</a>}
+                    <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => onCreateLead(getContactActionLabel(contact))} data-crm-auto-scroll="true">{t("crm.contacts.c6616d235d")}</BusinessButton>
+                    <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contact)} data-crm-auto-scroll="true" data-crm-action="details">{t("crm.contacts.17eaee489b")}</BusinessButton>
+                    <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => openEdit(contact)} data-crm-auto-scroll="true">{t("crm.contacts.42e37604b6")}</BusinessButton>
                     <BusinessButton permission="remove"
                       className="danger-button"
                       type="button"
                       onClick={() => {
-                        const confirmed = window.confirm(`Supprimer "${contact.name}" ?`);
+                        const confirmed = window.confirm(dialogT("crm.contacts.a451e23492", { value1: displayValue(contact.name) }));
                         if (confirmed) onDelete(contact.id);
                       }}
-                    >
-                      Supprimer
-                    </BusinessButton>
+                    >{t("crm.contacts.5e5d0216ce")}</BusinessButton>
                   </div>
                 </article>
               ))}
-            </div>
-          )}
+            </div>)}
           {closeContacts.length > 0 && (
-            <section className="stack" data-contact-suggestions aria-label="Correspondances proches">
-              <h3>Correspondances proches</h3>
+            <section className="stack" data-contact-suggestions aria-label={t("crm.contacts.7b679162fa")}>
+              <h3>{t("crm.contacts.7b679162fa")}</h3>
               <div className="list-stack">
                 {closeContacts.map((contact) => (
                   <article className="item-card contact-row" key={contact.id} data-contact-suggestion-id={contact.id}>
                     <div>
-                      <p className="eyebrow">{typeLabel(contact)}{isSupplierContact(contact) ? ` · ${getContactSupplierCategory(contact)}` : ""}</p>
+                      <p className="eyebrow" data-semantic-text={" · {value1}"}>{typeLabel(contact)}{isSupplierContact(contact) ? t("crm.contacts.f6b53f9c8a", { value1: displayValue(screen.category(getContactSupplierCategory(contact))) }) : ""}</p>
                       <h4>{getContactActionLabel(contact)}</h4>
-                      {contact.companyName && <p className="muted-line">Société : {contact.companyName}</p>}
+                      {contact.companyName && <p className="muted-line">{t("crm.contacts.79671d846d")}{" "}{contact.companyName}</p>}
                     </div>
                     <div className="item-actions">
-                      <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contact)}>
-                        Ouvrir la fiche
-                      </BusinessButton>
+                      <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contact)} data-crm-auto-scroll="true">{t("crm.contacts.32cc83b005")}</BusinessButton>
                     </div>
                   </article>
                 ))}
@@ -12056,120 +11861,105 @@ function ContactsView({
         </section>
 
         <section className="card form-card contacts-form-card oar-contacts-form-card">
-          <p className="eyebrow">Nouveau</p>
-          <h3>{creationRecordId?"Modifier le contact créé":"Ajouter un contact"}</h3>
+          <p className="eyebrow" data-semantic-text={"Nouveau"}>{t("crm.contacts.c3634f2ede")}</p>
+          <h3>{creationRecordId ? t("crm.contacts.869538c383") : t("crm.contacts.a57c9b5174")}</h3>
 
-          <BusinessForm className="form-grid contact-create-form" data-saved-record-id={creationRecordId||undefined} pending={creation.saving} onChangeCapture={creation.changed} onSubmit={event=>{
+          <BusinessForm className="form-grid contact-create-form" data-saved-record-id={creationRecordId || undefined} pending={creation.saving} onChangeCapture={creation.changed} onSubmit={event=>{
             if(!business){void onAdd(event);return;}
             event.preventDefault();const form=event.currentTarget;
             void creation.submit(form,()=>onAdd(event),(newerDraft,result)=>{if(newerDraft){setCreationRecordId(result?.recordId??null);return;}form.reset();setCreationRecordId(null);setNewContactKind("Client");});
           }}>
-            {creation.message&&<p role="alert">{creation.message}</p>}
-            <BusinessLabel>Civilité
-              <select name="civility" defaultValue="">
+            <ConfirmedFormMessage message={creation.message} />
+            <BusinessLabel>{t("crm.contacts.901ce24cca")}<select name="civility" defaultValue="">
                 <option value="">—</option>
-                <option value="M">M</option>
-                <option value="MME">MME</option>
+                <option value="M">{t("crm.contacts.08f271887c")}</option>
+                <option value="MME">{t("crm.contacts.97c3250ed4")}</option>
               </select>
             </BusinessLabel>
-            <BusinessLabel>Prénom<input name="firstName" placeholder="Prénom" /></BusinessLabel>
-            <BusinessLabel>Nom<input name="name" placeholder="Nom" /></BusinessLabel>
-            <BusinessLabel>Société<input name="companyName" placeholder="Nom de la société" /></BusinessLabel>
-            <BusinessLabel>Type
-              <select name="kind" value={newContactKind} onChange={(event) => setNewContactKind(event.target.value as ContactKind)}>
-                {contactKinds.map((kind) => <option key={kind}>{kind}</option>)}
+            <BusinessLabel>{t("crm.contacts.e325bf8f90")}<input name="firstName" placeholder={t("crm.contacts.e325bf8f90")} /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.b2c124536d")}<input name="name" placeholder={t("crm.contacts.b2c124536d")} /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.e408c08c6b")}<input name="companyName" placeholder={t("crm.contacts.5f1020f041")} /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.baaddf70fb")}<select name="kind" value={newContactKind} onChange={(event) => setNewContactKind(event.target.value as ContactKind)}>
+                {contactKinds.map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
               </select>
             </BusinessLabel>
-            <BusinessLabel>Email<input name="email" type="email" placeholder="email@example.com" /></BusinessLabel>
-            <BusinessLabel>Téléphone<input name="phone" placeholder="+33..." /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.969ccbd3cf")}<input name="email" type="email" placeholder={t("crm.contacts.2a539d6520")} /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.cc4c424b57")}<input name="phone" placeholder="+33..." /></BusinessLabel>
             <ContactPostalAddressField />
-            <BusinessLabel>Ville / zone<input name="city" placeholder="Cannes, Monaco..." /></BusinessLabel>
-            <BusinessLabel>Source<input name="source" placeholder="Site, recommandation, réseau..." /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.4d7e0f0579")}<input name="city" placeholder={t("crm.contacts.897ebccda8")} /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.0e570ca6fa")}<input name="source" placeholder={t("crm.contacts.0ce7823851")} /></BusinessLabel>
 
             {newContactKind === "Membre de l’organisation" && (
-              <BusinessLabel>Fonction<input name="organizationFunction" placeholder="Fonction dans l’organisation" /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.222f9de9e7")}<input name="organizationFunction" placeholder={t("crm.contacts.60c9c50476")} /></BusinessLabel>
             )}
 
             {newContactKind !== "Prestataire" && newContactKind !== "Membre de l’organisation" && (
               <>
-                <BusinessLabel>Relation
-                  <select name="relationshipStatus" defaultValue="Prospect">
-                    {nonSupplierRelationshipStatuses.map((status) => <option key={status}>{status}</option>)}
+                <BusinessLabel>{t("crm.contacts.1367485dc3")}<select name="relationshipStatus" defaultValue="Prospect">
+                    {nonSupplierRelationshipStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
                   </select>
                 </BusinessLabel>
-                <BusinessLabel>Budget<input name="budget" type="number" min="0" placeholder="Si client" /></BusinessLabel>
+                <BusinessLabel>{t("crm.contacts.1c6225ec70")}<input name="budget" type="number" min="0" placeholder={t("crm.contacts.0a9be8ec89")} /></BusinessLabel>
               </>
             )}
 
             {newContactKind === "Client" && (
               <>
-                <BusinessLabel>Niveau client
-                  <select name="clientLevel" defaultValue="Standard">
-                    {contactLevels.map((level) => <option key={level}>{level}</option>)}
+                <BusinessLabel>{t("crm.contacts.7f83d4d107")}<select name="clientLevel" defaultValue="Standard">
+                    {contactLevels.map((level) => <option key={level} value={level}>{label(level, "crm")}</option>)}
                   </select>
                 </BusinessLabel>
-                <BusinessLabel>Langue
-                  <select name="preferredLanguage" defaultValue="Français">
-                    {contactLanguages.map((language) => <option key={language}>{language}</option>)}
+                <BusinessLabel>{t("crm.contacts.5f6baab4db")}<select name="preferredLanguage" defaultValue="Français">
+                    {contactLanguages.map((language) => <option key={language} value={language}>{label(language, "crm")}</option>)}
                   </select>
                 </BusinessLabel>
-                <BusinessLabel className="full">Préférences
-                  <textarea name="preferences" placeholder="Villa, voiture, yacht, dates, habitudes..." />
+                <BusinessLabel className="full">{t("crm.contacts.2032603871")}<textarea name="preferences" placeholder={t("crm.contacts.57ecbc19c3")} />
                 </BusinessLabel>
-                <BusinessLabel className="full">Notes importantes
-                  <textarea name="importantNotes" placeholder="À savoir avant de proposer quelque chose" />
+                <BusinessLabel className="full">{t("crm.contacts.ba2bb523cd")}<textarea name="importantNotes" placeholder={t("crm.contacts.62b07d0502")} />
                 </BusinessLabel>
               </>
             )}
 
             {newContactKind === "Prestataire" && (
               <>
-                <BusinessLabel>Profession / activité
-                  <select name="supplierCategory" defaultValue="">
+                <BusinessLabel>{t("crm.contacts.306854f806")}<select name="supplierCategory" defaultValue="">
                     <option value="">—</option>
-                    {supplierProfessionOptions.map((category) => <option key={category}>{category}</option>)}
+                    {supplierProfessionOptions.map((category) => <option key={category} value={category}>{screen.category(category)}</option>)}
                   </select>
                 </BusinessLabel>
-                <BusinessLabel>Ajouter une profession
-                  <input name="supplierCategoryCustom" placeholder="Ex : Technicien volets" />
+                <BusinessLabel>{t("crm.contacts.89dd598794")}<input name="supplierCategoryCustom" placeholder={t("crm.contacts.84329bc858")} />
                 </BusinessLabel>
-                <BusinessLabel>Fiabilité
-                  <select name="supplierReliability" defaultValue="À tester">
-                    <option>À tester</option>
-                    <option>Fiable</option>
-                    <option>Très fiable</option>
-                    <option>À éviter</option>
+                <BusinessLabel>{t("crm.contacts.10859b8dc3")}<select name="supplierReliability" defaultValue="À tester">
+                    <option value="À tester">{t("crm.contacts.437f69fce9")}</option>
+                    <option value="Fiable">{t("crm.contacts.26d5cdf018")}</option>
+                    <option value="Très fiable">{t("crm.contacts.8508f22f87")}</option>
+                    <option value="À éviter">{t("crm.contacts.9c5902593d")}</option>
                   </select>
                 </BusinessLabel>
-                <BusinessLabel>Contact référent<input name="supplierContactName" placeholder="Nom du contact" /></BusinessLabel>
-                <BusinessLabel>Statut prestataire
-                  <select name="supplierStatus" defaultValue="Actif">
-                    <option>Actif</option>
-                    <option>À vérifier</option>
-                    <option>Inactif</option>
+                <BusinessLabel>{t("crm.contacts.5459cc133f")}<input name="supplierContactName" placeholder={t("crm.contacts.67f8a52b44")} /></BusinessLabel>
+                <BusinessLabel>{t("crm.contacts.8a8a8e1503")}<select name="supplierStatus" defaultValue="Actif">
+                    <option value="Actif">{t("crm.contacts.ad26287ab6")}</option>
+                    <option value="À vérifier">{t("crm.contacts.03a088312d")}</option>
+                    <option value="Inactif">{t("crm.contacts.cdcf2ea348")}</option>
                   </select>
                 </BusinessLabel>
-                <BusinessLabel>Qualité
-                  <select name="supplierQuality" defaultValue="Standard">
-                    <option>Standard</option>
-                    <option>Premium</option>
-                    <option>Très premium</option>
+                <BusinessLabel>{t("crm.contacts.8dce95eeb4")}<select name="supplierQuality" defaultValue="Standard">
+                    <option value="Standard">{t("crm.contacts.ef6691545d")}</option>
+                    <option value="Premium">{t("crm.contacts.de88c121a8")}</option>
+                    <option value="Très premium">{t("crm.contacts.6e2c957724")}</option>
                   </select>
                 </BusinessLabel>
-                <BusinessLabel className="full">Notes prix / accord prestataire
-                  <textarea name="supplierPriceNotes" placeholder="Tarifs, minimum spend, conditions..." />
+                <BusinessLabel className="full">{t("crm.contacts.a9d3991563")}<textarea name="supplierPriceNotes" placeholder={t("crm.contacts.1b8f311310")} />
                 </BusinessLabel>
-                <BusinessLabel className="full">Commission / marge
-                  <textarea name="supplierCommissionNotes" placeholder="Commission, marge, accord commercial..." />
+                <BusinessLabel className="full">{t("crm.contacts.c5da356eca")}<textarea name="supplierCommissionNotes" placeholder={t("crm.contacts.0f07ee6d45")} />
                 </BusinessLabel>
               </>
             )}
 
-            <BusinessLabel className="full">Notes
-              <textarea name="notes" placeholder="Contexte, préférences, infos utiles" />
+            <BusinessLabel className="full">{t("crm.contacts.8a7525b149")}<textarea name="notes" placeholder={t("crm.contacts.7e672331b2")} />
             </BusinessLabel>
 
-            <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{creationRecordId?"Enregistrer les modifications":"Ajouter"}</BusinessButton>
+            <BusinessButton permission="write" className="primary-button contact-form-submit" type="submit">{creationRecordId ? t("crm.contacts.45951f6ac1") : t("crm.contacts.00f9c53345")}</BusinessButton>
           </BusinessForm>
         </section>
       </div>
@@ -12177,55 +11967,55 @@ function ContactsView({
       {selectedContact && (
         <div className="confirm-backdrop">
           <div id="contact-detail-panel" className="confirm-dialog contact-detail-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Fiche contact</p>
-            <h3>{[selectedContact.civility, selectedContact.firstName, selectedContact.name].filter(Boolean).join(" ") || selectedContact.companyName || "Contact sans nom"}</h3>
+            <p className="eyebrow" data-semantic-text={"Fiche contact"}>{t("crm.contacts.9330008a8f")}</p>
+            <h3>{[selectedContact.civility, selectedContact.firstName, selectedContact.name].filter(Boolean).join(" ") || selectedContact.companyName || t("crm.contacts.576d508976")}</h3>
 
             <div className="contact-detail-grid">
-              <div><span>Type</span><strong>{typeLabel(selectedContact)}</strong></div>
-              <div><span>Civilité</span><strong>{selectedContact.civility || "Non renseignée"}</strong></div>
-              <div><span>Prénom</span><strong>{selectedContact.firstName || "Non renseigné"}</strong></div>
-              <div><span>Société</span><strong>{selectedContact.companyName || "Non renseignée"}</strong></div>
-              <div><span>Email</span><strong>{selectedContact.email || "Non renseigné"}</strong></div>
-              <div><span>Téléphone</span><strong>{selectedContact.phone || "Non renseigné"}</strong></div>
+              <div><span>{t("crm.contacts.baaddf70fb")}</span><strong>{typeLabel(selectedContact)}</strong></div>
+              <div><span>{t("crm.contacts.901ce24cca")}</span><strong>{selectedContact.civility || t("crm.contacts.831460cb02")}</strong></div>
+              <div><span>{t("crm.contacts.e325bf8f90")}</span><strong>{selectedContact.firstName || t("crm.contacts.cb6c1fb76c")}</strong></div>
+              <div><span>{t("crm.contacts.e408c08c6b")}</span><strong>{selectedContact.companyName || t("crm.contacts.831460cb02")}</strong></div>
+              <div><span>{t("crm.contacts.969ccbd3cf")}</span><strong>{selectedContact.email || t("crm.contacts.cb6c1fb76c")}</strong></div>
+              <div><span>{t("crm.contacts.cc4c424b57")}</span><strong>{selectedContact.phone || t("crm.contacts.cb6c1fb76c")}</strong></div>
               <ContactPostalAddressDetails key={`${selectedContact.id}:${selectedContact.postalAddress ?? ""}`} address={selectedContact.postalAddress} />
-              <div><span>Ville / zone</span><strong>{selectedContact.city || getContactSupplierZone(selectedContact) || "Non renseignée"}</strong></div>
-              <div><span>Action</span><strong>{getActionMetaLabel(selectedContact)}</strong></div>
+              <div><span>{t("crm.contacts.4d7e0f0579")}</span><strong>{selectedContact.city || getContactSupplierZone(selectedContact) || t("crm.contacts.831460cb02")}</strong></div>
+              <div><span>{t("crm.contacts.64cff1319d")}</span><strong>{screen.action(selectedContact)}</strong></div>
 
               {selectedContact.kind === "Membre de l’organisation" ? (
-                <div><span>Fonction</span><strong>{selectedContact.organizationFunction || "Non renseignée"}</strong></div>
+                <div><span>{t("crm.contacts.222f9de9e7")}</span><strong>{selectedContact.organizationFunction || t("crm.contacts.831460cb02")}</strong></div>
               ) : isSupplierContact(selectedContact) ? (
                 <>
-                  <div><span>Profession</span><strong>{getContactSupplierCategory(selectedContact)}</strong></div>
-                  <div><span>Fiabilité</span><strong>{selectedContact.supplierReliability || "À tester"}</strong></div>
-                  <div><span>Qualité</span><strong>{selectedContact.supplierQuality || "Standard"}</strong></div>
-                  <div><span>Statut</span><strong>{selectedContact.supplierStatus || "Actif"}</strong></div>
-                  <div className="full"><span>Notes prix</span><p>{selectedContact.supplierPriceNotes || "Aucune note prix."}</p></div>
-                  <div className="full"><span>Commission / marge</span><p>{selectedContact.supplierCommissionNotes || "Aucune note commission."}</p></div>
+                  <div><span>{t("crm.contacts.13a150e3fd")}</span><strong>{screen.category(getContactSupplierCategory(selectedContact))}</strong></div>
+                  <div><span>{t("crm.contacts.10859b8dc3")}</span><strong>{label(selectedContact.supplierReliability, "crm") || t("crm.contacts.437f69fce9")}</strong></div>
+                  <div><span>{t("crm.contacts.8dce95eeb4")}</span><strong>{label(selectedContact.supplierQuality, "crm") || t("crm.contacts.ef6691545d")}</strong></div>
+                  <div><span>{t("crm.contacts.dee377cfd8")}</span><strong>{label(selectedContact.supplierStatus, "crm") || t("crm.contacts.ad26287ab6")}</strong></div>
+                  <div className="full"><span>{t("crm.contacts.301b704907")}</span><p>{selectedContact.supplierPriceNotes || t("crm.contacts.61979ef29a")}</p></div>
+                  <div className="full"><span>{t("crm.contacts.c5da356eca")}</span><p>{selectedContact.supplierCommissionNotes || t("crm.contacts.cec2a1bbd3")}</p></div>
                 </>
               ) : (
                 <>
-                  <div><span>Budget</span><strong>{selectedContact.budget ? currency.format(selectedContact.budget) : "Non renseigné"}</strong></div>
-                  <div><span>Relation</span><strong>{getContactRelationshipStatus(selectedContact)}</strong></div>
-                  <div><span>Niveau</span><strong>{getContactClientLevel(selectedContact)}</strong></div>
-                  <div><span>Langue</span><strong>{getContactPreferredLanguage(selectedContact)}</strong></div>
+                  <div><span>{t("crm.contacts.1c6225ec70")}</span><strong>{selectedContact.budget ? screen.money(selectedContact.budget) : t("crm.contacts.cb6c1fb76c")}</strong></div>
+                  <div><span>{t("crm.contacts.1367485dc3")}</span><strong>{label(getContactRelationshipStatus(selectedContact), "crm")}</strong></div>
+                  <div><span>{t("crm.contacts.2b5104f5fc")}</span><strong>{label(getContactClientLevel(selectedContact), "crm")}</strong></div>
+                  <div><span>{t("crm.contacts.5f6baab4db")}</span><strong>{label(getContactPreferredLanguage(selectedContact), "crm")}</strong></div>
                 </>
               )}
 
-              <div className="full"><span>Notes</span><p>{selectedContact.notes || "Aucune note."}</p></div>
+              <div className="full"><span>{t("crm.contacts.8a7525b149")}</span><p>{selectedContact.notes || t("crm.contacts.7130e80de1")}</p></div>
             </div>
 
             {!business && (isSupplierContact(selectedContact) || Boolean(selectedContact.supplierBankAccounts?.length)) && <VendorBankAccounts contact={contacts.find(c => c.id === selectedContact.id) || selectedContact} actor={actor} onUpdate={onUpdate} />}
 
             {!isSupplierContact(selectedContact) && (
               <div className="contact-related-section">
-                <p className="eyebrow">Synthèse commerciale</p>
+                <p className="eyebrow" data-semantic-text={"Synthèse commerciale"}>{t("crm.contacts.ae151f73db")}</p>
                 <div className="list-stack oar-contact-list-stack">
                   <article className="mini-row">
-                    <div><strong>Leads liés</strong><span>{getContactLeads(selectedContact).length} lead{getContactLeads(selectedContact).length > 1 ? "s" : ""}</span></div>
+                    <div><strong>{t("crm.contacts.7a1b10d944")}</strong><span>{t("crm.contacts.linkedEnquiries", { count: getContactLeads(selectedContact).length })}</span></div>
                     <Badge>{getContactLeads(selectedContact).filter((lead) => lead.status !== "Perdu").length}</Badge>
                   </article>
                   <article className="mini-row">
-                    <div><strong>Tâches ouvertes</strong><span>Actions restantes</span></div>
+                    <div><strong>{t("crm.contacts.ad3cb2195b")}</strong><span>{t("crm.contacts.c00de5a564")}</span></div>
                     <Badge>{getContactTasks(selectedContact).filter((task) => task.status !== "Terminé").length}</Badge>
                   </article>
                 </div>
@@ -12235,10 +12025,10 @@ function ContactsView({
             {access && <ContactDocuments key={selectedContact.id} contactId={selectedContact.id} access={access}/>}
 
             <div className="confirm-actions">
-              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedContact(null)}>Fermer</BusinessButton>
-              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); setSelectedContact(null); onCreateLead(name); }}>Créer un lead</BusinessButton>
-              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = selectedContact.name; const id = selectedContact.id; setSelectedContact(null); onCreateTask(name, id); }}>Créer une tâche</BusinessButton>
-              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedContact)}>Modifier</BusinessButton>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedContact(null)} data-crm-dismiss="true">{t("crm.contacts.711e5f2e19")}</BusinessButton>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); setSelectedContact(null); onCreateLead(name); }} data-crm-auto-scroll="true">{t("crm.contacts.b17ed17a3a")}</BusinessButton>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = selectedContact.name; const id = selectedContact.id; setSelectedContact(null); onCreateTask(name, id); }} data-crm-auto-scroll="true">{t("crm.contacts.502e6ba2e5")}</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedContact)} data-crm-auto-scroll="true">{t("crm.contacts.42e37604b6")}</BusinessButton>
             </div>
           </div>
         </div>
@@ -12247,8 +12037,8 @@ function ContactsView({
       {editingContact && (
         <div className="confirm-backdrop">
           <div id="contact-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Modification</p>
-            <h3>Modifier le contact</h3>
+            <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.contacts.46889b43bc")}</p>
+            <h3>{t("crm.contacts.b67e91e395")}</h3>
 
             <BusinessForm className="form-grid contact-edit-form" pending={edition.saving} onSubmit={submitEdit} onChangeCapture={edition.changed} onChange={(event) => {
               const target = event.target;
@@ -12256,115 +12046,100 @@ function ContactsView({
                 changedContactFields.current.add(target.name);
               }
             }}>
-              {edition.message&&<p role="alert">{edition.message}</p>}
-              <BusinessLabel>Civilité
-                <select name="civility" defaultValue={editingContact.civility ?? ""}>
+              <ConfirmedFormMessage message={edition.message} />
+              <BusinessLabel>{t("crm.contacts.901ce24cca")}<select name="civility" defaultValue={editingContact.civility ?? ""}>
                   <option value="">—</option>
-                  <option value="M">M</option>
-                  <option value="MME">MME</option>
+                  <option value="M">{t("crm.contacts.08f271887c")}</option>
+                  <option value="MME">{t("crm.contacts.97c3250ed4")}</option>
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Prénom<input name="firstName" defaultValue={editingContact.firstName ?? ""} /></BusinessLabel>
-              <BusinessLabel>Nom<input name="name" defaultValue={editingContact.name} /></BusinessLabel>
-              <BusinessLabel>Société<input name="companyName" defaultValue={editingContact.companyName ?? ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.e325bf8f90")}<input name="firstName" defaultValue={editingContact.firstName ?? ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.b2c124536d")}<input name="name" defaultValue={editingContact.name} /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.e408c08c6b")}<input name="companyName" defaultValue={editingContact.companyName ?? ""} /></BusinessLabel>
 
-              <BusinessLabel>Type
-                <select name="kind" value={editingContactKind} onChange={(event) => setEditingContactKind(event.target.value as ContactKind)}>
-                  {contactKinds.map((kind) => <option key={kind}>{kind}</option>)}
+              <BusinessLabel>{t("crm.contacts.baaddf70fb")}<select name="kind" value={editingContactKind} onChange={(event) => setEditingContactKind(event.target.value as ContactKind)}>
+                  {contactKinds.map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
                 </select>
               </BusinessLabel>
-              <BusinessLabel>Email<input name="email" type="email" defaultValue={editingContact.email} /></BusinessLabel>
-              <BusinessLabel>Téléphone<input name="phone" defaultValue={editingContact.phone} /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.969ccbd3cf")}<input name="email" type="email" defaultValue={editingContact.email} /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.cc4c424b57")}<input name="phone" defaultValue={editingContact.phone} /></BusinessLabel>
               <ContactPostalAddressField value={editingContact.postalAddress} />
-              <BusinessLabel>Ville / zone<input name="city" defaultValue={editingContact.city} /></BusinessLabel>
-              <BusinessLabel>Source<input name="source" defaultValue={editingContact.source} /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.4d7e0f0579")}<input name="city" defaultValue={editingContact.city} /></BusinessLabel>
+              <BusinessLabel>{t("crm.contacts.0e570ca6fa")}<input name="source" defaultValue={editingContact.source} /></BusinessLabel>
 
               {editingContactKind === "Membre de l’organisation" && (
-                <BusinessLabel>Fonction<input name="organizationFunction" defaultValue={editingContact.organizationFunction ?? ""} placeholder="Fonction dans l’organisation" /></BusinessLabel>
+                <BusinessLabel>{t("crm.contacts.222f9de9e7")}<input name="organizationFunction" defaultValue={editingContact.organizationFunction ?? ""} placeholder={t("crm.contacts.60c9c50476")} /></BusinessLabel>
               )}
 
               {editingContactKind !== "Prestataire" && editingContactKind !== "Membre de l’organisation" && (
                 <>
-                  <BusinessLabel>Relation
-                    <select name="relationshipStatus" defaultValue={getContactRelationshipStatus(editingContact) === "Prestataire" ? "Prospect" : getContactRelationshipStatus(editingContact)}>
-                      {nonSupplierRelationshipStatuses.map((status) => <option key={status}>{status}</option>)}
+                  <BusinessLabel>{t("crm.contacts.1367485dc3")}<select name="relationshipStatus" defaultValue={getContactRelationshipStatus(editingContact) === "Prestataire" ? "Prospect" : getContactRelationshipStatus(editingContact)}>
+                      {nonSupplierRelationshipStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
                     </select>
                   </BusinessLabel>
-                  <BusinessLabel>Budget<input name="budget" type="number" min="0" defaultValue={editingContact.budget || ""} /></BusinessLabel>
+                  <BusinessLabel>{t("crm.contacts.1c6225ec70")}<input name="budget" type="number" min="0" defaultValue={editingContact.budget || ""} /></BusinessLabel>
                 </>
               )}
 
               {editingContactKind === "Client" && (
                 <>
-                  <BusinessLabel>Niveau client
-                    <select name="clientLevel" defaultValue={getContactClientLevel(editingContact)}>
-                      {contactLevels.map((level) => <option key={level}>{level}</option>)}
+                  <BusinessLabel>{t("crm.contacts.7f83d4d107")}<select name="clientLevel" defaultValue={getContactClientLevel(editingContact)}>
+                      {contactLevels.map((level) => <option key={level} value={level}>{label(level, "crm")}</option>)}
                     </select>
                   </BusinessLabel>
-                  <BusinessLabel>Langue
-                    <select name="preferredLanguage" defaultValue={getContactPreferredLanguage(editingContact)}>
-                      {contactLanguages.map((language) => <option key={language}>{language}</option>)}
+                  <BusinessLabel>{t("crm.contacts.5f6baab4db")}<select name="preferredLanguage" defaultValue={getContactPreferredLanguage(editingContact)}>
+                      {contactLanguages.map((language) => <option key={language} value={language}>{label(language, "crm")}</option>)}
                     </select>
                   </BusinessLabel>
-                  <BusinessLabel className="full">Préférences
-                    <textarea name="preferences" defaultValue={editingContact.preferences ?? ""} />
+                  <BusinessLabel className="full">{t("crm.contacts.2032603871")}<textarea name="preferences" defaultValue={editingContact.preferences ?? ""} />
                   </BusinessLabel>
-                  <BusinessLabel className="full">Notes importantes
-                    <textarea name="importantNotes" defaultValue={editingContact.importantNotes ?? ""} />
+                  <BusinessLabel className="full">{t("crm.contacts.ba2bb523cd")}<textarea name="importantNotes" defaultValue={editingContact.importantNotes ?? ""} />
                   </BusinessLabel>
                 </>
               )}
 
               {editingContactKind === "Prestataire" && (
                 <>
-                  <BusinessLabel>Profession / activité
-                    <select name="supplierCategory" defaultValue={editingContact.supplierCategory || ""}>
+                  <BusinessLabel>{t("crm.contacts.306854f806")}<select name="supplierCategory" defaultValue={editingContact.supplierCategory || ""}>
                       <option value="">—</option>
-                      {supplierProfessionOptions.map((category) => <option key={category}>{category}</option>)}
+                      {supplierProfessionOptions.map((category) => <option key={category} value={category}>{screen.category(category)}</option>)}
                     </select>
                   </BusinessLabel>
-                  <BusinessLabel>Ajouter une profession
-                    <input name="supplierCategoryCustom" placeholder="Nouvelle profession si absente de la liste" />
+                  <BusinessLabel>{t("crm.contacts.89dd598794")}<input name="supplierCategoryCustom" placeholder={t("crm.contacts.ebe3278935")} />
                   </BusinessLabel>
-                  <BusinessLabel>Contact référent<input name="supplierContactName" defaultValue={editingContact.supplierContactName || ""} /></BusinessLabel>
-                  <BusinessLabel>Fiabilité
-                    <select name="supplierReliability" defaultValue={editingContact.supplierReliability || "À tester"}>
-                      <option>À tester</option>
-                      <option>Fiable</option>
-                      <option>Très fiable</option>
-                      <option>À éviter</option>
+                  <BusinessLabel>{t("crm.contacts.5459cc133f")}<input name="supplierContactName" defaultValue={editingContact.supplierContactName || ""} /></BusinessLabel>
+                  <BusinessLabel>{t("crm.contacts.10859b8dc3")}<select name="supplierReliability" defaultValue={editingContact.supplierReliability || "À tester"}>
+                      <option value="À tester">{t("crm.contacts.437f69fce9")}</option>
+                      <option value="Fiable">{t("crm.contacts.26d5cdf018")}</option>
+                      <option value="Très fiable">{t("crm.contacts.8508f22f87")}</option>
+                      <option value="À éviter">{t("crm.contacts.9c5902593d")}</option>
                     </select>
                   </BusinessLabel>
-                  <BusinessLabel>Statut prestataire
-                    <select name="supplierStatus" defaultValue={editingContact.supplierStatus || "Actif"}>
-                      <option>Actif</option>
-                      <option>À vérifier</option>
-                      <option>Inactif</option>
+                  <BusinessLabel>{t("crm.contacts.8a8a8e1503")}<select name="supplierStatus" defaultValue={editingContact.supplierStatus || "Actif"}>
+                      <option value="Actif">{t("crm.contacts.ad26287ab6")}</option>
+                      <option value="À vérifier">{t("crm.contacts.03a088312d")}</option>
+                      <option value="Inactif">{t("crm.contacts.cdcf2ea348")}</option>
                     </select>
                   </BusinessLabel>
-                  <BusinessLabel>Qualité
-                    <select name="supplierQuality" defaultValue={editingContact.supplierQuality || "Standard"}>
-                      <option>Standard</option>
-                      <option>Premium</option>
-                      <option>Très premium</option>
+                  <BusinessLabel>{t("crm.contacts.8dce95eeb4")}<select name="supplierQuality" defaultValue={editingContact.supplierQuality || "Standard"}>
+                      <option value="Standard">{t("crm.contacts.ef6691545d")}</option>
+                      <option value="Premium">{t("crm.contacts.de88c121a8")}</option>
+                      <option value="Très premium">{t("crm.contacts.6e2c957724")}</option>
                     </select>
                   </BusinessLabel>
-                  <BusinessLabel className="full">Notes prix
-                    <textarea name="supplierPriceNotes" defaultValue={editingContact.supplierPriceNotes || ""} />
+                  <BusinessLabel className="full">{t("crm.contacts.301b704907")}<textarea name="supplierPriceNotes" defaultValue={editingContact.supplierPriceNotes || ""} />
                   </BusinessLabel>
-                  <BusinessLabel className="full">Commission / marge
-                    <textarea name="supplierCommissionNotes" defaultValue={editingContact.supplierCommissionNotes || ""} />
+                  <BusinessLabel className="full">{t("crm.contacts.c5da356eca")}<textarea name="supplierCommissionNotes" defaultValue={editingContact.supplierCommissionNotes || ""} />
                   </BusinessLabel>
                 </>
               )}
 
-              <BusinessLabel className="full">Notes
-                <textarea name="notes" defaultValue={editingContact.notes} />
+              <BusinessLabel className="full">{t("crm.contacts.8a7525b149")}<textarea name="notes" defaultValue={editingContact.notes} />
               </BusinessLabel>
 
               <div className="confirm-actions full">
-                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => {edition.changed();setEditingContact(null);}}>Annuler</BusinessButton>
-                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => {edition.changed();setEditingContact(null);}} data-crm-dismiss="true">{t("crm.contacts.46ad3916f6")}</BusinessButton>
+                <BusinessButton permission="write" className="primary-button contact-form-submit" type="submit">{t("crm.contacts.71dc74873e")}</BusinessButton>
               </div>
             </BusinessForm>
           </div>
@@ -12405,6 +12180,8 @@ function LeadsView({
   quotes?: QuoteRequest[];
   onCreateTask: (lead: Lead) => void;
 }) {
+  const { t, label, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -12465,7 +12242,7 @@ function LeadsView({
     if (!updatedLead.contactName) return;
 
     if (isOpenLead(updatedLead) && (!updatedLead.nextAction.trim() || !updatedLead.dueDate)) {
-      window.alert("Un lead ouvert doit avoir une prochaine action et une échéance.");
+      window.alert(dialogT("crm.leads.49ed09dfc6"));
       return;
     }
 
@@ -12530,41 +12307,38 @@ const visibleLeads = leads.filter((lead) => {
     <div className="stack">
       <section id="lead-create-form" className="card form-card horizontal-form">
         <div>
-          <p className="eyebrow">Nouveau</p>
-          <h3>Ajouter un lead</h3>
+          <p className="eyebrow" data-semantic-text={"Nouveau"}>{t("crm.leads.c3634f2ede")}</p>
+          <h3>{t("crm.leads.c361479b7c")}</h3>
         </div>
 
         <BusinessForm className="lead-smart-form" onSubmit={onAdd}>
           <fieldset className="lead-form-block">
-            <legend>1 · Client & demande</legend>
+            <legend>{t("crm.leads.d75d2476f0")}</legend>
 
-            <BusinessLabel>Catégorie
-              <select name="category" defaultValue="Villa">
-                <option value="Villa">Villa</option>
-                <option value="Voiture">Voiture</option>
-                <option value="Bateau">Bateau</option>
-                <option value="Conciergerie">Conciergerie</option>
+            <BusinessLabel>{t("crm.leads.68a5341fc6")}<select name="category" defaultValue="Villa">
+                <option value="Villa">{t("crm.leads.afad4c579e")}</option>
+                <option value="Voiture">{t("crm.leads.035004be54")}</option>
+                <option value="Bateau">{t("crm.leads.d69c7210bc")}</option>
+                <option value="Conciergerie">{t("crm.leads.6a4ce3246c")}</option>
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>Contact
-              <input
+            <BusinessLabel>{t("crm.leads.2b5c3d2672")}<input
                 name="contactName"
                 list="lead-contact-options"
                 defaultValue={preselectedContactName || ""}
-                placeholder="Tapez un nom, société, email ou téléphone..."
+                placeholder={t("crm.leads.84c00400a6")}
               />
               <datalist id="lead-contact-options">
                 {contacts.map((contact) => {
                   const label = [contact.civility, contact.firstName, contact.name].filter(Boolean).join(" ").trim() || contact.companyName || contact.email || contact.phone || "Contact sans nom";
-                  return <option key={contact.id} value={label}>{contact.companyName ? `${label} · ${contact.companyName}` : label}</option>;
+                  return <option key={contact.id} value={label}>{contact.companyName ? t("crm.leads.7c639bc99b", { value1: displayValue(label), value2: displayValue(contact.companyName) }) : label}</option>;
                 })}
               </datalist>
             </BusinessLabel>
 
-            <BusinessLabel>Actif proposé
-              <select name="assetKey" defaultValue="">
-                <option value="">Aucun actif lié</option>
+            <BusinessLabel>{t("crm.leads.0ad9d4fa0c")}<select name="assetKey" defaultValue="">
+                <option value="">{t("crm.leads.1ceb66fe96")}</option>
                 {assetOptions.map((asset) => (
                   <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`}>
                     {asset.label}
@@ -12575,116 +12349,103 @@ const visibleLeads = leads.filter((lead) => {
           </fieldset>
 
           <fieldset className="lead-form-block">
-            <legend>2 · Planning & budget</legend>
+            <legend>{t("crm.leads.fa767df5cb")}</legend>
 
-            <BusinessLabel>Début réservation
-              <input name="rentalStartDate" type="date" />
+            <BusinessLabel>{t("crm.leads.d90f9c7025")}<input name="rentalStartDate" type="date" />
             </BusinessLabel>
 
-            <BusinessLabel>Fin réservation
-              <input name="rentalEndDate" type="date" />
+            <BusinessLabel>{t("crm.leads.97fa488838")}<input name="rentalEndDate" type="date" />
             </BusinessLabel>
 
-            <BusinessLabel>Valeur
-              <input name="value" type="number" min="0" placeholder="2500" />
+            <BusinessLabel>{t("crm.leads.6e8f3132d8")}<input name="value" type="number" min="0" placeholder="2500" />
             </BusinessLabel>
           </fieldset>
 
           <fieldset className="lead-form-block">
-            <legend>3 · Suivi commercial</legend>
+            <legend>{t("crm.leads.dc1e38fec8")}</legend>
 
-            <BusinessLabel>Statut
-              <select name="status" defaultValue="Nouveau">
+            <BusinessLabel>{t("crm.leads.dee377cfd8")}<select name="status" defaultValue="Nouveau">
                 
         {visibleLeads.length === 0 && (
           <div className="empty-state">
-            <h3>Aucun lead affiché</h3>
-            <p>
-              Ajoutez un lead avec “Ajouter contact / lead” ou modifiez les filtres si vous cherchez une demande existante.
-            </p>
+            <h3>{t("crm.leads.e395db00e1")}</h3>
+            <p>{t("crm.leads.ac4e57ba21")}</p>
           </div>
         )}
 
 {leadStatuses.map((status) => (
-                  <option key={status}>{status}</option>
+                  <option key={status} value={status}>{label(status, "crm")}</option>
                 ))}
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>Priorité
-              <select name="priority" defaultValue="Moyenne">
-                <option>Basse</option>
-                <option>Moyenne</option>
-                <option>Haute</option>
+            <BusinessLabel>{t("crm.leads.26c18a313d")}<select name="priority" defaultValue="Moyenne">
+                <option value="Basse">{t("crm.leads.2435a9bfbd")}</option>
+                <option value="Moyenne">{t("crm.leads.2aefe19b76")}</option>
+                <option value="Haute">{t("crm.leads.9c3e565aa2")}</option>
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>Date réponse
-              <input name="dueDate" type="date" />
+            <BusinessLabel>{t("crm.leads.40f31a1ecb")}<input name="dueDate" type="date" />
             </BusinessLabel>
 
-            <BusinessLabel className="full">Prochaine action
-              <input name="nextAction" placeholder="Appeler, envoyer proposition, relancer..." />
+            <BusinessLabel className="full">{t("crm.leads.a3596782a3")}<input name="nextAction" placeholder={t("crm.leads.9f95456376")} />
             </BusinessLabel>
 
-            <BusinessLabel className="full">Notes internes
-              <textarea name="notes" placeholder="Préférences client, contraintes, détails importants..." />
+            <BusinessLabel className="full">{t("crm.leads.d96ddd0984")}<textarea name="notes" placeholder={t("crm.leads.56d53a4278")} />
             </BusinessLabel>
           </fieldset>
 
           <div className="lead-form-actions">
-            <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter le lead</BusinessButton>
+            <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.leads.7fee0e9d89")}</BusinessButton>
           </div>
         </BusinessForm>
       </section>
 
       <section className="card lead-filter-card">
         <div>
-          <p className="eyebrow">Filtres rapides</p>
-          <h3>{visibleLeads.length} leads affichés</h3>
+          <p className="eyebrow" data-semantic-text={"Filtres rapides"}>{t("crm.leads.a81e92302e")}</p>
+          <h3>{visibleLeads.length}{" "}{t("crm.leads.167c84a712")}</h3>
         </div>
 
         <div className="lead-filter-grid">
-          <BusinessLabel>Catégorie
-            <select
+          <BusinessLabel>{t("crm.leads.68a5341fc6")}<select
               value={leadCategoryFilter}
               onChange={(event) => setLeadCategoryFilter(event.target.value as "Toutes" | Lead["category"])}
             >
-              <option value="Toutes">Toutes</option>
-              <option value="Villa">Villa</option>
-              <option value="Voiture">Voiture</option>
-              <option value="Bateau">Bateau</option>
-              <option value="Conciergerie">Conciergerie</option>
+              <option value="Toutes">{t("crm.leads.42623b97b4")}</option>
+              <option value="Villa">{t("crm.leads.afad4c579e")}</option>
+              <option value="Voiture">{t("crm.leads.035004be54")}</option>
+              <option value="Bateau">{t("crm.leads.d69c7210bc")}</option>
+              <option value="Conciergerie">{t("crm.leads.6a4ce3246c")}</option>
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Statut
-            <select
+          <BusinessLabel>{t("crm.leads.dee377cfd8")}<select
               value={leadStatusFilter}
               onChange={(event) => setLeadStatusFilter(event.target.value as "Tous" | LeadStatus)}
             >
-              <option value="Tous">Tous</option>
+              <option value="Tous">{t("crm.leads.2ff5998143")}</option>
               {leadStatuses.map((status) => (
-                <option key={status} value={status}>{status}</option>
+                <option key={status} value={status}>{label(status, "crm")}</option>
               ))}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Priorité
-            <select
+          <BusinessLabel>{t("crm.leads.26c18a313d")}<select
               value={leadPriorityFilter}
               onChange={(event) => setLeadPriorityFilter(event.target.value as "Toutes" | Lead["priority"])}
             >
-              <option value="Toutes">Toutes</option>
-              <option value="Basse">Basse</option>
-              <option value="Moyenne">Moyenne</option>
-              <option value="Haute">Haute</option>
+              <option value="Toutes">{t("crm.leads.42623b97b4")}</option>
+              <option value="Basse">{t("crm.leads.2435a9bfbd")}</option>
+              <option value="Moyenne">{t("crm.leads.2aefe19b76")}</option>
+              <option value="Haute">{t("crm.leads.9c3e565aa2")}</option>
             </select>
           </BusinessLabel>
         </div>
       </section>
 
-      <section className="pipeline-grid compact-pipeline" aria-label="Demandes clients">
+      <section className="pipeline-grid compact-pipeline" aria-label={t("crm.leads.7bcb6fb014")}>
         {leadStatuses.map((status) => {
           const columnLeads = sortByUrgency(visibleLeads.filter((lead) => lead.status === status));
 
@@ -12701,7 +12462,7 @@ const visibleLeads = leads.filter((lead) => {
                 onClick={() => toggleLeadColumn(status)}
                 aria-expanded={!isCollapsed}
               >
-                <strong>{status}</strong>
+                <strong>{label(status, "crm")}</strong>
                 <span>{columnLeads.length}</span>
                 <em>{isCollapsed ? "▾" : "▴"}</em>
               </BusinessButton>
@@ -12711,67 +12472,59 @@ const visibleLeads = leads.filter((lead) => {
                   {columnLeads.map((lead) => (
                     <article className={`lead-card ${getDueStatus(lead.dueDate)}`} key={lead.id} data-notification-target={`lead-${lead.id}`}>
                       <div className="lead-topline">
-                        <Badge>{lead.priority}</Badge>
+                        <Badge>{label(lead.priority, "crm")}</Badge>
 
                         <BusinessButton permission="remove"
                           className="icon-button"
                           type="button"
                           onClick={() => {
                             const confirmed = window.confirm(
-                              `Supprimer ce lead pour "${lead.contactName}" ?`
+                              dialogT("crm.leads.216e79a037", { value1: displayValue(lead.contactName) })
                             );
 
                             if (confirmed) {
                               onDelete(lead.id);
                             }
                           }}
-                          aria-label="Supprimer"
-                        >
-                          ×
-                        </BusinessButton>
+                          aria-label={t("crm.leads.5e5d0216ce")}
+                        >{t("crm.leads.8db71ed28b")}</BusinessButton>
                       </div>
 
-                      <strong>{lead.category}</strong>
+                      <strong>{label(lead.category, "crm")}</strong>
                       <span>{lead.contactName}</span>
-                      <small>{formatReservationPeriod(lead.rentalStartDate, lead.rentalEndDate)}</small>
+                      <small>{screen.reservation(lead.rentalStartDate, lead.rentalEndDate)}</small>
 
                       {getLeadAssetLabel(lead) && (
                         <small className="asset-linked-line">{getLeadAssetLabel(lead)}</small>
                       )}
 
-                      <p>{lead.nextAction || "Aucune prochaine action"}</p>
+                      <p>{lead.nextAction || t("crm.leads.c3990c21db")}</p>
 
                       {lead.notes && (
                         <p className="lead-note-preview">{lead.notes}</p>
                       )}
 
                       <div className="lead-footer">
-                        <b>{currency.format(lead.value)}</b>
+                        <b>{screen.money(lead.value)}</b>
                         <small className={`due-label ${getDueStatus(lead.dueDate)}`}>
-                          {getDueLabel(lead.dueDate)}
+                          {screen.due(lead.dueDate)}
                         </small>
                       </div>
 
                       <BusinessSelect value={lead.status} onChange={(event) => onStatusChange(lead.id, event.target.value as LeadStatus)}>
-                        {leadStatuses.map((option) => <option key={option}>{option}</option>)}
+                        {leadStatuses.map((option) => <option key={option} value={option}>{label(option, "crm")}</option>)}
                       </BusinessSelect>
 
                       <div className="lead-card-actions">
-                        <BusinessButton className="lead-detail-button" type="button" onClick={() => setSelectedLead(lead)}>
-                          Détails
+                        <BusinessButton className="lead-detail-button" type="button" onClick={() => setSelectedLead(lead)} data-crm-auto-scroll="true" data-crm-action="details">{t("crm.leads.17eaee489b")}</BusinessButton>
+
+                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateTask(lead)}>{t("crm.leads.e4c05d29df")}</BusinessButton>
+
+                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateQuote(lead)} data-crm-auto-scroll="true">
+                          {quotes.some((quote) => quote.leadId === lead.id) ? t("crm.leads.4d2edfdd47") : t("crm.leads.1b45a42c1e")}
                         </BusinessButton>
 
-                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateTask(lead)}>
-                          Tâche
-                        </BusinessButton>
-
-                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateQuote(lead)}>
-                          {quotes.some((quote) => quote.leadId === lead.id) ? "Ouvrir devis lié" : "Créer devis"}
-                        </BusinessButton>
-
-                        <BusinessButton permission="write" className="lead-edit-button" type="button" onClick={() => openEdit(lead)}>
-                          Modifier
-                        </BusinessButton>
+                        <BusinessButton permission="write" className="lead-edit-button" type="button" onClick={() => openEdit(lead)} data-crm-auto-scroll="true">{t("crm.leads.42e37604b6")}</BusinessButton>
                       </div>
                     </article>
                   ))}
@@ -12785,53 +12538,53 @@ const visibleLeads = leads.filter((lead) => {
       {selectedLead && (
         <div className="confirm-backdrop">
           <div className="confirm-dialog lead-detail-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Fiche lead</p>
-            <h3>{selectedLead.category} • {selectedLead.contactName}</h3>
+            <p className="eyebrow" data-semantic-text={"Fiche lead"}>{t("crm.leads.5730fbf554")}</p>
+            <h3>{label(selectedLead.category, "crm")} • {selectedLead.contactName}</h3>
 
             <div className="lead-detail-grid">
               <div>
-                <span>Statut</span>
-                <strong>{selectedLead.status}</strong>
+                <span>{t("crm.leads.dee377cfd8")}</span>
+                <strong>{label(selectedLead.status, "crm")}</strong>
               </div>
 
               <div>
-                <span>Priorité</span>
-                <strong>{selectedLead.priority}</strong>
+                <span>{t("crm.leads.26c18a313d")}</span>
+                <strong>{label(selectedLead.priority, "crm")}</strong>
               </div>
 
               <div>
-                <span>Valeur</span>
-                <strong>{currency.format(selectedLead.value)}</strong>
+                <span>{t("crm.leads.6e8f3132d8")}</span>
+                <strong>{screen.money(selectedLead.value)}</strong>
               </div>
 
               <div>
-                <span>Date réponse</span>
-                <strong>{selectedLead.dueDate ? formatDateFR(selectedLead.dueDate) : "Non renseignée"}</strong>
+                <span>{t("crm.leads.40f31a1ecb")}</span>
+                <strong>{selectedLead.dueDate ? screen.date(selectedLead.dueDate) : t("crm.leads.831460cb02")}</strong>
               </div>
 
               <div className="full">
-                <span>Date de réservation</span>
-                <strong>{formatReservationPeriod(selectedLead.rentalStartDate, selectedLead.rentalEndDate)}</strong>
+                <span>{t("crm.leads.f8c31bb6c6")}</span>
+                <strong>{screen.reservation(selectedLead.rentalStartDate, selectedLead.rentalEndDate)}</strong>
               </div>
 
               <div className="full">
-                <span>Prochaine action</span>
-                <strong>{selectedLead.nextAction || "Aucune prochaine action"}</strong>
+                <span>{t("crm.leads.a3596782a3")}</span>
+                <strong>{selectedLead.nextAction || t("crm.leads.c3990c21db")}</strong>
               </div>
-              <div><span>Action</span><strong>{getActionMetaLabel(selectedLead)}</strong></div>
+              <div><span>{t("crm.leads.64cff1319d")}</span><strong>{screen.action(selectedLead)}</strong></div>
 
               <div className="full">
-                <span>Notes internes</span>
-                <p>{selectedLead.notes || "Aucune note interne pour le moment."}</p>
+                <span>{t("crm.leads.d96ddd0984")}</span>
+                <p>{selectedLead.notes || t("crm.leads.50f3acb1f1")}</p>
               </div>
             </div>
 
             <div className="lead-related-section">
-              <p className="eyebrow">Tâches liées à ce lead</p>
+              <p className="eyebrow" data-semantic-text={"Tâches liées à ce lead"}>{t("crm.leads.3eb5c16283")}</p>
 
               <div className="list-stack oar-contact-list-stack">
                 {getLeadTasks(selectedLead).length === 0 && (
-                  <p className="muted-line">Aucune tâche liée pour le moment.</p>
+                  <p className="muted-line">{t("crm.leads.dc8b155594")}</p>
                 )}
 
                 {getLeadTasks(selectedLead).map((task) => (
@@ -12839,21 +12592,19 @@ const visibleLeads = leads.filter((lead) => {
                     <div>
                       <strong>{task.title}</strong>
                       <span>
-                        {task.owner || "Responsable non renseigné"}
+                        {task.owner || t("crm.leads.96a9c762f6")}
                         {" · "}
-                        {task.dueDate ? `Date ${formatDateFR(task.dueDate)}` : "Sans échéance"}
+                        {task.dueDate ? t("crm.leads.f31959df8f", { value1: displayValue(screen.date(task.dueDate)) }) : t("crm.leads.5de50fae8b")}
                       </span>
                     </div>
-                    <Badge>{task.status}</Badge>
+                    <Badge>{label(task.status, "crm")}</Badge>
                   </article>
                 ))}
               </div>
             </div>
 
             <div className="confirm-actions">
-              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedLead(null)}>
-                Fermer
-              </BusinessButton>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedLead(null)} data-crm-dismiss="true">{t("crm.leads.711e5f2e19")}</BusinessButton>
 
                               <BusinessButton permission="write"
                 className="secondary-button"
@@ -12863,9 +12614,7 @@ const visibleLeads = leads.filter((lead) => {
                   setSelectedLead(null);
                   onCreateTask(lead);
                 }}
-              >
-                Créer une tâche
-              </BusinessButton>
+               data-crm-auto-scroll="true">{t("crm.leads.502e6ba2e5")}</BusinessButton>
 
               <BusinessButton permission="write"
                 className="primary-button"
@@ -12875,9 +12624,7 @@ const visibleLeads = leads.filter((lead) => {
                   setSelectedLead(null);
                   openEdit(lead);
                 }}
-              >
-                Modifier
-              </BusinessButton>
+               data-crm-auto-scroll="true">{t("crm.leads.42e37604b6")}</BusinessButton>
             </div>
           </div>
         </div>
@@ -12886,22 +12633,20 @@ const visibleLeads = leads.filter((lead) => {
       {editingLead && (
         <div className="confirm-backdrop">
           <div id="lead-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Modification</p>
-            <h3>Modifier le lead</h3>
+            <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.leads.46889b43bc")}</p>
+            <h3>{t("crm.leads.cf4075f488")}</h3>
 
             <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <BusinessLabel>Catégorie
-                <select name="category" defaultValue={editingLead.category}>
-                  <option value="Villa">Villa</option>
-                  <option value="Voiture">Voiture</option>
-                  <option value="Bateau">Bateau</option>
-                  <option value="Conciergerie">Conciergerie</option>
+              <BusinessLabel>{t("crm.leads.68a5341fc6")}<select name="category" defaultValue={editingLead.category}>
+                  <option value="Villa">{t("crm.leads.afad4c579e")}</option>
+                  <option value="Voiture">{t("crm.leads.035004be54")}</option>
+                  <option value="Bateau">{t("crm.leads.d69c7210bc")}</option>
+                  <option value="Conciergerie">{t("crm.leads.6a4ce3246c")}</option>
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Contact
-                <select name="contactName" defaultValue={editingLead.contactName} required>
-                  <option value="">Sélectionner un contact</option>
+              <BusinessLabel>{t("crm.leads.2b5c3d2672")}<select name="contactName" defaultValue={editingLead.contactName} required>
+                  <option value="">{t("crm.leads.09a3bda6ca")}</option>
                   {contacts.map((contact) => (
                     <option key={contact.id} value={contact.name}>
                       {contact.name}
@@ -12910,12 +12655,11 @@ const visibleLeads = leads.filter((lead) => {
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Actif proposé
-                <select
+              <BusinessLabel>{t("crm.leads.0ad9d4fa0c")}<select
                   name="assetKey"
                   defaultValue={editingLead.assetType && editingLead.assetId ? `${editingLead.assetType}:${editingLead.assetId}` : ""}
                 >
-                  <option value="">Aucun actif lié</option>
+                  <option value="">{t("crm.leads.1ceb66fe96")}</option>
                   {assetOptions.map((asset) => (
                     <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`}>
                       {asset.label}
@@ -12924,42 +12668,34 @@ const visibleLeads = leads.filter((lead) => {
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Statut
-                <select name="status" defaultValue={editingLead.status}>
-                  {leadStatuses.map((status) => <option key={status}>{status}</option>)}
+              <BusinessLabel>{t("crm.leads.dee377cfd8")}<select name="status" defaultValue={editingLead.status}>
+                  {leadStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Valeur<input name="value" type="number" min="0" defaultValue={editingLead.value || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.leads.6e8f3132d8")}<input name="value" type="number" min="0" defaultValue={editingLead.value || ""} /></BusinessLabel>
 
-              <BusinessLabel>Priorité
-                <select name="priority" defaultValue={editingLead.priority}>
-                  <option>Basse</option>
-                  <option>Moyenne</option>
-                  <option>Haute</option>
+              <BusinessLabel>{t("crm.leads.26c18a313d")}<select name="priority" defaultValue={editingLead.priority}>
+                  <option value="Basse">{t("crm.leads.2435a9bfbd")}</option>
+                  <option value="Moyenne">{t("crm.leads.2aefe19b76")}</option>
+                  <option value="Haute">{t("crm.leads.9c3e565aa2")}</option>
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Date<input name="dueDate" type="date" defaultValue={editingLead.dueDate} /></BusinessLabel>
-              <BusinessLabel>Début réservation<input name="rentalStartDate" type="date" defaultValue={editingLead.rentalStartDate} /></BusinessLabel>
-              <BusinessLabel>Fin réservation<input name="rentalEndDate" type="date" defaultValue={editingLead.rentalEndDate} /></BusinessLabel>
+              <BusinessLabel>{t("crm.leads.99c40ab405")}<input name="dueDate" type="date" defaultValue={editingLead.dueDate} /></BusinessLabel>
+              <BusinessLabel>{t("crm.leads.d90f9c7025")}<input name="rentalStartDate" type="date" defaultValue={editingLead.rentalStartDate} /></BusinessLabel>
+              <BusinessLabel>{t("crm.leads.97fa488838")}<input name="rentalEndDate" type="date" defaultValue={editingLead.rentalEndDate} /></BusinessLabel>
 
-              <BusinessLabel className="full">Prochaine action
-                <input name="nextAction" defaultValue={editingLead.nextAction} />
+              <BusinessLabel className="full">{t("crm.leads.a3596782a3")}<input name="nextAction" defaultValue={editingLead.nextAction} />
               </BusinessLabel>
 
-              <BusinessLabel className="full">Notes internes
-                <textarea name="notes" defaultValue={editingLead.notes ?? ""} />
+              <BusinessLabel className="full">{t("crm.leads.d96ddd0984")}<textarea name="notes" defaultValue={editingLead.notes ?? ""} />
               </BusinessLabel>
 
               <div className="confirm-actions full">
-                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingLead(null)}>
-                  Annuler
-                </BusinessButton>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingLead(null)} data-crm-dismiss="true">{t("crm.leads.46ad3916f6")}</BusinessButton>
 
-                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">
-                  Enregistrer
-                </BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.leads.71dc74873e")}</BusinessButton>
               </div>
             </BusinessForm>
           </div>
@@ -12983,6 +12719,8 @@ function PropertiesView({
   onUpdate: (property: Property) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t, label, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -13040,73 +12778,65 @@ function PropertiesView({
       <section className="property-grid">
         <div className="card asset-filter-card">
           <div>
-            <p className="eyebrow">Filtres biens</p>
-            <h3>{visibleProperties.length} biens affichés</h3>
+            <p className="eyebrow" data-semantic-text={"Filtres biens"}>{t("crm.properties.8789b96118")}</p>
+            <h3>{visibleProperties.length}{" "}{t("crm.properties.4e61e7a4d9")}</h3>
           </div>
 
           <div className="asset-filter-grid">
-            <BusinessLabel>Statut
-              <select value={propertyStatusFilter} onChange={(event) => setPropertyStatusFilter(event.target.value as "Tous" | PropertyStatus)}>
-                <option value="Tous">Tous</option>
-                {propertyStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            <BusinessLabel>{t("crm.properties.dee377cfd8")}<select value={propertyStatusFilter} onChange={(event) => setPropertyStatusFilter(event.target.value as "Tous" | PropertyStatus)}>
+                <option value="Tous">{t("crm.properties.2ff5998143")}</option>
+                {propertyStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>Ville
-              <input value={propertyCityFilter} onChange={(event) => setPropertyCityFilter(event.target.value)} placeholder="Cannes, Nice..." />
+            <BusinessLabel>{t("crm.properties.0ebd25a341")}<input value={propertyCityFilter} onChange={(event) => setPropertyCityFilter(event.target.value)} placeholder={t("crm.properties.4664cdd74b")} />
             </BusinessLabel>
           </div>
         </div>
 
         {visibleProperties.length === 0 && (
           <div className="empty-state">
-            <h3>Aucun bien trouvé</h3>
-            <p>Ajoutez un bien avec “Ajouter bien / voiture / bateau” ou modifiez les filtres.</p>
+            <h3>{t("crm.properties.d4456bde7c")}</h3>
+            <p>{t("crm.properties.09cc57a0ec")}</p>
           </div>
         )}
 
         {visibleProperties.map((property) => (
           <article className="property-card" key={property.id}>
             <div className="property-visual">
-              <span>{property.city || "Bien"}</span>
+              <span>{property.city || t("crm.properties.3d7ed1bfba")}</span>
 
               <BusinessButton permission="remove"
                 className="asset-reset-button icon-button light"
                 onClick={() => {
-                  const confirmed = window.confirm(`Supprimer "${property.name}" ?`);
+                  const confirmed = window.confirm(dialogT("crm.properties.a451e23492", { value1: displayValue(property.name) }));
                   if (confirmed) onDelete(property.id);
                 }}
-                aria-label="Supprimer"
-              >
-                ×
-              </BusinessButton>
+                aria-label={t("crm.properties.5e5d0216ce")}
+              >{t("crm.properties.8db71ed28b")}</BusinessButton>
             </div>
 
             <div className="property-body">
               <div className="section-heading compact-heading">
                 <div>
                   <h3>{property.name}</h3>
-                  <p>{property.city || "Ville non renseignée"}</p>
+                  <p>{property.city || t("crm.properties.b9d4fe5d85")}</p>
                 </div>
-                <Badge>{property.status}</Badge>
+                <Badge>{label(property.status, "crm")}</Badge>
               </div>
 
               <dl className="property-meta">
-                <div><dt>Prix</dt><dd>{currency.format(property.price)}</dd></div>
-                <div><dt>Chambres</dt><dd>{property.bedrooms || "—"}</dd></div>
-                <div><dt>Surface</dt><dd>{property.surface ? `${property.surface} m²` : "—"}</dd></div>
-                <div><dt>Owner</dt><dd>{property.owner || "—"}</dd></div>
+                <div><dt>{t("crm.properties.54c324f6c1")}</dt><dd>{screen.money(property.price)}</dd></div>
+                <div><dt>{t("crm.properties.6d76352164")}</dt><dd>{property.bedrooms || "—"}</dd></div>
+                <div><dt>{t("crm.properties.0905f7f590")}</dt><dd>{property.surface ? t("crm.properties.7797793c45", { value1: displayValue(property.surface) }) : "—"}</dd></div>
+                <div><dt>{t("crm.properties.4b1b8aa360")}</dt><dd>{property.owner || "—"}</dd></div>
               </dl>
               <ActionMeta item={property} />
 
               <div className="asset-card-actions">
-                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedProperty(property)}>
-                  Détails
-                </BusinessButton>
+                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedProperty(property)} data-crm-auto-scroll="true" data-crm-action="details">{t("crm.properties.17eaee489b")}</BusinessButton>
 
-                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(property)}>
-                  Modifier
-                </BusinessButton>
+                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(property)} data-crm-auto-scroll="true">{t("crm.properties.42e37604b6")}</BusinessButton>
               </div>
             </div>
           </article>
@@ -13114,67 +12844,66 @@ function PropertiesView({
       </section>
 
       <section className="card form-card">
-        <p className="eyebrow">Nouveau</p>
-        <h3>Ajouter un bien</h3>
+        <p className="eyebrow" data-semantic-text={"Nouveau"}>{t("crm.properties.c3634f2ede")}</p>
+        <h3>{t("crm.properties.930aa2c6c9")}</h3>
 
         <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
-          <BusinessLabel>Nom<input name="name" placeholder="Villa Belle Époque" /></BusinessLabel>
-          <BusinessLabel>Ville<input name="city" placeholder="Cannes" /></BusinessLabel>
-          <BusinessLabel>Prix<input name="price" type="number" min="0" placeholder="120000" /></BusinessLabel>
+          <BusinessLabel>{t("crm.properties.b2c124536d")}<input name="name" placeholder={t("crm.properties.c64fa18415")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.properties.0ebd25a341")}<input name="city" placeholder={t("crm.properties.0d488ded44")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.properties.54c324f6c1")}<input name="price" type="number" min="0" placeholder="120000" /></BusinessLabel>
 
-          <BusinessLabel>Statut
-            <select name="status">
-              {propertyStatuses.map((status) => <option key={status}>{status}</option>)}
+          <BusinessLabel>{t("crm.properties.dee377cfd8")}<select name="status">
+              {propertyStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Propriétaire<input name="owner" placeholder="Nom owner" /></BusinessLabel>
-          <BusinessLabel>Chambres<input name="bedrooms" type="number" min="0" placeholder="6" /></BusinessLabel>
-          <BusinessLabel>Surface m²<input name="surface" type="number" min="0" placeholder="420" /></BusinessLabel>
+          <BusinessLabel>{t("crm.properties.b406881e07")}<input name="owner" placeholder={t("crm.properties.516683c1f0")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.properties.6d76352164")}<input name="bedrooms" type="number" min="0" placeholder="6" /></BusinessLabel>
+          <BusinessLabel>{t("crm.properties.da0708ff96")}<input name="surface" type="number" min="0" placeholder="420" /></BusinessLabel>
 
-          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.properties.00f9c53345")}</BusinessButton>
         </BusinessForm>
       </section>
 
       {selectedProperty && (
         <div className="confirm-backdrop">
           <div className="confirm-dialog asset-detail-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Fiche bien</p>
+            <p className="eyebrow" data-semantic-text={"Fiche bien"}>{t("crm.properties.8acd64a7bf")}</p>
             <h3>{selectedProperty.name}</h3>
 
             <div className="asset-detail-grid">
-              <div><span>Statut</span><strong>{selectedProperty.status}</strong></div>
-              <div><span>Ville</span><strong>{selectedProperty.city || "Non renseignée"}</strong></div>
-              <div><span>Prix</span><strong>{currency.format(selectedProperty.price)}</strong></div>
-              <div><span>Owner</span><strong>{selectedProperty.owner || "Non renseigné"}</strong></div>
-              <div><span>Chambres</span><strong>{selectedProperty.bedrooms || "—"}</strong></div>
-              <div><span>Surface</span><strong>{selectedProperty.surface ? `${selectedProperty.surface} m²` : "—"}</strong></div>
-              <div className="full"><span>Notes internes</span><p>{selectedProperty.notes || "Aucune note interne."}</p></div>
+              <div><span>{t("crm.properties.dee377cfd8")}</span><strong>{label(selectedProperty.status, "crm")}</strong></div>
+              <div><span>{t("crm.properties.0ebd25a341")}</span><strong>{selectedProperty.city || t("crm.properties.831460cb02")}</strong></div>
+              <div><span>{t("crm.properties.54c324f6c1")}</span><strong>{screen.money(selectedProperty.price)}</strong></div>
+              <div><span>{t("crm.properties.4b1b8aa360")}</span><strong>{selectedProperty.owner || t("crm.properties.cb6c1fb76c")}</strong></div>
+              <div><span>{t("crm.properties.6d76352164")}</span><strong>{selectedProperty.bedrooms || "—"}</strong></div>
+              <div><span>{t("crm.properties.0905f7f590")}</span><strong>{selectedProperty.surface ? t("crm.properties.7797793c45", { value1: displayValue(selectedProperty.surface) }) : "—"}</strong></div>
+              <div className="full"><span>{t("crm.properties.d96ddd0984")}</span><p>{selectedProperty.notes || t("crm.properties.164fc8c2e2")}</p></div>
             </div>
 
             <div className="asset-related-section">
-              <p className="eyebrow">Leads liés à ce bien</p>
+              <p className="eyebrow" data-semantic-text={"Leads liés à ce bien"}>{t("crm.properties.593f35e206")}</p>
 
               <div className="list-stack oar-contact-list-stack">
                 {getPropertyLeads(selectedProperty).length === 0 && (
-                  <p className="muted-line">Aucun lead lié à ce bien.</p>
+                  <p className="muted-line">{t("crm.properties.837aafc0b2")}</p>
                 )}
 
                 {getPropertyLeads(selectedProperty).map((lead) => (
                   <article className="mini-row" key={lead.id}>
                     <div>
                       <strong>{lead.contactName}</strong>
-                      <span>{lead.status} · {currency.format(lead.value)}</span>
+                      <span>{label(lead.status, "crm")} · {screen.money(lead.value)}</span>
                     </div>
-                    <Badge>{lead.priority}</Badge>
+                    <Badge>{label(lead.priority, "crm")}</Badge>
                   </article>
                 ))}
               </div>
             </div>
 
             <div className="confirm-actions">
-              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedProperty(null)}>Fermer</BusinessButton>
-              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedProperty)}>Modifier</BusinessButton>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedProperty(null)} data-crm-dismiss="true">{t("crm.properties.711e5f2e19")}</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedProperty)} data-crm-auto-scroll="true">{t("crm.properties.42e37604b6")}</BusinessButton>
             </div>
           </div>
         </div>
@@ -13183,31 +12912,29 @@ function PropertiesView({
       {editingProperty && (
         <div className="confirm-backdrop">
           <div id="property-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Modification</p>
-            <h3>Modifier le bien</h3>
+            <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.properties.46889b43bc")}</p>
+            <h3>{t("crm.properties.4180273030")}</h3>
 
             <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <BusinessLabel>Nom<input name="name" defaultValue={editingProperty.name} /></BusinessLabel>
-              <BusinessLabel>Ville<input name="city" defaultValue={editingProperty.city} /></BusinessLabel>
-              <BusinessLabel>Prix<input name="price" type="number" min="0" defaultValue={editingProperty.price || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.properties.b2c124536d")}<input name="name" defaultValue={editingProperty.name} /></BusinessLabel>
+              <BusinessLabel>{t("crm.properties.0ebd25a341")}<input name="city" defaultValue={editingProperty.city} /></BusinessLabel>
+              <BusinessLabel>{t("crm.properties.54c324f6c1")}<input name="price" type="number" min="0" defaultValue={editingProperty.price || ""} /></BusinessLabel>
 
-              <BusinessLabel>Statut
-                <select name="status" defaultValue={editingProperty.status}>
-                  {propertyStatuses.map((status) => <option key={status}>{status}</option>)}
+              <BusinessLabel>{t("crm.properties.dee377cfd8")}<select name="status" defaultValue={editingProperty.status}>
+                  {propertyStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Propriétaire<input name="owner" defaultValue={editingProperty.owner} /></BusinessLabel>
-              <BusinessLabel>Chambres<input name="bedrooms" type="number" min="0" defaultValue={editingProperty.bedrooms || ""} /></BusinessLabel>
-              <BusinessLabel>Surface m²<input name="surface" type="number" min="0" defaultValue={editingProperty.surface || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.properties.b406881e07")}<input name="owner" defaultValue={editingProperty.owner} /></BusinessLabel>
+              <BusinessLabel>{t("crm.properties.6d76352164")}<input name="bedrooms" type="number" min="0" defaultValue={editingProperty.bedrooms || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.properties.da0708ff96")}<input name="surface" type="number" min="0" defaultValue={editingProperty.surface || ""} /></BusinessLabel>
 
-              <BusinessLabel className="full">Notes internes
-                <textarea name="notes" defaultValue={editingProperty.notes ?? ""} />
+              <BusinessLabel className="full">{t("crm.properties.d96ddd0984")}<textarea name="notes" defaultValue={editingProperty.notes ?? ""} />
               </BusinessLabel>
 
               <div className="confirm-actions full">
-                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingProperty(null)}>Annuler</BusinessButton>
-                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingProperty(null)} data-crm-dismiss="true">{t("crm.properties.46ad3916f6")}</BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.properties.71dc74873e")}</BusinessButton>
               </div>
             </BusinessForm>
           </div>
@@ -13230,6 +12957,8 @@ function VehiclesView({
   onUpdate: (vehicle: Vehicle) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t, label, locale, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
@@ -13285,61 +13014,59 @@ function VehiclesView({
       <section className="property-grid">
         <div className="card asset-filter-card">
           <div>
-            <p className="eyebrow">Filtres voitures</p>
-            <h3>{visibleVehicles.length} voitures affichées</h3>
+            <p className="eyebrow" data-semantic-text={"Filtres voitures"}>{t("crm.vehicles.6308e08581")}</p>
+            <h3>{visibleVehicles.length}{" "}{t("crm.vehicles.c2a733dba7")}</h3>
           </div>
 
           <div className="asset-filter-grid">
-            <BusinessLabel>Statut
-              <select value={vehicleStatusFilter} onChange={(event) => setVehicleStatusFilter(event.target.value as "Tous" | VehicleStatus)}>
-                <option value="Tous">Tous</option>
-                {vehicleStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            <BusinessLabel>{t("crm.vehicles.dee377cfd8")}<select value={vehicleStatusFilter} onChange={(event) => setVehicleStatusFilter(event.target.value as "Tous" | VehicleStatus)}>
+                <option value="Tous">{t("crm.vehicles.2ff5998143")}</option>
+                {vehicleStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>Ville
-              <input value={vehicleCityFilter} onChange={(event) => setVehicleCityFilter(event.target.value)} placeholder="Cannes, Monaco..." />
+            <BusinessLabel>{t("crm.vehicles.0ebd25a341")}<input value={vehicleCityFilter} onChange={(event) => setVehicleCityFilter(event.target.value)} placeholder={t("crm.vehicles.897ebccda8")} />
             </BusinessLabel>
           </div>
         </div>
 
         {visibleVehicles.length === 0 && (
           <div className="empty-state">
-            <h3>Aucune voiture trouvée</h3>
-            <p>Ajoutez un bien avec “Ajouter bien / voiture / bateau” ou modifiez les filtres.</p>
+            <h3>{t("crm.vehicles.adb21e4c79")}</h3>
+            <p>{t("crm.vehicles.09cc57a0ec")}</p>
           </div>
         )}
 
         {visibleVehicles.map((vehicle) => (
           <article className="property-card" key={vehicle.id}>
             <div className="property-visual">
-              <span>{vehicle.brand || "Voiture"}</span>
+              <span>{vehicle.brand || t("crm.vehicles.035004be54")}</span>
               <BusinessButton permission="remove" className="asset-reset-button icon-button light" onClick={() => {
-                const confirmed = window.confirm(`Supprimer "${vehicle.name}" ?`);
+                const confirmed = window.confirm(dialogT("crm.vehicles.a451e23492", { value1: displayValue(vehicle.name) }));
                 if (confirmed) onDelete(vehicle.id);
-              }} aria-label="Supprimer">×</BusinessButton>
+              }} aria-label={t("crm.vehicles.5e5d0216ce")}>{t("crm.vehicles.8db71ed28b")}</BusinessButton>
             </div>
 
             <div className="property-body">
               <div className="section-heading compact-heading">
                 <div>
                   <h3>{vehicle.name}</h3>
-                  <p>{vehicle.city || "Ville non renseignée"}</p>
+                  <p>{vehicle.city || t("crm.vehicles.b9d4fe5d85")}</p>
                 </div>
-                <Badge>{vehicle.status}</Badge>
+                <Badge>{label(vehicle.status, "crm")}</Badge>
               </div>
 
               <dl className="property-meta">
-                <div><dt>Prix / jour</dt><dd>{currency.format(vehicle.price)}</dd></div>
-                <div><dt>Année</dt><dd>{vehicle.year || "—"}</dd></div>
-                <div><dt>Kilométrage</dt><dd>{vehicle.mileage ? `${vehicle.mileage.toLocaleString("fr-FR")} km` : "—"}</dd></div>
-                <div><dt>Owner</dt><dd>{vehicle.owner || "—"}</dd></div>
+                <div><dt>{t("crm.vehicles.6e55aff773")}</dt><dd>{screen.money(vehicle.price)}</dd></div>
+                <div><dt>{t("crm.vehicles.561408ffca")}</dt><dd>{vehicle.year || "—"}</dd></div>
+                <div><dt>{t("crm.vehicles.91166285d4")}</dt><dd>{vehicle.mileage ? t("crm.vehicles.9b0f0d8a88", { value1: displayValue(vehicle.mileage.toLocaleString(locale)) }) : "—"}</dd></div>
+                <div><dt>{t("crm.vehicles.4b1b8aa360")}</dt><dd>{vehicle.owner || "—"}</dd></div>
               </dl>
               <ActionMeta item={vehicle} />
 
               <div className="asset-card-actions">
-                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedVehicle(vehicle)}>Détails</BusinessButton>
-                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(vehicle)}>Modifier</BusinessButton>
+                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedVehicle(vehicle)} data-crm-auto-scroll="true" data-crm-action="details">{t("crm.vehicles.17eaee489b")}</BusinessButton>
+                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(vehicle)} data-crm-auto-scroll="true">{t("crm.vehicles.42e37604b6")}</BusinessButton>
               </div>
             </div>
           </article>
@@ -13347,71 +13074,70 @@ function VehiclesView({
       </section>
 
       <section className="card form-card">
-        <p className="eyebrow">Nouveau</p>
-        <h3>Ajouter une voiture</h3>
+        <p className="eyebrow" data-semantic-text={"Nouveau"}>{t("crm.vehicles.c3634f2ede")}</p>
+        <h3>{t("crm.vehicles.8eea43262a")}</h3>
 
         <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
-          <BusinessLabel>Nom<input name="name" placeholder="Range Rover Autobiography" /></BusinessLabel>
-          <BusinessLabel>Marque<input name="brand" placeholder="Land Rover" /></BusinessLabel>
-          <BusinessLabel>Modèle<input name="model" placeholder="Range Rover" /></BusinessLabel>
-          <BusinessLabel>Ville<input name="city" placeholder="Cannes" /></BusinessLabel>
-          <BusinessLabel>Prix / jour<input name="price" type="number" min="0" placeholder="900" /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.b2c124536d")}<input name="name" placeholder={t("crm.vehicles.292d966641")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.ee5745548b")}<input name="brand" placeholder={t("crm.vehicles.18e111af26")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.e61bbb839e")}<input name="model" placeholder={t("crm.vehicles.5473d5ace1")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.0ebd25a341")}<input name="city" placeholder={t("crm.vehicles.0d488ded44")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.6e55aff773")}<input name="price" type="number" min="0" placeholder="900" /></BusinessLabel>
 
-          <BusinessLabel>Statut
-            <select name="status">
-              {vehicleStatuses.map((status) => <option key={status}>{status}</option>)}
+          <BusinessLabel>{t("crm.vehicles.dee377cfd8")}<select name="status">
+              {vehicleStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Propriétaire<input name="owner" placeholder="Nom owner" /></BusinessLabel>
-          <BusinessLabel>Année<input name="year" type="number" min="1900" placeholder="2024" /></BusinessLabel>
-          <BusinessLabel>Kilométrage<input name="mileage" type="number" min="0" placeholder="12000" /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.b406881e07")}<input name="owner" placeholder={t("crm.vehicles.516683c1f0")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.561408ffca")}<input name="year" type="number" min="1900" placeholder="2024" /></BusinessLabel>
+          <BusinessLabel>{t("crm.vehicles.91166285d4")}<input name="mileage" type="number" min="0" placeholder="12000" /></BusinessLabel>
 
-          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.vehicles.00f9c53345")}</BusinessButton>
         </BusinessForm>
       </section>
 
       {selectedVehicle && (
         <div className="confirm-backdrop">
           <div className="confirm-dialog asset-detail-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Fiche voiture</p>
+            <p className="eyebrow" data-semantic-text={"Fiche voiture"}>{t("crm.vehicles.29196e9e1d")}</p>
             <h3>{selectedVehicle.name}</h3>
 
             <div className="asset-detail-grid">
-              <div><span>Marque</span><strong>{selectedVehicle.brand || "—"}</strong></div>
-              <div><span>Modèle</span><strong>{selectedVehicle.model || "—"}</strong></div>
-              <div><span>Statut</span><strong>{selectedVehicle.status}</strong></div>
-              <div><span>Ville</span><strong>{selectedVehicle.city || "—"}</strong></div>
-              <div><span>Prix / jour</span><strong>{currency.format(selectedVehicle.price)}</strong></div>
-              <div><span>Owner</span><strong>{selectedVehicle.owner || "—"}</strong></div>
-              <div><span>Année</span><strong>{selectedVehicle.year || "—"}</strong></div>
-              <div><span>Kilométrage</span><strong>{selectedVehicle.mileage ? `${selectedVehicle.mileage.toLocaleString("fr-FR")} km` : "—"}</strong></div>
-              <div className="full"><span>Notes internes</span><p>{selectedVehicle.notes || "Aucune note interne."}</p></div>
+              <div><span>{t("crm.vehicles.ee5745548b")}</span><strong>{selectedVehicle.brand || "—"}</strong></div>
+              <div><span>{t("crm.vehicles.e61bbb839e")}</span><strong>{selectedVehicle.model || "—"}</strong></div>
+              <div><span>{t("crm.vehicles.dee377cfd8")}</span><strong>{label(selectedVehicle.status, "crm")}</strong></div>
+              <div><span>{t("crm.vehicles.0ebd25a341")}</span><strong>{selectedVehicle.city || "—"}</strong></div>
+              <div><span>{t("crm.vehicles.6e55aff773")}</span><strong>{screen.money(selectedVehicle.price)}</strong></div>
+              <div><span>{t("crm.vehicles.4b1b8aa360")}</span><strong>{selectedVehicle.owner || "—"}</strong></div>
+              <div><span>{t("crm.vehicles.561408ffca")}</span><strong>{selectedVehicle.year || "—"}</strong></div>
+              <div><span>{t("crm.vehicles.91166285d4")}</span><strong>{selectedVehicle.mileage ? t("crm.vehicles.9b0f0d8a88", { value1: displayValue(selectedVehicle.mileage.toLocaleString(locale)) }) : "—"}</strong></div>
+              <div className="full"><span>{t("crm.vehicles.d96ddd0984")}</span><p>{selectedVehicle.notes || t("crm.vehicles.164fc8c2e2")}</p></div>
             </div>
 
             <div className="asset-related-section">
-              <p className="eyebrow">Leads liés à cette voiture</p>
+              <p className="eyebrow" data-semantic-text={"Leads liés à cette voiture"}>{t("crm.vehicles.d297b81657")}</p>
 
               <div className="list-stack oar-contact-list-stack">
                 {getVehicleLeads(selectedVehicle).length === 0 && (
-                  <p className="muted-line">Aucun lead lié à cette voiture.</p>
+                  <p className="muted-line">{t("crm.vehicles.cb48ec30ef")}</p>
                 )}
 
                 {getVehicleLeads(selectedVehicle).map((lead) => (
                   <article className="mini-row" key={lead.id}>
                     <div>
                       <strong>{lead.contactName}</strong>
-                      <span>{lead.status} · {currency.format(lead.value)}</span>
+                      <span>{label(lead.status, "crm")} · {screen.money(lead.value)}</span>
                     </div>
-                    <Badge>{lead.priority}</Badge>
+                    <Badge>{label(lead.priority, "crm")}</Badge>
                   </article>
                 ))}
               </div>
             </div>
 
             <div className="confirm-actions">
-              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedVehicle(null)}>Fermer</BusinessButton>
-              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedVehicle)}>Modifier</BusinessButton>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedVehicle(null)} data-crm-dismiss="true">{t("crm.vehicles.711e5f2e19")}</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedVehicle)} data-crm-auto-scroll="true">{t("crm.vehicles.42e37604b6")}</BusinessButton>
             </div>
           </div>
         </div>
@@ -13420,33 +13146,31 @@ function VehiclesView({
       {editingVehicle && (
         <div className="confirm-backdrop">
           <div id="vehicle-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Modification</p>
-            <h3>Modifier la voiture</h3>
+            <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.vehicles.46889b43bc")}</p>
+            <h3>{t("crm.vehicles.5e17ed2a84")}</h3>
 
             <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <BusinessLabel>Nom<input name="name" defaultValue={editingVehicle.name} /></BusinessLabel>
-              <BusinessLabel>Marque<input name="brand" defaultValue={editingVehicle.brand} /></BusinessLabel>
-              <BusinessLabel>Modèle<input name="model" defaultValue={editingVehicle.model} /></BusinessLabel>
-              <BusinessLabel>Ville<input name="city" defaultValue={editingVehicle.city} /></BusinessLabel>
-              <BusinessLabel>Prix / jour<input name="price" type="number" min="0" defaultValue={editingVehicle.price || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.b2c124536d")}<input name="name" defaultValue={editingVehicle.name} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.ee5745548b")}<input name="brand" defaultValue={editingVehicle.brand} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.e61bbb839e")}<input name="model" defaultValue={editingVehicle.model} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.0ebd25a341")}<input name="city" defaultValue={editingVehicle.city} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.6e55aff773")}<input name="price" type="number" min="0" defaultValue={editingVehicle.price || ""} /></BusinessLabel>
 
-              <BusinessLabel>Statut
-                <select name="status" defaultValue={editingVehicle.status}>
-                  {vehicleStatuses.map((status) => <option key={status}>{status}</option>)}
+              <BusinessLabel>{t("crm.vehicles.dee377cfd8")}<select name="status" defaultValue={editingVehicle.status}>
+                  {vehicleStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Propriétaire<input name="owner" defaultValue={editingVehicle.owner} /></BusinessLabel>
-              <BusinessLabel>Année<input name="year" type="number" min="1900" defaultValue={editingVehicle.year || ""} /></BusinessLabel>
-              <BusinessLabel>Kilométrage<input name="mileage" type="number" min="0" defaultValue={editingVehicle.mileage || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.b406881e07")}<input name="owner" defaultValue={editingVehicle.owner} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.561408ffca")}<input name="year" type="number" min="1900" defaultValue={editingVehicle.year || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.vehicles.91166285d4")}<input name="mileage" type="number" min="0" defaultValue={editingVehicle.mileage || ""} /></BusinessLabel>
 
-              <BusinessLabel className="full">Notes internes
-                <textarea name="notes" defaultValue={editingVehicle.notes ?? ""} />
+              <BusinessLabel className="full">{t("crm.vehicles.d96ddd0984")}<textarea name="notes" defaultValue={editingVehicle.notes ?? ""} />
               </BusinessLabel>
 
               <div className="confirm-actions full">
-                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingVehicle(null)}>Annuler</BusinessButton>
-                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingVehicle(null)} data-crm-dismiss="true">{t("crm.vehicles.46ad3916f6")}</BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.vehicles.71dc74873e")}</BusinessButton>
               </div>
             </BusinessForm>
           </div>
@@ -13469,6 +13193,8 @@ function BoatsView({
   onUpdate: (boat: Boat) => void;
   onDelete: (id: string) => void;
 }) {
+  const { t, label, screen, dialogT } = useCRMDisplay();
+
   const business = useBusinessPermissions();
   const [editingBoat, setEditingBoat] = useState<Boat | null>(null);
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
@@ -13523,61 +13249,59 @@ function BoatsView({
       <section className="property-grid">
         <div className="card asset-filter-card">
           <div>
-            <p className="eyebrow">Filtres bateaux</p>
-            <h3>{visibleBoats.length} bateaux affichés</h3>
+            <p className="eyebrow" data-semantic-text={"Filtres bateaux"}>{t("crm.boats.87063ae11b")}</p>
+            <h3>{visibleBoats.length}{" "}{t("crm.boats.719ddbc457")}</h3>
           </div>
 
           <div className="asset-filter-grid">
-            <BusinessLabel>Statut
-              <select value={boatStatusFilter} onChange={(event) => setBoatStatusFilter(event.target.value as "Tous" | BoatStatus)}>
-                <option value="Tous">Tous</option>
-                {boatStatuses.map((status) => <option key={status} value={status}>{status}</option>)}
+            <BusinessLabel>{t("crm.boats.dee377cfd8")}<select value={boatStatusFilter} onChange={(event) => setBoatStatusFilter(event.target.value as "Tous" | BoatStatus)}>
+                <option value="Tous">{t("crm.boats.2ff5998143")}</option>
+                {boatStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>Port
-              <input value={boatPortFilter} onChange={(event) => setBoatPortFilter(event.target.value)} placeholder="Cannes, Antibes..." />
+            <BusinessLabel>{t("crm.boats.72e9a59f5a")}<input value={boatPortFilter} onChange={(event) => setBoatPortFilter(event.target.value)} placeholder={t("crm.boats.d892911e3f")} />
             </BusinessLabel>
           </div>
         </div>
 
         {visibleBoats.length === 0 && (
           <div className="empty-state">
-            <h3>Aucun bateau trouvé</h3>
-            <p>Ajoutez un bien avec “Ajouter bien / voiture / bateau” ou modifiez les filtres.</p>
+            <h3>{t("crm.boats.e8b5ea9fce")}</h3>
+            <p>{t("crm.boats.09cc57a0ec")}</p>
           </div>
         )}
 
         {visibleBoats.map((boat) => (
           <article className="property-card" key={boat.id}>
             <div className="property-visual">
-              <span>{boat.type || "Bateau"}</span>
+              <span>{boat.type || t("crm.boats.d69c7210bc")}</span>
               <BusinessButton permission="remove" className="icon-button light" onClick={() => {
-                const confirmed = window.confirm(`Supprimer "${boat.name}" ?`);
+                const confirmed = window.confirm(dialogT("crm.boats.a451e23492", { value1: displayValue(boat.name) }));
                 if (confirmed) onDelete(boat.id);
-              }} aria-label="Supprimer">×</BusinessButton>
+              }} aria-label={t("crm.boats.5e5d0216ce")}>{t("crm.boats.8db71ed28b")}</BusinessButton>
             </div>
 
             <div className="property-body">
               <div className="section-heading compact-heading">
                 <div>
                   <h3>{boat.name}</h3>
-                  <p>{boat.port || "Port non renseigné"}</p>
+                  <p>{boat.port || t("crm.boats.9b60dbaa36")}</p>
                 </div>
-                <Badge>{boat.status}</Badge>
+                <Badge>{label(boat.status, "crm")}</Badge>
               </div>
 
               <dl className="property-meta">
-                <div><dt>Prix / jour</dt><dd>{currency.format(boat.price)}</dd></div>
-                <div><dt>Longueur</dt><dd>{boat.length ? `${boat.length} m` : "—"}</dd></div>
-                <div><dt>Année</dt><dd>{boat.year || "—"}</dd></div>
-                <div><dt>Owner</dt><dd>{boat.owner || "—"}</dd></div>
+                <div><dt>{t("crm.boats.6e55aff773")}</dt><dd>{screen.money(boat.price)}</dd></div>
+                <div><dt>{t("crm.boats.e912493ce5")}</dt><dd>{boat.length ? t("crm.boats.41c4388538", { value1: displayValue(boat.length) }) : "—"}</dd></div>
+                <div><dt>{t("crm.boats.561408ffca")}</dt><dd>{boat.year || "—"}</dd></div>
+                <div><dt>{t("crm.boats.4b1b8aa360")}</dt><dd>{boat.owner || "—"}</dd></div>
               </dl>
               <ActionMeta item={boat} />
 
               <div className="asset-card-actions">
-                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedBoat(boat)}>Détails</BusinessButton>
-                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(boat)}>Modifier</BusinessButton>
+                <BusinessButton className="asset-detail-button" type="button" onClick={() => setSelectedBoat(boat)} data-crm-auto-scroll="true" data-crm-action="details">{t("crm.boats.17eaee489b")}</BusinessButton>
+                <BusinessButton permission="write" className="asset-edit-button" type="button" onClick={() => openEdit(boat)} data-crm-auto-scroll="true">{t("crm.boats.42e37604b6")}</BusinessButton>
               </div>
             </div>
           </article>
@@ -13585,69 +13309,68 @@ function BoatsView({
       </section>
 
       <section className="card form-card">
-        <p className="eyebrow">Nouveau</p>
-        <h3>Ajouter un bateau</h3>
+        <p className="eyebrow" data-semantic-text={"Nouveau"}>{t("crm.boats.c3634f2ede")}</p>
+        <h3>{t("crm.boats.c5e81fbab8")}</h3>
 
         <BusinessForm className="form-grid contact-create-form" onSubmit={onAdd}>
-          <BusinessLabel>Nom<input name="name" placeholder="Sunseeker Manhattan 55" /></BusinessLabel>
-          <BusinessLabel>Port<input name="port" placeholder="Cannes" /></BusinessLabel>
-          <BusinessLabel>Type<input name="type" placeholder="Yacht, day boat..." /></BusinessLabel>
-          <BusinessLabel>Prix / jour<input name="price" type="number" min="0" placeholder="4500" /></BusinessLabel>
+          <BusinessLabel>{t("crm.boats.b2c124536d")}<input name="name" placeholder={t("crm.boats.c5c47c66d5")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.boats.72e9a59f5a")}<input name="port" placeholder={t("crm.boats.0d488ded44")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.boats.baaddf70fb")}<input name="type" placeholder={t("crm.boats.f825d0aaa4")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.boats.6e55aff773")}<input name="price" type="number" min="0" placeholder="4500" /></BusinessLabel>
 
-          <BusinessLabel>Statut
-            <select name="status">
-              {boatStatuses.map((status) => <option key={status}>{status}</option>)}
+          <BusinessLabel>{t("crm.boats.dee377cfd8")}<select name="status">
+              {boatStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>Propriétaire<input name="owner" placeholder="Nom owner" /></BusinessLabel>
-          <BusinessLabel>Année<input name="year" type="number" min="1900" placeholder="2021" /></BusinessLabel>
-          <BusinessLabel>Longueur m<input name="length" type="number" min="0" placeholder="17" /></BusinessLabel>
+          <BusinessLabel>{t("crm.boats.b406881e07")}<input name="owner" placeholder={t("crm.boats.516683c1f0")} /></BusinessLabel>
+          <BusinessLabel>{t("crm.boats.561408ffca")}<input name="year" type="number" min="1900" placeholder="2021" /></BusinessLabel>
+          <BusinessLabel>{t("crm.boats.f2b9291c90")}<input name="length" type="number" min="0" placeholder="17" /></BusinessLabel>
 
-          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Ajouter</BusinessButton>
+          <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.boats.00f9c53345")}</BusinessButton>
         </BusinessForm>
       </section>
 
       {selectedBoat && (
         <div className="confirm-backdrop">
           <div className="confirm-dialog asset-detail-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Fiche bateau</p>
+            <p className="eyebrow" data-semantic-text={"Fiche bateau"}>{t("crm.boats.f92bc9bd5f")}</p>
             <h3>{selectedBoat.name}</h3>
 
             <div className="asset-detail-grid">
-              <div><span>Type</span><strong>{selectedBoat.type || "—"}</strong></div>
-              <div><span>Port</span><strong>{selectedBoat.port || "—"}</strong></div>
-              <div><span>Statut</span><strong>{selectedBoat.status}</strong></div>
-              <div><span>Prix / jour</span><strong>{currency.format(selectedBoat.price)}</strong></div>
-              <div><span>Owner</span><strong>{selectedBoat.owner || "—"}</strong></div>
-              <div><span>Année</span><strong>{selectedBoat.year || "—"}</strong></div>
-              <div><span>Longueur</span><strong>{selectedBoat.length ? `${selectedBoat.length} m` : "—"}</strong></div>
-              <div className="full"><span>Notes internes</span><p>{selectedBoat.notes || "Aucune note interne."}</p></div>
+              <div><span>{t("crm.boats.baaddf70fb")}</span><strong>{selectedBoat.type || "—"}</strong></div>
+              <div><span>{t("crm.boats.72e9a59f5a")}</span><strong>{selectedBoat.port || "—"}</strong></div>
+              <div><span>{t("crm.boats.dee377cfd8")}</span><strong>{label(selectedBoat.status, "crm")}</strong></div>
+              <div><span>{t("crm.boats.6e55aff773")}</span><strong>{screen.money(selectedBoat.price)}</strong></div>
+              <div><span>{t("crm.boats.4b1b8aa360")}</span><strong>{selectedBoat.owner || "—"}</strong></div>
+              <div><span>{t("crm.boats.561408ffca")}</span><strong>{selectedBoat.year || "—"}</strong></div>
+              <div><span>{t("crm.boats.e912493ce5")}</span><strong>{selectedBoat.length ? t("crm.boats.41c4388538", { value1: displayValue(selectedBoat.length) }) : "—"}</strong></div>
+              <div className="full"><span>{t("crm.boats.d96ddd0984")}</span><p>{selectedBoat.notes || t("crm.boats.164fc8c2e2")}</p></div>
             </div>
 
             <div className="asset-related-section">
-              <p className="eyebrow">Leads liés à ce bateau</p>
+              <p className="eyebrow" data-semantic-text={"Leads liés à ce bateau"}>{t("crm.boats.69bd4b39ce")}</p>
 
               <div className="list-stack oar-contact-list-stack">
                 {getBoatLeads(selectedBoat).length === 0 && (
-                  <p className="muted-line">Aucun lead lié à ce bateau.</p>
+                  <p className="muted-line">{t("crm.boats.35bfc29f95")}</p>
                 )}
 
                 {getBoatLeads(selectedBoat).map((lead) => (
                   <article className="mini-row" key={lead.id}>
                     <div>
                       <strong>{lead.contactName}</strong>
-                      <span>{lead.status} · {currency.format(lead.value)}</span>
+                      <span>{label(lead.status, "crm")} · {screen.money(lead.value)}</span>
                     </div>
-                    <Badge>{lead.priority}</Badge>
+                    <Badge>{label(lead.priority, "crm")}</Badge>
                   </article>
                 ))}
               </div>
             </div>
 
             <div className="confirm-actions">
-              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedBoat(null)}>Fermer</BusinessButton>
-              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedBoat)}>Modifier</BusinessButton>
+              <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedBoat(null)} data-crm-dismiss="true">{t("crm.boats.711e5f2e19")}</BusinessButton>
+              <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedBoat)} data-crm-auto-scroll="true">{t("crm.boats.42e37604b6")}</BusinessButton>
             </div>
           </div>
         </div>
@@ -13656,32 +13379,30 @@ function BoatsView({
       {editingBoat && (
         <div className="confirm-backdrop">
           <div id="boat-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
-            <p className="eyebrow">Modification</p>
-            <h3>Modifier le bateau</h3>
+            <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.boats.46889b43bc")}</p>
+            <h3>{t("crm.boats.8367eb7edc")}</h3>
 
             <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
-              <BusinessLabel>Nom<input name="name" defaultValue={editingBoat.name} /></BusinessLabel>
-              <BusinessLabel>Port<input name="port" defaultValue={editingBoat.port} /></BusinessLabel>
-              <BusinessLabel>Type<input name="type" defaultValue={editingBoat.type} /></BusinessLabel>
-              <BusinessLabel>Prix / jour<input name="price" type="number" min="0" defaultValue={editingBoat.price || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.boats.b2c124536d")}<input name="name" defaultValue={editingBoat.name} /></BusinessLabel>
+              <BusinessLabel>{t("crm.boats.72e9a59f5a")}<input name="port" defaultValue={editingBoat.port} /></BusinessLabel>
+              <BusinessLabel>{t("crm.boats.baaddf70fb")}<input name="type" defaultValue={editingBoat.type} /></BusinessLabel>
+              <BusinessLabel>{t("crm.boats.6e55aff773")}<input name="price" type="number" min="0" defaultValue={editingBoat.price || ""} /></BusinessLabel>
 
-              <BusinessLabel>Statut
-                <select name="status" defaultValue={editingBoat.status}>
-                  {boatStatuses.map((status) => <option key={status}>{status}</option>)}
+              <BusinessLabel>{t("crm.boats.dee377cfd8")}<select name="status" defaultValue={editingBoat.status}>
+                  {boatStatuses.map((status) => <option key={status} value={status}>{label(status, "crm")}</option>)}
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>Propriétaire<input name="owner" defaultValue={editingBoat.owner} /></BusinessLabel>
-              <BusinessLabel>Année<input name="year" type="number" min="1900" defaultValue={editingBoat.year || ""} /></BusinessLabel>
-              <BusinessLabel>Longueur m<input name="length" type="number" min="0" defaultValue={editingBoat.length || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.boats.b406881e07")}<input name="owner" defaultValue={editingBoat.owner} /></BusinessLabel>
+              <BusinessLabel>{t("crm.boats.561408ffca")}<input name="year" type="number" min="1900" defaultValue={editingBoat.year || ""} /></BusinessLabel>
+              <BusinessLabel>{t("crm.boats.f2b9291c90")}<input name="length" type="number" min="0" defaultValue={editingBoat.length || ""} /></BusinessLabel>
 
-              <BusinessLabel className="full">Notes internes
-                <textarea name="notes" defaultValue={editingBoat.notes ?? ""} />
+              <BusinessLabel className="full">{t("crm.boats.d96ddd0984")}<textarea name="notes" defaultValue={editingBoat.notes ?? ""} />
               </BusinessLabel>
 
               <div className="confirm-actions full">
-                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingBoat(null)}>Annuler</BusinessButton>
-                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">Enregistrer</BusinessButton>
+                <BusinessButton permission="write" className="ghost-button" type="button" onClick={() => setEditingBoat(null)} data-crm-dismiss="true">{t("crm.boats.46ad3916f6")}</BusinessButton>
+                <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.boats.71dc74873e")}</BusinessButton>
               </div>
             </BusinessForm>
           </div>

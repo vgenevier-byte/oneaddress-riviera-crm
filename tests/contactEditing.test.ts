@@ -35,7 +35,7 @@ for (const kind of ["Client", "Prestataire", "Propriétaire"] as const) {
         makeId: () => "contact-test", stampCreated: (c: Contact) => c, activeActor: "Test",
         safeNumber: (v: unknown) => Number(v) || 0, getSupplierCategoryFromForm: () => "Entretien",
         confirmDuplicateContact: () => true, setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); },
-        notify: () => {}, window: { setTimeout: () => {} }
+        notify: () => {}, screenNotice: () => {}, window: { setTimeout: () => {} }
       });
       add({ preventDefault() {}, currentTarget: { reset() {} } });
       assert.equal(state.contacts[0].postalAddress, postalAddress);
@@ -63,7 +63,7 @@ test("modification réelle : RIB, identité, propriétés et liens conservés, t
   const initial = structuredClone(state);
   const update = handler("updateContact", { mergeContactUpdate, activeActor: "Test",
     stampUpdated: (c: Contact, actor: string) => ({ ...c, updatedBy: actor, updatedAt: "test-time" }),
-    setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); }, notify: () => {} });
+    setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); }, notify: () => {}, screenNotice: () => {} });
   update({ id: original.id, postalAddress: "新しい住所\nÉtage 2" });
   assert.deepEqual(state.contacts[0], { ...original, postalAddress: "新しい住所\nÉtage 2", updatedBy: "Test", updatedAt: "test-time" });
   assert.deepEqual(state.invoices, initial.invoices); assert.deepEqual(state.quotes, initial.quotes);

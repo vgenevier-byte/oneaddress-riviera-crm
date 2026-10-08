@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
@@ -36,6 +37,8 @@ export default function SearchableBusinessContactPicker({
   name = "contactId",
   required = false
 }: Props) {
+  const {t} = useI18n();
+
   const inputId = useId();
   const listboxId = `${inputId}-listbox`;
   const inputRef = useRef<HTMLInputElement>(null);
@@ -184,7 +187,7 @@ export default function SearchableBusinessContactPicker({
   return (
     <div className="business-contact-picker-field" ref={containerRef}>
       <label className="business-contact-picker-label" htmlFor={inputId}>
-        {label}
+        {label === "Prestataire" ? t("modules.moduleWorkspace.supplier") : label}
       </label>
       <input type="hidden" name={name} value={selectedContactId} />
       <input
@@ -198,18 +201,20 @@ export default function SearchableBusinessContactPicker({
           <div className="business-contact-picker-selection-copy">
             <strong>{selectedBusinessName}</strong>
             {selectedPersonName && selectedPersonName !== selectedBusinessName ? (
-              <span>Référent : {selectedPersonName}</span>
+              <span>{t("modules.searchableBusinessContactPicker.contactPerson")} {selectedPersonName}</span>
             ) : null}
             {selectedProfession ? <span>{selectedProfession}</span> : null}
             {selectedPhone ? <span>{selectedPhone}</span> : null}
-            {preserveFallback ? <small>Contact historique non lié au CRM</small> : null}
+            {preserveFallback ? <small>{t("modules.searchableBusinessContactPicker.historicalContactNotLinkedToTheCRM")}</small> : null}
           </div>
           <div className="business-contact-picker-actions">
             <button type="button" className="secondary-button" onClick={startChanging}>
-              Changer
+
+              {t("modules.searchableBusinessContactPicker.change")}
             </button>
             <button type="button" className="danger-link" onClick={clearSelection}>
-              Effacer
+
+              {t("modules.searchableBusinessContactPicker.clear")}
             </button>
           </div>
         </div>
@@ -231,7 +236,7 @@ export default function SearchableBusinessContactPicker({
             aria-required={required}
             autoComplete="off"
             value={query}
-            placeholder="Rechercher une entreprise ou un contact…"
+            placeholder={t("modules.searchableBusinessContactPicker.searchForACompanyOrContact")}
             onChange={(event) => {
               const nextQuery = event.target.value;
               setQuery(nextQuery);
@@ -251,7 +256,7 @@ export default function SearchableBusinessContactPicker({
                   const profession = getVendorContactProfession(contact);
                   const secondaryParts = contact.companyName
                     ? [
-                        personName ? `Référent : ${personName}` : "",
+                        personName ? t("modules.vendors.supplierPerson", {name: personName}) : "",
                         profession,
                         contact.city
                       ]
@@ -279,7 +284,8 @@ export default function SearchableBusinessContactPicker({
                 })
               ) : (
                 <p className="business-contact-picker-empty" role="status">
-                  Aucun prestataire trouvé
+
+                  {t("modules.searchableBusinessContactPicker.noSuppliersFound")}
                 </p>
               )}
             </div>

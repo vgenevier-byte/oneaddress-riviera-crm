@@ -7719,61 +7719,46 @@ iframe.vendor-invoice-preview-frame {
   Ne touche pas aux Factures prestataires.
 */
 
-/* Scope Contacts : présence du formulaire Ajouter un contact */
-main:has(input[placeholder="Prénom"]),
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) {
+/* Scope Contacts : module effectivement monté, quelle que soit la langue. */
+main:has(.contacts-workspace[data-crm-module="contacts"]) {
   overflow: visible !important;
 }
 
 /* La zone de liste contacts doit privilégier la lisibilité : une seule colonne pour les cartes. */
-main:has(input[placeholder="Prénom"]) [class*="contact"] [class*="grid"],
-main:has(input[placeholder="Prénom"]) [class*="Contact"] [class*="grid"],
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="contact"] [class*="grid"],
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="Contact"] [class*="grid"] {
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="contact"] [class*="grid"],
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="Contact"] [class*="grid"] {
   grid-template-columns: 1fr !important;
 }
 
 /* Les cartes contacts prennent toute la largeur disponible. */
-main:has(input[placeholder="Prénom"]) [class*="contact"] [class*="card"],
-main:has(input[placeholder="Prénom"]) [class*="Contact"] [class*="card"],
-main:has(input[placeholder="Prénom"]) .contact-card,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="contact"] [class*="card"],
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="Contact"] [class*="card"],
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) .contact-card {
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="contact"] [class*="card"],
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="Contact"] [class*="card"],
+main:has(.contacts-workspace[data-crm-module="contacts"]) .contact-card {
   width: 100% !important;
   max-width: none !important;
   min-width: 0 !important;
 }
 
 /* Texte contact : jamais de mots cassés en vertical. */
-main:has(input[placeholder="Prénom"]) [class*="contact"] *,
-main:has(input[placeholder="Prénom"]) [class*="Contact"] *,
-main:has(input[placeholder="Prénom"]) .contact-card *,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="contact"] *,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="Contact"] *,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) .contact-card * {
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="contact"] *,
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="Contact"] *,
+main:has(.contacts-workspace[data-crm-module="contacts"]) .contact-card * {
   word-break: normal !important;
   overflow-wrap: normal !important;
 }
 
 /* Les lignes d'information peuvent revenir à la ligne, mais proprement. */
-main:has(input[placeholder="Prénom"]) [class*="contact"] p,
-main:has(input[placeholder="Prénom"]) [class*="Contact"] p,
-main:has(input[placeholder="Prénom"]) .contact-card p,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="contact"] p,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="Contact"] p,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) .contact-card p {
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="contact"] p,
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="Contact"] p,
+main:has(.contacts-workspace[data-crm-module="contacts"]) .contact-card p {
   white-space: normal !important;
   line-height: 1.45 !important;
 }
 
 /* Boutons contact : texte centré et dimensions raisonnables, sans forcer de gros carrés. */
-main:has(input[placeholder="Prénom"]) a[href^="tel:"],
-main:has(input[placeholder="Prénom"]) [class*="contact"] button,
-main:has(input[placeholder="Prénom"]) [class*="Contact"] button,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) a[href^="tel:"],
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="contact"] button,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [class*="Contact"] button {
+main:has(.contacts-workspace[data-crm-module="contacts"]) a[href^="tel:"],
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="contact"] button,
+main:has(.contacts-workspace[data-crm-module="contacts"]) [class*="Contact"] button {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -7787,17 +7772,46 @@ main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) [
 }
 
 /* Le formulaire nouveau contact reste utilisable mais ne doit pas écraser la liste. */
-main:has(input[placeholder="Prénom"]) form,
-main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) form {
+main:has(.contacts-workspace[data-crm-module="contacts"]) form {
   min-width: 320px !important;
 }
 
 /* Si la page utilise une grille liste + formulaire, on limite l'emprise du panneau formulaire. */
 @media (min-width: 1180px) {
-  main:has(input[placeholder="Prénom"]) form,
-  main:has(input[placeholder="Nom"]):has(input[placeholder="email@example.com"]) form {
+  main:has(.contacts-workspace[data-crm-module="contacts"]) form {
     max-width: 420px !important;
   }
+}
+
+/* Les deux validations Contacts restent des boutons, sans les styles de carte Planning. */
+[data-crm-module="contacts"] .contact-form-submit {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 38px !important;
+  height: auto !important;
+  color: #fffaf2 !important;
+  background: var(--crm-navy) !important;
+  border-color: var(--crm-navy) !important;
+  box-shadow: none !important;
+}
+
+[data-crm-module="contacts"] .contact-form-submit:hover,
+[data-crm-module="contacts"] .contact-form-submit:focus-visible {
+  color: #fffaf2 !important;
+  background: var(--crm-navy) !important;
+}
+
+[data-crm-module="contacts"] .contact-form-submit:focus-visible {
+  outline: 2px solid var(--crm-gold) !important;
+  outline-offset: 3px !important;
+}
+
+[data-crm-module="contacts"] .contact-form-submit:disabled {
+  opacity: .75 !important;
+  cursor: not-allowed !important;
+  filter: none !important;
+  transform: none !important;
 }
 
 /* === CONTACTS STABLE READABLE LAYOUT END === */

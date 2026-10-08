@@ -1,10 +1,10 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/I18nProvider";
+
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import {
-  getCRMTabSearchPlaceholder,
-  getCRMTabTitle,
   isCRMTabSearchable,
   type CRMTab
 } from "./crmNavigation";
@@ -31,13 +31,14 @@ export default function MobileCRMHeader({
   onActorChange,
   onQueryChange
 }: Props) {
+  const { t, label } = useI18n();
   const [searchOpen, setSearchOpen] = useState(false);
   const [previousTab, setPreviousTab] = useState(activeTab);
   const [actionsOpen, setActionsOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const actionsCloseRef = useRef<HTMLButtonElement>(null);
   const searchable = isCRMTabSearchable(activeTab);
-  const searchPlaceholder = getCRMTabSearchPlaceholder(activeTab);
+  const searchPlaceholder = searchable ? t(`navigation.search.${activeTab}`) : "";
 
   if (previousTab !== activeTab) {
     setPreviousTab(activeTab);
@@ -78,15 +79,15 @@ export default function MobileCRMHeader({
         <Image src="/oar-logo-paysage-crm.png" alt="One Address Riviera" width={96} height={84} priority />
         <div className="mobile-crm-header-title">
           <span>One Address · CRM</span>
-          <h1>{getCRMTabTitle(activeTab)}</h1>
+          <h1>{t(`navigation.module.${activeTab}`)}</h1>
         </div>
         <div className="mobile-crm-header-actions">
           {searchable ? (
-            <button type="button" className="mobile-icon-button" aria-label="Ouvrir la recherche" onClick={() => setSearchOpen(true)}>
+            <button type="button" className="mobile-icon-button" aria-label={t("navigation.openSearch")} onClick={() => setSearchOpen(true)}>
               ⌕
             </button>
           ) : null}
-          <button type="button" className="mobile-action-button" aria-label="Ouvrir les actions" onClick={() => setActionsOpen(true)}>
+          <button type="button" className="mobile-action-button" aria-label={t("navigation.openActions")} onClick={() => setActionsOpen(true)}>
             Actions
           </button>
         </div>
@@ -97,13 +98,13 @@ export default function MobileCRMHeader({
           <section className="mobile-search-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-search-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="mobile-sheet-header">
               <div>
-                <p className="eyebrow">Recherche générale</p>
-                <h2 id="mobile-search-title">Rechercher dans le CRM</h2>
+                <p className="eyebrow">{t("navigation.generalSearch")}</p>
+                <h2 id="mobile-search-title">{t("navigation.searchCRM")}</h2>
               </div>
-              <button type="button" className="mobile-icon-button" aria-label="Fermer la recherche" onClick={() => setSearchOpen(false)}>×</button>
+              <button type="button" className="mobile-icon-button" aria-label={t("navigation.closeSearch")} onClick={() => setSearchOpen(false)}>×</button>
             </header>
             <label className="mobile-search-field">
-              <span>Nom, bien, lead ou référence</span>
+              <span>{t("navigation.searchField")}</span>
               <input
                 ref={searchRef}
                 type="search"
@@ -112,8 +113,8 @@ export default function MobileCRMHeader({
                 placeholder={searchPlaceholder}
               />
             </label>
-            <p>La liste du module actif est filtrée au fil de la saisie.</p>
-            <button type="button" className="primary-button" onClick={() => setSearchOpen(false)}>Afficher les résultats</button>
+            <p>{t("navigation.filterHint")}</p>
+            <button type="button" className="primary-button" onClick={() => setSearchOpen(false)}>{t("navigation.showResults")}</button>
           </section>
         </div>
       ) : null}
@@ -123,24 +124,24 @@ export default function MobileCRMHeader({
           <section className="mobile-actions-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-actions-title" onMouseDown={(event) => event.stopPropagation()}>
             <header className="mobile-sheet-header">
               <div>
-                <p className="eyebrow">Compte et outils</p>
-                <h2 id="mobile-actions-title">Actions</h2>
+                <p className="eyebrow">{t("navigation.accountTools")}</p>
+                <h2 id="mobile-actions-title">{t("navigation.actions")}</h2>
               </div>
-              <button ref={actionsCloseRef} type="button" className="mobile-icon-button" aria-label="Fermer les actions" onClick={() => setActionsOpen(false)}>×</button>
+              <button ref={actionsCloseRef} type="button" className="mobile-icon-button" aria-label={t("navigation.closeActions")} onClick={() => setActionsOpen(false)}>×</button>
             </header>
 
             <div className="mobile-actions-scroll">
-              <p className="mobile-session-line">Connecté : <strong>{sessionEmail}</strong></p>
+              <p className="mobile-session-line">{t("navigation.signedIn")} <strong>{sessionEmail}</strong></p>
               <label className="mobile-actor-field">
-                <span>Actions par</span>
+                <span>{t("navigation.actionsBy")}</span>
                 <select value={activeActor} onChange={(event) => onActorChange(event.target.value)}>
-                  <option value="">Non renseigné</option>
+                  <option value="">{t("navigation.unspecified")}</option>
                   {actors.map((actor) => <option key={actor}>{actor}</option>)}
                 </select>
               </label>
               {actions.map((action) => (
                 <button
-                  key={action.label}
+                  key={action.id}
                   type="button"
                   className={action.tone === "danger" ? "is-danger" : ""}
                   onClick={() => {
@@ -148,7 +149,7 @@ export default function MobileCRMHeader({
                     setActionsOpen(false);
                   }}
                 >
-                  {action.label}
+                  {label(action.label, "crm")}
                 </button>
               ))}
             </div>

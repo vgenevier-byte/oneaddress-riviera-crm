@@ -1,4 +1,6 @@
 "use client";
+import { moduleMessage } from "@/lib/i18n/moduleMessage";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import {useCallback,useEffect,useRef,useState} from "react";
 import {useScopedOperations,isCancelled} from "@/lib/access/operations";
@@ -11,13 +13,15 @@ import styles from "./ContactDocuments.module.css";
 
 type Queued = ContactDocumentDraft & {status:"ready"|"sending"|"failed"|"confirmed";message?:string;locked?:boolean};
 type Recipient = {id:string;email:string;active:boolean;confirmed:boolean;modules:AccessSnapshot["modules"]};
-const date = (value?:string|null) => value ? new Date(value.length===10?value+"T12:00:00":value).toLocaleDateString("fr-FR") : "Non renseignée";
+
 const canDownload = (access:AccessSnapshot) => access.fullAccess || Boolean(access.modules.documents?.sensitive.export && access.modules.contacts?.sensitive.export);
 const allowed = (access:AccessSnapshot) => readable(access,"contacts") && readable(access,"documents");
 const writable = (access:AccessSnapshot) => access.fullAccess || (access.modules.contacts?.level==="contribute" && access.modules.documents?.level==="contribute");
 
 /** Shared renderer keeps the same private proxy and retirement rules in both surfaces. */
 export function ContactDocumentCards({access,documents,onChanged,onReplace}:{access:AccessSnapshot;documents:ContactDocument[];onChanged:()=>Promise<void>|void;onReplace?:(doc:ContactDocument,file:File)=>void}) {
+  const {t, formatDate: uiDate, locale} = useI18n();
+
   const begin=useScopedOperations("documents");
   const [message,setMessage]=useState(""),[working,setWorking]=useState(""),[preview,setPreview]=useState<{doc:ContactDocument;url:string}|null>(null);
   const [sharing,setSharing]=useState<ContactDocument|null>(null),[recipients,setRecipients]=useState<Recipient[]>([]),[recipient,setRecipient]=useState("");
@@ -57,7 +61,7 @@ export function ContactDocumentCards({access,documents,onChanged,onReplace}:{acc
   async function view(doc:ContactDocument){const request=previewReads.current.start();setWorking(doc.resource_id);setMessage("");try{const {op,blob}=await bytes(doc,false);await op.check();if(!previewReads.current.current(request))return;if(blob.type!=="application/pdf"&&!blob.type.startsWith("image/")){setMessage("Aperçu indisponible pour ce format.");return;}setPreview({doc,url:URL.createObjectURL(blob)});}catch(error){if(previewReads.current.current(request)){fail(error);await onChanged();}}finally{if(previewReads.current.current(request))setWorking("");}}
   async function download(doc:ContactDocument){setWorking(doc.resource_id);try{const {op,blob}=await bytes(doc,true);await op.download(blob,doc.file_name||doc.title||"document");}catch(error){fail(error);await onChanged();}finally{setWorking("");}}
   async function withdraw(doc:ContactDocument){
-    if(!window.confirm(`Mettre « ${doc.title} » à la corbeille ? Le fichier et son historique seront conservés.`))return;
+    if(!window.confirm(t("modules.documents.trashConfirm", {title: doc.title})))return;
     setWorking(doc.resource_id);setMessage("");
     try{const op=await begin();const result=await op.run(()=>op.client.rpc("crm_contact_document_withdraw",{p_resource:doc.resource_id,p_revision:doc.revision}));if(result.error)throw result.error;await op.check();setMessage("Document retiré et conservé dans la corbeille privée.");await onChanged();}catch(error){fail(error);}finally{setWorking("");}
   }
@@ -65,23 +69,25 @@ export function ContactDocumentCards({access,documents,onChanged,onReplace}:{acc
   async function share(revokeUser?:string){if(!sharing||(!recipient&&!revokeUser))return;setWorking(sharing.resource_id);try{const op=await begin();const result=await op.run(()=>revokeUser?op.client.rpc("crm_revoke_document_share",{p_provider:"storage",p_resource:sharing.resource_id,p_user:revokeUser}):op.client.rpc("crm_share_contact_document",{p_resource:sharing.resource_id,p_user:recipient}));if(result.error)throw result.error;await op.check();setMessage(revokeUser?"Autorisation retirée.":"Autorisation explicite confirmée.");setSharing(null);await onChanged();}catch(error){fail(error);}finally{setWorking("");}}
   return <div className={styles.list}>
     {documents.map(doc=><article key={doc.resource_id} className={styles.document} data-contact-document={doc.resource_id}>
-      <div><h4>{doc.title}</h4><p>{doc.personal_contact?doc.document_type||"Autre":doc.bank?"Document bancaire existant":"Document métier existant"}{doc.superseded_by||doc.lifecycle==="superseded"?" · Ancienne version":""}</p>
-      {doc.personal_contact&&<><p>{doc.file_name} · {doc.size_bytes?`${(doc.size_bytes/1_000_000).toLocaleString("fr-FR",{maximumFractionDigits:2})} Mo`:""}</p><p>Ajout : {date(doc.created_at)} · Auteur : {doc.created_by_label||doc.created_by||"Auteur serveur"}</p><p>Expiration : {date(doc.expires_on)}</p><p className={styles.private}>Privé · propriétaire, déposant habilité et personnes explicitement autorisées.</p></>}</div>
+      <div><h4>{doc.title}</h4><p>{doc.personal_contact?doc.document_type||t("modules.moduleWorkspace.other"):doc.bank?t("modules.contactDocuments.existingBankDocument"):t("modules.contactDocuments.existingBusinessDocument")}{doc.superseded_by||doc.lifecycle==="superseded"?t("modules.contactDocuments.previousVersion"):""}</p>
+      {doc.personal_contact&&<><p>{doc.file_name} · {doc.size_bytes?t("modules.documents.megabytes", {size: (doc.size_bytes/1_000_000).toLocaleString(locale,{maximumFractionDigits:2})}):""}</p><p>{t("modules.contactDocuments.added")} {doc.created_at ? uiDate(doc.created_at) : t("modules.contactDocuments.notProvided")}  {t("modules.contactDocuments.author")} {doc.created_by_label||doc.created_by||t("modules.contactDocuments.serverrecordedAuthor")}</p><p>{t("modules.contactDocuments.expiry")} {doc.expires_on ? uiDate(doc.expires_on) : t("modules.contactDocuments.notProvided")}</p><p className={styles.private}>{t("modules.contactDocuments.privateOwnerAuthorisedUploaderAndExplicitlyAuthorisedPeople")}</p></>}</div>
       <div className={styles.actions}>
-        <button type="button" className="secondary-button" disabled={working===doc.resource_id} onClick={()=>void view(doc)}>Aperçu</button>
-        {canDownload(access)&&<button type="button" className="secondary-button" disabled={working===doc.resource_id} onClick={()=>void download(doc)}>Télécharger</button>}
-        {doc.personal_contact&&doc.replaceable&&!doc.readonly&&writable(access)&&onReplace&&<label className={styles.fileButton}>Remplacer explicitement<input aria-label={`Remplacer ${doc.title}`} type="file" accept={CONTACT_DOCUMENT_ACCEPT} disabled={Boolean(working)} onChange={event=>{const file=event.target.files?.[0];if(file)onReplace(doc,file);event.target.value="";}}/></label>}
-        {doc.personal_contact&&doc.deletable&&writable(access)&&(access.fullAccess||(access.modules.contacts?.sensitive.delete&&access.modules.documents?.sensitive.delete))&&<button type="button" className="danger-button" disabled={Boolean(working)} onClick={()=>void withdraw(doc)}>Mettre à la corbeille</button>}
-        {doc.personal_contact&&doc.can_share&&<button type="button" className="secondary-button" disabled={Boolean(working)} onClick={()=>void openSharing(doc)}>Autorisations</button>}
+        <button type="button" className="secondary-button" disabled={working===doc.resource_id} onClick={()=>void view(doc)}>{t("modules.contactDocuments.preview")}</button>
+        {canDownload(access)&&<button type="button" className="secondary-button" disabled={working===doc.resource_id} onClick={()=>void download(doc)}>{t("modules.contactDocuments.download")}</button>}
+        {doc.personal_contact&&doc.replaceable&&!doc.readonly&&writable(access)&&onReplace&&<label className={styles.fileButton}>{t("modules.contactDocuments.replaceExplicitly")}<input aria-label={t("modules.documents.replaceTitle", {title: doc.title})} type="file" accept={CONTACT_DOCUMENT_ACCEPT} disabled={Boolean(working)} onChange={event=>{const file=event.target.files?.[0];if(file)onReplace(doc,file);event.target.value="";}}/></label>}
+        {doc.personal_contact&&doc.deletable&&writable(access)&&(access.fullAccess||(access.modules.contacts?.sensitive.delete&&access.modules.documents?.sensitive.delete))&&<button type="button" className="danger-button" disabled={Boolean(working)} onClick={()=>void withdraw(doc)}>{t("modules.contactDocuments.moveToBin")}</button>}
+        {doc.personal_contact&&doc.can_share&&<button type="button" className="secondary-button" disabled={Boolean(working)} onClick={()=>void openSharing(doc)}>{t("modules.contactDocuments.permissions")}</button>}
       </div>
     </article>)}
-    {message&&<p role="status">{message}</p>}
-    {preview&&<div className="document-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="contact-document-preview-title" ref={previewDialog}><div className="document-preview-modal"><div className="section-heading"><h3 id="contact-document-preview-title">{preview.doc.title}</h3><button type="button" className="secondary-button" onClick={closePreview}>Fermer l’aperçu</button></div><iframe src={preview.url+"#toolbar=0"} title={preview.doc.title} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="document-preview-frame"/>{canDownload(access)&&<button type="button" onClick={()=>void download(preview.doc)}>Télécharger</button>}</div></div>}
-    {sharing&&<div className="confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="contact-document-sharing-title" ref={shareDialog}><div className="confirm-dialog"><h3 id="contact-document-sharing-title">Autorisations · {sharing.title}</h3><p>Chaque autorisation concerne uniquement cette pièce. Les droits Contacts et Documents restent nécessaires.</p><label>Collaborateur habilité<select value={recipient} onChange={event=>setRecipient(event.target.value)}><option value="">Choisir une personne</option>{recipients.map(user=><option key={user.id} value={user.id}>{user.email}</option>)}</select></label><button type="button" disabled={!recipient||Boolean(working)} onClick={()=>void share()}>Autoriser cette pièce</button>{sharing.shared_with?.map(user=><p key={user.user_id}>{user.email||user.user_id} <button type="button" disabled={Boolean(working)} onClick={()=>void share(user.user_id)}>Retirer l’autorisation</button></p>)}<button type="button" className="secondary-button" onClick={()=>setSharing(null)}>Fermer</button></div></div>}
+    {message&&<p role="status">{moduleMessage(message, t)}</p>}
+    {preview&&<div className="document-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="contact-document-preview-title" ref={previewDialog}><div className="document-preview-modal"><div className="section-heading"><h3 id="contact-document-preview-title">{preview.doc.title}</h3><button type="button" className="secondary-button" onClick={closePreview}>{t("modules.contactDocuments.closePreview")}</button></div><iframe src={preview.url+"#toolbar=0"} title={preview.doc.title} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="document-preview-frame"/>{canDownload(access)&&<button type="button" onClick={()=>void download(preview.doc)}>{t("modules.contactDocuments.download")}</button>}</div></div>}
+    {sharing&&<div className="confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="contact-document-sharing-title" ref={shareDialog}><div className="confirm-dialog"><h3 id="contact-document-sharing-title">{t("modules.contactDocuments.permissions_c80b62")} {sharing.title}</h3><p>{t("modules.contactDocuments.eachPermissionAppliesOnlyToThisFileContactsAndDocumentsAccessIs")}</p><label>{t("modules.contactDocuments.authorisedColleague")}<select value={recipient} onChange={event=>setRecipient(event.target.value)}><option value="">{t("modules.contactDocuments.chooseAPerson")}</option>{recipients.map(user=><option key={user.id} value={user.id}>{user.email}</option>)}</select></label><button type="button" disabled={!recipient||Boolean(working)} onClick={()=>void share()}>{t("modules.contactDocuments.grantAccessToThisFile")}</button>{sharing.shared_with?.map(user=><p key={user.user_id}>{user.email||user.user_id} <button type="button" disabled={Boolean(working)} onClick={()=>void share(user.user_id)}>{t("modules.contactDocuments.revokeAccess")}</button></p>)}<button type="button" className="secondary-button" onClick={()=>setSharing(null)}>{t("modules.tasksWorkspace.close")}</button></div></div>}
   </div>;
 }
 
 export default function ContactDocuments({contactId,access}:{contactId:string;access:AccessSnapshot}) {
+  const {t, label: uiLabel} = useI18n();
+
   const begin=useScopedOperations("documents"),[projection,setProjection]=useState<ContactDocumentProjection|null>(null),[queue,setQueue]=useState<Queued[]>([]),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
   const revision=useRef<string|null>(null),runController=useRef<AbortController|null>(null),inFlight=useRef(false),alive=useRef(true),queueRef=useRef<Queued[]>([]),reads=useRef(new ContactDocumentReadSequence());
   const permitted=allowed(access),canAdd=writable(access),identity=JSON.stringify(access);
@@ -95,7 +101,7 @@ export default function ContactDocuments({contactId,access}:{contactId:string;ac
   }
   function replace(doc:ContactDocument,file:File){
     const validation=validateContactDocumentFile(file);if(validation){setMessage(validation);return;}
-    if(!window.confirm(`Créer une nouvelle version de « ${doc.title} » ? L’ancienne version sera conservée.`))return;
+    if(!window.confirm(t("modules.documents.replaceConfirm", {title: doc.title})))return;
     updateQueue(rows=>[...rows,{operationId:crypto.randomUUID(),contactId,file,title:doc.title,type:doc.document_type??"Autre",expiry:doc.expires_on??"",previous:{resource_id:doc.resource_id,revision:doc.revision},status:"ready"}]);
   }
   async function send(){
@@ -126,33 +132,35 @@ export default function ContactDocuments({contactId,access}:{contactId:string;ac
     if(item.locked&&item.status!=="confirmed"){try{const op=await begin();const result=await op.run(()=>op.client.rpc("crm_contact_document_cancel",{p_operation:item.operationId}));if(result.error)throw result.error;await op.check();}catch(error){if(!isCancelled(error))setMessage(contactDocumentError(error));await refresh();return;}}
     updateQueue(rows=>rows.filter(row=>row.operationId!==item.operationId));
   }
-  if(!permitted)return <section className={styles.section} data-contact-documents><h4>Documents du contact</h4><p>Les droits de lecture Contacts et Documents sont nécessaires.</p></section>;
-  return <section className={styles.section} data-contact-documents aria-label="Documents du contact">
-    <div className={styles.heading}><h4>Documents du contact {projection?`(${projection.documents.length})`:""}</h4><button type="button" className="secondary-button" onClick={()=>void refresh()} disabled={busy}>Recharger la liste</button></div>
-    <p>Pièces personnelles privées par défaut. Le propriétaire et le déposant habilité y ont accès ; chaque autre personne doit être autorisée explicitement.</p>
-    {!projection?<p role="status">Lecture des documents en cours ou indisponible.</p>:projection.documents.length===0?<p>Aucun document accessible pour ce contact.</p>:<ContactDocumentCards access={access} documents={projection.documents} onChanged={refresh} onReplace={replace}/>}
+  if(!permitted)return <section className={styles.section} data-contact-documents><h4>{t("modules.contactDocuments.contactDocuments")}</h4><p>{t("modules.contactDocuments.readAccessToContactsAndDocumentsIsRequired")}</p></section>;
+  return <section className={styles.section} data-contact-documents aria-label={t("modules.contactDocuments.contactDocuments")}>
+    <div className={styles.heading}><h4>{t("modules.contactDocuments.contactDocuments")} {projection?`(${projection.documents.length})`:""}</h4><button type="button" className="secondary-button" onClick={()=>void refresh()} disabled={busy}>{t("modules.contactDocuments.reloadList")}</button></div>
+    <p>{t("modules.contactDocuments.personalDocumentsArePrivateByDefaultTheOwnerAndAuthorisedUploaderHave")}</p>
+    {!projection?<p role="status">{t("modules.contactDocuments.loadingDocumentsOrDocumentsUnavailable")}</p>:projection.documents.length===0?<p>{t("modules.contactDocuments.noAccessibleDocumentsForThisContact")}</p>:<ContactDocumentCards access={access} documents={projection.documents} onChanged={refresh} onReplace={replace}/>}
     {canAdd&&<form className={styles.form} onSubmit={event=>{event.preventDefault();void send();}}>
-      <h4>Ajouter des pièces</h4><p>PDF, JPEG et PNG · 25 Mo maximum par fichier. Plusieurs pièces du même type et du même nom sont acceptées. Le contact est déjà confirmé par son identifiant serveur.</p>
-      <label>Choisir plusieurs fichiers<input type="file" multiple accept={CONTACT_DOCUMENT_ACCEPT} disabled={busy||!projection} onChange={event=>{select(event.target.files);event.target.value="";}}/></label>
-      {queue.map(item=><fieldset key={item.operationId} disabled={busy||item.locked} className={styles.draft}><legend>{item.file.name}{item.previous?" · Nouvelle version":""}</legend>
-        <label>Type<select aria-label={`Type ${item.file.name}`} value={item.type} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,type:event.target.value as ContactDocumentType}:row))}>{CONTACT_DOCUMENT_TYPES.map(type=><option key={type}>{type}</option>)}</select></label>
-        <label>Intitulé<input aria-label={`Intitulé ${item.file.name}`} required maxLength={200} value={item.title} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,title:event.target.value}:row))}/></label>
-        <label>Expiration facultative<input type="date" value={item.expiry} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,expiry:event.target.value}:row))}/></label>
-        <p role="status">{item.message||validateContactDocumentFile(item.file)||"Prêt à envoyer"}</p>
+      <h4>{t("modules.contactDocuments.addDocuments")}</h4><p>{t("modules.contactDocuments.pdfJPEGAndPNGMaximum25MBPerFileMultipleFilesOf")}</p>
+      <label>{t("modules.contactDocuments.chooseMultipleFiles")}<input type="file" multiple accept={CONTACT_DOCUMENT_ACCEPT} disabled={busy||!projection} onChange={event=>{select(event.target.files);event.target.value="";}}/></label>
+      {queue.map(item=><fieldset key={item.operationId} disabled={busy||item.locked} className={styles.draft}><legend>{item.file.name}{item.previous?t("modules.contactDocuments.newVersion"):""}</legend>
+        <label>{t("modules.contactDocuments.type")}<select aria-label={t("modules.documents.typeTitle", {title: item.file.name})} value={item.type} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,type:event.target.value as ContactDocumentType}:row))}>{CONTACT_DOCUMENT_TYPES.map(type=><option key={type} value={type}>{uiLabel(type, "modules")}</option>)}</select></label>
+        <label>{t("modules.contactDocuments.title")}<input aria-label={t("modules.documents.nameTitle", {title: item.file.name})} required maxLength={200} value={item.title} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,title:event.target.value}:row))}/></label>
+        <label>{t("modules.contactDocuments.optionalExpiryDate")}<input type="date" value={item.expiry} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,expiry:event.target.value}:row))}/></label>
+        <p role="status">{item.message||validateContactDocumentFile(item.file) ? moduleMessage(item.message||validateContactDocumentFile(item.file), t) : t("modules.contactDocuments.readyToUpload")}</p>
       </fieldset>)}
-      <div className={styles.actions}>{queue.filter(item=>item.status!=="confirmed").map(item=><button key={item.operationId} type="button" className="secondary-button" disabled={busy} onClick={()=>void discard(item)}>Retirer la sélection : {item.file.name}</button>)}{queue.some(item=>item.status!=="confirmed")&&<button type="submit" className="primary-button" disabled={busy||!projection}>{busy?"Import en cours…":queue.some(item=>item.status==="failed")?"Reprendre les fichiers non confirmés":"Ajouter les fichiers sélectionnés"}</button>}{busy&&<button type="button" className="secondary-button" onClick={()=>runController.current?.abort()}>Annuler l’import</button>}{!busy&&queue.some(item=>item.status==="confirmed")&&<button type="button" className="secondary-button" onClick={()=>updateQueue(rows=>rows.filter(item=>item.status!=="confirmed"))}>Masquer les imports confirmés</button>}</div>
+      <div className={styles.actions}>{queue.filter(item=>item.status!=="confirmed").map(item=><button key={item.operationId} type="button" className="secondary-button" disabled={busy} onClick={()=>void discard(item)}>{t("modules.contactDocuments.removeSelection")} {item.file.name}</button>)}{queue.some(item=>item.status!=="confirmed")&&<button type="submit" className="primary-button" disabled={busy||!projection}>{busy?t("modules.contactDocuments.uploading"):queue.some(item=>item.status==="failed")?t("modules.contactDocuments.retryUnconfirmedFiles"):t("modules.contactDocuments.uploadSelectedFiles")}</button>}{busy&&<button type="button" className="secondary-button" onClick={()=>runController.current?.abort()}>{t("modules.contactDocuments.cancelUpload")}</button>}{!busy&&queue.some(item=>item.status==="confirmed")&&<button type="button" className="secondary-button" onClick={()=>updateQueue(rows=>rows.filter(item=>item.status!=="confirmed"))}>{t("modules.contactDocuments.hideConfirmedUploads")}</button>}</div>
     </form>}
-    {message&&<p role="status">{message}</p>}
+    {message&&<p role="status">{moduleMessage(message, t)}</p>}
   </section>;
 }
 
 /** Full-access Documents uses its existing payload for Drive; personal attachments
  * are projected separately so no contact addition can trigger a workspace overwrite. */
 export function ContactDocumentLibrary({access}:{access:AccessSnapshot}){
+  const {t} = useI18n();
+
   const begin=useScopedOperations("documents"),[documents,setDocuments]=useState<ContactDocument[]>([]),[message,setMessage]=useState(""),[query,setQuery]=useState("");
   const reads=useRef(new ContactDocumentReadSequence());
   const refresh=useCallback(async()=>{const request=reads.current.start();try{const op=await begin();const result=await op.run(()=>op.client.rpc("crm_read_module",{p_module:"documents"}));if(result.error)throw result.error;await op.check();if(reads.current.current(request)){setDocuments((result.data.collections.documents as ContactDocument[]).filter(doc=>doc.personal_contact));setMessage("");}}catch(error){if(reads.current.current(request)&&!isCancelled(error)){setDocuments([]);setMessage(contactDocumentError(error));}}},[begin]);
   useEffect(()=>{const sequence=reads.current;const initial=setTimeout(()=>void refresh(),0);const focus=()=>void refresh();window.addEventListener("focus",focus);const timer=setInterval(focus,15000);return()=>{sequence.invalidate();clearTimeout(initial);clearInterval(timer);window.removeEventListener("focus",focus);};},[refresh]);
   if(!allowed(access))return null;
-  return <section className="card" data-contact-documents><div className={styles.heading}><h3>Documents des contacts ({documents.length})</h3><button type="button" className="secondary-button" onClick={()=>void refresh()}>Recharger</button></div><p>Liste des pièces personnelles autorisées. Leur partage reste indépendant de celui de la bibliothèque générale.</p><label>Rechercher une pièce autorisée<input value={query} onChange={event=>setQuery(event.target.value)}/></label><ContactDocumentCards access={access} documents={documents.filter(doc=>[doc.title,doc.file_name,doc.document_type].join(" ").toLocaleLowerCase().includes(query.toLocaleLowerCase()))} onChanged={refresh}/>{message&&<p role="status">{message}</p>}</section>;
+  return <section className="card" data-contact-documents><div className={styles.heading}><h3>{t("modules.contactDocuments.contactDocuments_796ce1")}{documents.length})</h3><button type="button" className="secondary-button" onClick={()=>void refresh()}>{t("modules.contactDocuments.reload")}</button></div><p>{t("modules.contactDocuments.authorisedPersonalDocumentsTheirSharingRemainsSeparateFromTheGeneralLibrary")}</p><label>{t("modules.contactDocuments.searchAuthorisedDocuments")}<input value={query} onChange={event=>setQuery(event.target.value)}/></label><ContactDocumentCards access={access} documents={documents.filter(doc=>[doc.title,doc.file_name,doc.document_type].join(" ").toLocaleLowerCase().includes(query.toLocaleLowerCase()))} onChanged={refresh}/>{message&&<p role="status">{moduleMessage(message, t)}</p>}</section>;
 }

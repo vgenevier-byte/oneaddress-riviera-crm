@@ -5,8 +5,11 @@ import crmLogo from "../public/oar-logo-paysage-crm.png";
 import { type AccessSnapshot, type ModuleId } from "@/lib/access/modules";
 import { administrationItem, allowedNavigation, groupForModule, mobileShortcutItems, type NavigationGroupId, type NavigationModule } from "./unifiedNavigationStructure";
 import styles from "./UnifiedNavigation.module.css";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import LanguageSelector from "./LanguageSelector";
 export type UnifiedTab = ModuleId | "admin";
 export default function UnifiedNavigation({ access, active, accountId, navigationRevision = 0, onNavigate, onLogout, badges = {} }: { access: AccessSnapshot; active: UnifiedTab; accountId: string; navigationRevision?: number; onNavigate: (tab: UnifiedTab) => boolean | void; onLogout: () => void; badges?: Partial<Record<ModuleId, number>> }) {
+ const { t } = useI18n();
  const [more, setMore] = useState(false);
  const [openedGroup, setOpenedGroup] = useState<NavigationGroupId | null>(() => groupForModule(active));
  const [destination, setDestination] = useState({ active, accountId, navigationRevision });
@@ -74,8 +77,8 @@ export default function UnifiedNavigation({ access, active, accountId, navigatio
   const className = surface === "shortcut" ? `mobile-crm-nav-button ${selected ? "is-active" : ""}` : surface === "more" ? `unified-more-button ${selected ? "is-active" : ""}` : `${styles.row} ${selected ? styles.active : ""}`;
   return <button key={item.tab} data-navigation-module={item.tab} type="button" className={className} aria-current={selected ? "page" : undefined} onClick={() => navigate(item.tab)}>
    <span className={surface === "more" ? "unified-more-icon" : surface === "shortcut" ? "nav-button-icon" : styles.icon} aria-hidden="true">{item.icon}</span>
-   <span className={surface === "more" ? "unified-more-label" : surface === "shortcut" ? "nav-button-label" : styles.label}>{item.label}</span>
-   {count ? <span className={surface === "more" ? "unified-more-badge" : surface === "shortcut" ? "nav-badge" : styles.badge} aria-label={`${count} élément(s) à traiter`}>{count}</span> : null}
+   <span className={surface === "more" ? "unified-more-label" : surface === "shortcut" ? "nav-button-label" : styles.label}>{t(`navigation.module.${item.tab}`)}</span>
+   {count ? <span className={surface === "more" ? "unified-more-badge" : surface === "shortcut" ? "nav-badge" : styles.badge} aria-label={t("navigation.pendingCount", { count })}>{count}</span> : null}
   </button>;
  }
  function tree(surface: "desktop" | "more") {
@@ -88,21 +91,21 @@ export default function UnifiedNavigation({ access, active, accountId, navigatio
    return <div key={entry.id} className={styles.group}>
     <button type="button" data-navigation-group={entry.id} className={`${surface === "more" ? "unified-more-button" : styles.row} ${styles.category} ${!expanded && containsActive ? styles.containsActive : ""}`} aria-expanded={expanded} aria-controls={panelId} onClick={() => setOpenedGroup(expanded ? null : entry.id)}>
      <span className={surface === "more" ? "unified-more-icon" : styles.icon} aria-hidden="true">{expanded ? "▾" : "▸"}</span>
-     <span className={surface === "more" ? "unified-more-label" : styles.label}>{entry.label}</span>
+     <span className={surface === "more" ? "unified-more-label" : styles.label}>{t(`navigation.group.${entry.id}`)}</span>
      <span className={styles.indicators}>
-      {!expanded && containsActive && <span className={styles.activeDot} role="img" aria-label="Contient la page active" />}
-      {pending && <span className={styles.pendingDot} role="img" aria-label="Éléments à traiter" />}
+      {!expanded && containsActive && <span className={styles.activeDot} role="img" aria-label={t("navigation.activePage")} />}
+      {pending && <span className={styles.pendingDot} role="img" aria-label={t("navigation.pending")} />}
      </span>
     </button>
     <div id={panelId} className={styles.children} hidden={!expanded}>{expanded && entry.items.map(item => button(item, surface))}</div>
    </div>;
   });
  }
- return <><aside className={`sidebar ${styles.rail}`}><div className={`brand-block brand-block-logo ${styles.brand}`}><Image src={crmLogo} alt="One Address Riviera" className="crm-sidebar-logo" /></div><nav className={`nav-list ${styles.tree}`} aria-label="Navigation principale">{tree("desktop")}</nav><footer className={styles.footer}>
+ return <><aside className={`sidebar ${styles.rail}`}><div className={`brand-block brand-block-logo ${styles.brand}`}><Image src={crmLogo} alt="One Address Riviera" className="crm-sidebar-logo" /></div><nav className={`nav-list ${styles.tree}`} aria-label={t("navigation.main")}>{tree("desktop")}</nav><footer className={styles.footer}><LanguageSelector compact />
   {access.generalAdmin && button(administrationItem, "desktop")}
-  <button type="button" className={`${styles.row} ${styles.signout}`} onClick={onLogout}>Déconnexion</button>
+  <button type="button" className={`${styles.row} ${styles.signout}`} onClick={onLogout}>{t("navigation.signOut")}</button>
  </footer></aside>
- <nav className="mobile-crm-navigation" aria-label="Navigation mobile principale">{mobileShortcutItems(access).map(item => button(item, "shortcut"))}<button ref={moreButton} id="unified-more-trigger" type="button" className="mobile-crm-nav-button" aria-expanded={more} aria-controls="unified-more-panel" aria-haspopup="dialog" onClick={()=>setMore(!more)}>•••<span>Plus</span></button></nav>
+ <nav className="mobile-crm-navigation" aria-label={t("navigation.mobile")}>{mobileShortcutItems(access).map(item => button(item, "shortcut"))}<button ref={moreButton} id="unified-more-trigger" type="button" className="mobile-crm-nav-button" aria-expanded={more} aria-controls="unified-more-panel" aria-haspopup="dialog" onClick={()=>setMore(!more)}>•••<span>{t("navigation.more")}</span></button></nav>
  {more && <div className="mobile-sheet-backdrop unified-more-backdrop" onClick={()=>setMore(false)}>
   <section ref={morePanel} id="unified-more-panel" className={`mobile-more-menu unified-more-panel ${styles.panel}`} role="dialog" aria-modal="true" aria-labelledby="unified-more-title" onClick={e=>e.stopPropagation()} onKeyDown={event => {
    if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setMore(false); }
@@ -112,13 +115,13 @@ export default function UnifiedNavigation({ access, active, accountId, navigatio
    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
   }}>
-   <header className="unified-more-header"><h2 id="unified-more-title">Modules autorisés</h2><button ref={closeButton} type="button" className="unified-more-close" onClick={()=>setMore(false)}>Fermer</button></header>
+   <header className="unified-more-header"><h2 id="unified-more-title">{t("navigation.authorized")}</h2><button ref={closeButton} type="button" className="unified-more-close" onClick={()=>setMore(false)}>{t("navigation.close")}</button></header>
    <div className="unified-more-scroll">
-    <nav className="unified-more-list" aria-label="Modules autorisés">
+    <nav className="unified-more-list" aria-label={t("navigation.authorized")}>
      {tree("more")}
     </nav>
    </div>
-   <footer className={styles.footer}>{access.generalAdmin && button(administrationItem, "more")}<button type="button" className="unified-more-signout" onClick={onLogout}>Déconnexion</button></footer>
+   <footer className={styles.footer}><LanguageSelector compact />{access.generalAdmin && button(administrationItem, "more")}<button type="button" className="unified-more-signout" onClick={onLogout}>{t("navigation.signOut")}</button></footer>
   </section>
  </div>}</>;
 }

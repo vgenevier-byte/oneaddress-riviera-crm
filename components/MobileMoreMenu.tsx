@@ -1,5 +1,8 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/I18nProvider";
+
+import LanguageSelector from "./LanguageSelector";
 import { useEffect, useRef } from "react";
 import {
   getCRMNavigationItem,
@@ -8,6 +11,7 @@ import {
 } from "./crmNavigation";
 
 export type MobileSecondaryAction = {
+  id: string;
   label: string;
   onClick: () => void;
   tone?: "default" | "danger";
@@ -32,6 +36,7 @@ export default function MobileMoreMenu({
   onClose,
   onNavigate
 }: Props) {
+  const { t, label } = useI18n();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -68,9 +73,9 @@ export default function MobileMoreMenu({
         <header className="mobile-sheet-header">
           <div>
             <p className="eyebrow">Navigation</p>
-            <h2 id="mobile-more-menu-title">Plus de modules</h2>
+            <h2 id="mobile-more-menu-title">{t("navigation.moreModules")}</h2>
           </div>
-          <button ref={closeButtonRef} type="button" className="mobile-icon-button" aria-label="Fermer le menu" onClick={onClose}>
+          <button ref={closeButtonRef} type="button" className="mobile-icon-button" aria-label={t("navigation.closeMenu")} onClick={onClose}>
             ×
           </button>
         </header>
@@ -93,18 +98,19 @@ export default function MobileMoreMenu({
                   }}
                 >
                   <span className="mobile-more-item-icon" aria-hidden="true">{item.icon}</span>
-                  <span>{item.label}</span>
-                  {badge ? <strong aria-label={`${badge} élément(s) à traiter`}>{badge}</strong> : null}
+                  <span>{t(`navigation.module.${item.tab}`)}</span>
+                  {badge ? <strong aria-label={t("navigation.pendingCount", { count: badge })}>{badge}</strong> : null}
                 </button>
               );
             })}
           </div>
 
-          <section className="mobile-more-secondary" aria-label="Actions secondaires">
-            <p className="mobile-session-line">Connecté : <strong>{sessionEmail}</strong></p>
+          <LanguageSelector />
+          <section className="mobile-more-secondary" aria-label={t("navigation.secondary")}>
+            <p className="mobile-session-line">{t("navigation.signedIn")} <strong>{sessionEmail}</strong></p>
             {secondaryActions.map((action) => (
               <button
-                key={action.label}
+                key={action.id}
                 type="button"
                 className={action.tone === "danger" ? "is-danger" : ""}
                 onClick={() => {
@@ -112,7 +118,7 @@ export default function MobileMoreMenu({
                   onClose();
                 }}
               >
-                {action.label}
+                {label(action.label, "crm")}
               </button>
             ))}
           </section>

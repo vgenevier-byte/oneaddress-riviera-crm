@@ -1,5 +1,5 @@
 .shell { min-height:100vh; background:#faf8f3 !important; color:#0c2740; padding:40px clamp(20px,6vw,100px); }
-.header { display:flex; justify-content:space-between; align-items:center; gap:24px; padding-bottom:36px; border-bottom:1px solid #dcd5c8; font-size:12px; }
+.header { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:24px; padding-bottom:36px; border-bottom:1px solid #dcd5c8; font-size:12px; }
 .wordmark { font-weight:700; letter-spacing:1.5px; } .wordmark span { margin:0 16px; color:#ac844a; }
 .card { max-width:760px; margin:70px auto; padding:48px; background:white; border:1px solid #e4ded4; border-radius:12px; box-shadow:0 15px 45px #0c274008; }
 .eyebrow { color:#8a6736; letter-spacing:2px; font-size:11px; font-weight:700; }
@@ -14,8 +14,11 @@
 .links a:hover { border-color:#ac844a; } .links span { white-space:nowrap; color:#8a6736; }
 .projects { padding:0; list-style:none; margin:28px 0; } .projects li { display:grid; gap:8px; padding:22px; background:#faf8f3; border-left:3px solid #ac844a; margin-top:12px; overflow-wrap:anywhere; } .projects span { font-size:13px; color:#63717d; }
 .footer { text-align:center; font-size:12px; color:#63717d; } .workspaceNav { display:flex; justify-content:flex-end; gap:24px; padding:10px 24px; background:#faf8f3; color:#0c2740; }
-@media(max-width:600px) { .shell{padding:24px 18px;} .header{align-items:flex-start;} .header>span:last-child{display:none;} .wordmark{font-size:10px; letter-spacing:.8px;} .wordmark span{margin:0 8px;} .card{margin:32px auto; padding:26px 20px;} .card h1{font-size:34px;} .links a{flex-direction:column; padding:18px;} }
+@media(max-width:600px) { .shell{padding:24px 18px;} .header{align-items:flex-start;} .header>span:nth-child(2){display:none;} .wordmark{font-size:10px; letter-spacing:.8px;} .wordmark span{margin:0 8px;} .card{margin:32px auto; padding:26px 20px;} .card h1{font-size:34px;} .links a{flex-direction:column; padding:18px;} }
 
 .recoveryChoice { display:flex; align-items:flex-start; gap:12px; margin:24px 0; line-height:1.6; }
 .recoveryChoice input { flex:none; width:18px; height:18px; margin-top:4px; }
 .card.generatorCard { max-width:1440px; margin:36px auto; padding:clamp(16px,3vw,40px); }
+
+.header :global([data-language-selector]) { width:auto; max-width:100%; }
+.header :global([data-language-selector] button) { width:auto; flex:none; white-space:nowrap; }

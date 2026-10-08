@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { isCancelled, useScopedOperations } from "./operations";
 
 type HistoryEvent = {
@@ -15,6 +16,7 @@ type HistoryPage = { events: HistoryEvent[]; nextCursor: HistoryCursor | null; h
 type HistoryState = HistoryPage & { status: "loading" | "ready" | "error" };
 const emptyPage: HistoryPage = { events: [], nextCursor: null, hasMore: false };
 const pageSize = 50;
+const historyActionKeys = new Set(["access_saved", "invitation_prepared", "invitation_accepted", "invitation_revoked", "document_classified", "document_shared", "document_share_revoked", "document_trash_started", "document_trashed", "contact_document_reserved", "contact_document_confirmed", "contact_document_withdrawn", "contact_document_replaced", "contact_document_shared", "worker_documents_removed"]);
 
 // Keep bigint identifiers as strings from the RPC through the next request.
 function parsePage(value: unknown): HistoryPage {
@@ -36,6 +38,7 @@ function parsePage(value: unknown): HistoryPage {
 }
 
 export default function AdminHistory({ users }: { users: { id: string; email: string }[] }) {
+  const { t, formatDate } = useI18n();
   const begin = useScopedOperations("admin");
   const request = useRef({ sequence: 0 });
   const [history, setHistory] = useState<HistoryState>({ ...emptyPage, status: "loading" });
@@ -71,20 +74,20 @@ export default function AdminHistory({ users }: { users: { id: string; email: st
   const shown = expanded ? history.events : history.events.slice(0, 3);
   const email = (id: string) => users.find(user => user.id === id)?.email;
   return <section className="panel" data-admin-history>
-    <h2>Historique des changements</h2>
+    <h2>{t("admin.history.title")}</h2>
     <div id={listId}>
       {shown.map(event => <p key={event.id} data-admin-history-event={event.id}>
-        <time dateTime={event.created_at}>{new Date(event.created_at).toLocaleString("fr-FR")}</time>
-        {" · Auteur : "}{event.actor_id ? email(event.actor_id) ?? `Compte indisponible · ${event.actor_id}` : "Non renseigné"}
-        {" · Action : "}{event.action}
-        {" · Destinataire : "}{event.subject_id ? email(event.subject_id) ?? `Compte / invitation / document · ${event.subject_id}` : "Non renseigné"}
+        <time dateTime={event.created_at}>{formatDate(event.created_at, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</time>
+        {" · "}{t("admin.history.author")} {event.actor_id ? email(event.actor_id) ?? t("admin.history.unavailableAccount", { id: event.actor_id }) : t("navigation.unspecified")}
+        {" · "}{t("admin.history.action")} {historyActionKeys.has(event.action) ? t(`admin.history.action.${event.action}`) : event.action}
+        {" · "}{t("admin.history.recipient")} {event.subject_id ? email(event.subject_id) ?? t("admin.history.unavailableSubject", { id: event.subject_id }) : t("navigation.unspecified")}
       </p>)}
     </div>
-    {history.status === "ready" && history.events.length === 0 && <p>Aucun changement enregistré.</p>}
-    {history.events.length > 0 && <p data-admin-history-count>{expanded ? `${history.events.length} événements chargés.` : `${shown.length} événement${shown.length > 1 ? "s" : ""} affiché${shown.length > 1 ? "s" : ""} sur ${history.events.length} chargé${history.events.length > 1 ? "s" : ""}.`}{history.hasMore ? " Des événements plus anciens restent à charger." : history.status === "ready" ? " Historique entièrement chargé." : ""}</p>}
-    {history.events.length > 3 && <button type="button" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>{expanded ? "Réduire l’historique" : "Voir tout l’historique"}</button>}
-    {history.status === "loading" && <p role="status">Chargement de l’historique…</p>}
-    {history.status === "error" && <><p role="status">Lecture de l’historique indisponible. Les événements déjà chargés sont conservés.</p><button type="button" onClick={loadOlder}>Réessayer le chargement de l’historique</button></>}
-    {expanded && history.hasMore && history.status !== "error" && <button type="button" disabled={history.status === "loading"} onClick={loadOlder}>Charger les événements plus anciens</button>}
+    {history.status === "ready" && history.events.length === 0 && <p>{t("admin.history.empty")}</p>}
+    {history.events.length > 0 && <p data-admin-history-count>{expanded ? t("admin.history.loaded", { count: history.events.length }) : t("admin.history.shown", { count: shown.length, total: history.events.length })}{history.hasMore ? t("admin.history.olderRemaining") : history.status === "ready" ? t("admin.history.complete") : ""}</p>}
+    {history.events.length > 3 && <button type="button" aria-expanded={expanded} aria-controls={listId} onClick={() => setExpanded(value => !value)}>{expanded ? t("admin.history.collapse") : t("admin.history.expand")}</button>}
+    {history.status === "loading" && <p role="status">{t("admin.history.loading")}</p>}
+    {history.status === "error" && <><p role="status">{t("admin.history.readFailed")}</p><button type="button" onClick={loadOlder}>{t("admin.history.retry")}</button></>}
+    {expanded && history.hasMore && history.status !== "error" && <button type="button" disabled={history.status === "loading"} onClick={loadOlder}>{t("admin.history.loadOlder")}</button>}
   </section>;
 }

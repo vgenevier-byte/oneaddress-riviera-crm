@@ -1,6 +1,7 @@
 "use client";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 type QuickReplyTemplate = {
   id: string;
@@ -322,6 +323,10 @@ const categories = ["Toutes", ...Array.from(new Set(templates.map((template) => 
 const channels = ["Tous", "WhatsApp", "Email"] as const;
 
 export default function QuickRepliesView() {
+  const {t, label: uiLabel} = useI18n();
+  const liveT = useRef(t);
+  useLayoutEffect(() => { liveT.current = t; }, [t]);
+
   const [situation, setSituation] = useState("Toutes");
   const [category, setCategory] = useState("Toutes");
   const [channel, setChannel] = useState<(typeof channels)[number]>("Tous");
@@ -358,7 +363,7 @@ export default function QuickRepliesView() {
       setCopiedId(template.id);
       window.setTimeout(() => setCopiedId(null), 1600);
     } catch {
-      window.alert("Copie impossible. Sélectionnez le texte manuellement.");
+      window.alert(liveT.current("modules.quickRepliesView.unableToCopySelectTheTextManually"));
     }
   }
 
@@ -367,44 +372,45 @@ export default function QuickRepliesView() {
       <section className="card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Réponses rapides</p>
-            <h3>Bibliothèque de messages</h3>
+            <p className="eyebrow">{t("modules.quickRepliesView.quickReplies")}</p>
+            <h3>{t("modules.quickRepliesView.messageLibrary")}</h3>
           </div>
           <p className="muted-line">
-            Sélectionnez une situation à gauche, puis copiez le message complet à droite.
+
+            {t("modules.quickRepliesView.selectASituationOnTheLeftThenCopyTheFullMessageOn")}
           </p>
         </div>
 
         <div className="form-grid">
-          <label>Situation
+          <label>{t("modules.quickRepliesView.situation")}
             <select value={situation} onChange={(event) => setSituation(event.target.value)}>
               {situations.map((item) => (
-                <option key={item}>{item}</option>
+                <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
             </select>
           </label>
 
-          <label>Catégorie
+          <label>{t("modules.quickRepliesView.category")}
             <select value={category} onChange={(event) => setCategory(event.target.value)}>
               {categories.map((item) => (
-                <option key={item}>{item}</option>
+                <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
             </select>
           </label>
 
-          <label>Canal
+          <label>{t("modules.quickRepliesView.channel")}
             <select value={channel} onChange={(event) => setChannel(event.target.value as typeof channel)}>
               {channels.map((item) => (
-                <option key={item}>{item}</option>
+                <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
             </select>
           </label>
 
-          <label>Recherche
+          <label>{t("modules.moduleWorkspace.search")}
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Ex : paiement, devis, chauffeur..."
+              placeholder={t("modules.quickRepliesView.egPaymentQuoteChauffeur")}
             />
           </label>
         </div>
@@ -421,13 +427,13 @@ export default function QuickRepliesView() {
         <section className="card" style={{ padding: 22 }}>
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Bibliothèque</p>
-              <h3>{filteredTemplates.length} réponse{filteredTemplates.length > 1 ? "s" : ""}</h3>
+              <p className="eyebrow">{t("modules.quickRepliesView.library")}</p>
+              <h3>{t("modules.quickReplies.count", {count: filteredTemplates.length})}</h3>
             </div>
           </div>
 
           {filteredTemplates.length === 0 ? (
-            <p className="muted-line">Aucune réponse ne correspond aux filtres.</p>
+            <p className="muted-line">{t("modules.quickRepliesView.noRepliesMatchTheFilters")}</p>
           ) : (
             <div style={{ display: "grid", gap: 10 }}>
               {filteredTemplates.map((template) => {
@@ -449,12 +455,12 @@ export default function QuickRepliesView() {
                     }}
                   >
                     <p className="eyebrow" style={{ marginBottom: 6 }}>
-                      {template.situation} · {template.channel}
+                      {uiLabel(template.situation, "modules")} · {template.channel}
                     </p>
                     <strong style={{ display: "block", color: "#071f27", fontSize: 16 }}>
-                      {template.title}
+                      {t("modules.quickReplies.templateTitle." + template.id)}
                     </strong>
-                    <span className="muted-line">{template.category}</span>
+                    <span className="muted-line">{uiLabel(template.category, "modules")}</span>
                   </button>
                 );
               })}
@@ -476,11 +482,11 @@ export default function QuickRepliesView() {
               <div className="section-heading">
                 <div>
                   <p className="eyebrow">
-                    {selectedTemplate.situation} · {selectedTemplate.category} · {selectedTemplate.channel}
+                    {uiLabel(selectedTemplate.situation, "modules")} · {uiLabel(selectedTemplate.category, "modules")} · {selectedTemplate.channel}
                   </p>
-                  <h3>{selectedTemplate.title}</h3>
+                  <h3>{t("modules.quickReplies.templateTitle." + selectedTemplate.id)}</h3>
                 </div>
-                <span className="status-pill">{selectedTemplate.language}</span>
+                <span className="status-pill">{t("modules.quickReplies.language." + selectedTemplate.language)}</span>
               </div>
 
               <div
@@ -500,12 +506,12 @@ export default function QuickRepliesView() {
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 18, flexWrap: "wrap" }}>
                 <button className="primary-button" type="button" onClick={() => copyMessage(selectedTemplate)}>
-                  {copiedId === selectedTemplate.id ? "Copié" : "Copier le message"}
+                  {copiedId === selectedTemplate.id ? t("modules.quickRepliesView.copied") : t("modules.quickRepliesView.copyMessage")}
                 </button>
               </div>
             </>
           ) : (
-            <p className="muted-line">Sélectionnez une réponse.</p>
+            <p className="muted-line">{t("modules.quickRepliesView.selectAReply")}</p>
           )}
         </section>
       </div>

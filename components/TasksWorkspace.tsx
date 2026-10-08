@@ -1,7 +1,9 @@
 "use client";
+import { moduleMessage } from "@/lib/i18n/moduleMessage";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { buildTaskPatch, draftForTask, effectiveTaskLeadId, filterAndSortTasks, formatTaskTimestamp, parisCivilDate, priorityLabels, TASK_NOTE_LIMIT, TaskRequestLedger, taskCapabilities, taskDueLabel, taskDueState, taskManagementLabel, type TaskFilters } from "@/lib/tasks/domain";
+import { buildTaskPatch, draftForTask, effectiveTaskLeadId, filterAndSortTasks, parisCivilDate, priorityLabels, TASK_NOTE_LIMIT, TaskRequestLedger, taskCapabilities, taskDueState, type TaskFilters } from "@/lib/tasks/domain";
 import { taskPriorities, taskStatuses, type Task, type TaskApi, type TaskDraft, type TaskLinkOption, type TaskPermissions, type TaskRecipient, type TaskMutation } from "@/lib/tasks/types";
 import { taskContactLabel, type TaskContactOption } from "@/lib/tasks/contactOptions";
 import TaskContactPicker from "./TaskContactPicker";
@@ -33,11 +35,13 @@ function lostAccess(error: unknown) {
 }
 
 function Dialog({ title, children, onClose, busy = false }: { title: string; children: ReactNode; onClose: () => void; busy?: boolean }) {
+  const {t} = useI18n();
+
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = `task-dialog-${title.replace(/\s/g, "-")}`;
   useEffect(() => { const dialog = ref.current; if (dialog && !dialog.open) dialog.showModal(); }, []);
   return <dialog ref={ref} className="taskws-dialog" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
-    <div className="taskws-dialog-heading"><h2 id={titleId}>{title}</h2><button type="button" onClick={onClose} disabled={busy} aria-label="Fermer">×</button></div>
+    <div className="taskws-dialog-heading"><h2 id={titleId}>{title}</h2><button type="button" onClick={onClose} disabled={busy} aria-label={t("modules.tasksWorkspace.close")}>×</button></div>
     {children}
   </dialog>;
 }
@@ -49,6 +53,15 @@ export default function TasksWorkspace(props: TasksWorkspaceProps) {
 
 /** Account/permission changes remount this entire private state, including drafts. */
 function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty, onDraftConsumed, query, onQueryChange, draft, links, scope }: TasksWorkspaceProps & { scope: string }) {
+  const {t, label: uiLabel, formatDate: uiDate, locale} = useI18n();
+
+  const contactLabel = (contact: TaskContactOption) => [contact.firstName, contact.name, contact.company].some(value => value?.trim()) ? taskContactLabel(contact) : t("modules.contacts.unnamed");
+  const formatTaskTimestamp = (value?: string | null) => value && Number.isFinite(Date.parse(value)) ? uiDate(value, {dateStyle: "short", timeStyle: "short"}) : t("modules.contactDocuments.notProvided");
+  const taskDueLabel = (value: string, reference = today) => {
+    const state = taskDueState(value, reference);
+    return state === "none" ? t("modules.common.noDeadline") : state === "invalid" ? t("modules.common.historicalDeadlineToCheck") : uiLabel(state === "late" ? "En retard" : state === "today" ? "Aujourd’hui" : "À venir", "modules") + " · " + uiDate(value);
+  };
+  const taskManagementLabel = (task: Task) => task.createdBy !== null ? "" : !task.managerId ? t("modules.common.noManagerAssignedPrivateCorrectionRequired") : t("modules.tasks.manager", {name: task.managerLabel || t("modules.common.confirmedIdentity"), inactive: task.managerActive === true ? "" : t("modules.tasks.inactiveManager")});
   const scopeRef = useRef(scope);
   const callbacks = useRef({ onTasksChange, onDirty, onDraftConsumed });
   useLayoutEffect(() => { callbacks.current = { onTasksChange, onDirty, onDraftConsumed }; }, [onTasksChange, onDirty, onDraftConsumed]);
@@ -251,85 +264,85 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
     callbacks.current.onDirty?.(true);
   }
 
-  return <section className="taskws" aria-label="Tâches privées" data-task-workspace>
-    {!permissions.read ? <p role="status">Vous n’avez plus accès à Tâches.</p> : <>
-      <div className="taskws-heading"><div><h2>Tâches</h2><p>{tasks.length} tâche{tasks.length > 1 ? "s" : ""} vous concerne{tasks.length > 1 ? "nt" : ""} · Terminées conservées</p></div><div className="taskws-buttons">
-        <button type="button" onClick={() => void refresh()} disabled={loading}>Actualiser</button>
-        {permissions.export && api.export && <button type="button" onClick={() => void exportTasks()}>Exporter mes tâches</button>}
-        {permissions.contribute && <button type="button" className="taskws-primary" onClick={() => openEditor()}>Ajouter une tâche</button>}
+  return <section className="taskws" aria-label={t("modules.tasksWorkspace.privateTasks")} data-task-workspace>
+    {!permissions.read ? <p role="status">{t("modules.tasksWorkspace.youNoLongerHaveAccessToTasks")}</p> : <>
+      <div className="taskws-heading"><div><h2>{t("modules.tasksWorkspace.tasks")}</h2><p>{t("modules.tasks.count", {count: tasks.length})}</p></div><div className="taskws-buttons">
+        <button type="button" onClick={() => void refresh()} disabled={loading}>{t("modules.tasksWorkspace.refresh")}</button>
+        {permissions.export && api.export && <button type="button" onClick={() => void exportTasks()}>{t("modules.tasksWorkspace.exportMyTasks")}</button>}
+        {permissions.contribute && <button type="button" className="taskws-primary" onClick={() => openEditor()}>{t("modules.tasksWorkspace.addATask")}</button>}
       </div></div>
-      <p className="taskws-help">Actualisation à l’ouverture, au retour dans l’onglet, toutes les 15 secondes quand il est visible et après un enregistrement. Chaque opération vérifie les droits actuels.</p>
-      {message && <p role="status" className="taskws-message">{message}</p>}
-      {loading && <p role="status">Actualisation des tâches…</p>}
+      <p className="taskws-help">{t("modules.tasksWorkspace.tasksRefreshWhenOpenedWhenYouReturnToTheTabEvery15")}</p>
+      {message && <p role="status" className="taskws-message">{moduleMessage(message, t)}</p>}
+      {loading && <p role="status">{t("modules.tasksWorkspace.refreshingTasks")}</p>}
       <div className="taskws-filters">
-        <label>Périmètre<select value={filters.relation} onChange={event => setFilters(previous => ({ ...previous, relation: event.target.value as TaskFilters["relation"] }))}><option value="related">Toutes celles qui me concernent</option><option value="assigned">Mes affectations</option><option value="created">Créées par moi</option></select></label>
-        <label>Statut<select value={filters.status} onChange={event => setFilters(previous => ({ ...previous, status: event.target.value as TaskFilters["status"] }))}><option value="all">Tous les statuts</option>{taskStatuses.map(status => <option key={status} value={status}>{status === "Terminé" ? "Terminées" : status}</option>)}</select></label>
-        <label>Priorité<select value={filters.priority} onChange={event => setFilters(previous => ({ ...previous, priority: event.target.value as TaskFilters["priority"] }))}><option value="all">Toutes les priorités</option>{taskPriorities.map(priority => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}</select></label>
-        <label>Recherche<input type="search" value={query ?? filters.query ?? ""} onChange={event => onQueryChange ? onQueryChange(event.target.value) : setFilters(previous => ({ ...previous, query: event.target.value }))} placeholder="Dans mes tâches visibles" /></label>
+        <label>{t("modules.tasksWorkspace.scope")}<select value={filters.relation} onChange={event => setFilters(previous => ({ ...previous, relation: event.target.value as TaskFilters["relation"] }))}><option value="related">{t("modules.tasksWorkspace.allTasksInvolvingMe")}</option><option value="assigned">{t("modules.tasksWorkspace.assignedToMe")}</option><option value="created">{t("modules.tasksWorkspace.createdByMe")}</option></select></label>
+        <label>{t("modules.tasksWorkspace.status")}<select value={filters.status} onChange={event => setFilters(previous => ({ ...previous, status: event.target.value as TaskFilters["status"] }))}><option value="all">{t("modules.tasksWorkspace.allStatuses")}</option>{taskStatuses.map(status => <option key={status} value={status}>{status === "Terminé" ? t("modules.tasksWorkspace.completed") : uiLabel(status, "modules")}</option>)}</select></label>
+        <label>{t("modules.tasksWorkspace.priority")}<select value={filters.priority} onChange={event => setFilters(previous => ({ ...previous, priority: event.target.value as TaskFilters["priority"] }))}><option value="all">{t("modules.tasksWorkspace.allPriorities")}</option>{taskPriorities.map(priority => <option key={priority} value={priority}>{uiLabel(priorityLabels[priority], "modules")}</option>)}</select></label>
+        <label>{t("modules.moduleWorkspace.search")}<input type="search" value={query ?? filters.query ?? ""} onChange={event => onQueryChange ? onQueryChange(event.target.value) : setFilters(previous => ({ ...previous, query: event.target.value }))} placeholder={t("modules.tasksWorkspace.searchMyVisibleTasks")} /></label>
       </div>
-      <nav aria-label="Sections des tâches" className="taskws-anchors">{taskStatuses.map((status, index) => <a href={`#task-section-${index}`} key={status}>{status === "Terminé" ? "Terminées" : status} ({visibleTasks.filter(task => task.status === status).length})</a>)}</nav>
-      <p className="taskws-help">Tri : retards, échéances proches, priorité puis ordre stable. Les tâches sans échéance restent à part.</p>
+      <nav aria-label={t("modules.tasksWorkspace.taskSections")} className="taskws-anchors">{taskStatuses.map((status, index) => <a href={`#task-section-${index}`} key={status}>{status === "Terminé" ? t("modules.tasksWorkspace.completed") : uiLabel(status, "modules")} ({visibleTasks.filter(task => task.status === status).length})</a>)}</nav>
+      <p className="taskws-help">{t("modules.tasksWorkspace.sortedByOverdueDatesUpcomingDeadlinesPriorityThenAStableOrderTasks")}</p>
       <div className="taskws-board">{taskStatuses.map((status, index) => {
         const column = visibleTasks.filter(task => task.status === status);
         return <section className="taskws-column" id={`task-section-${index}`} key={status} aria-labelledby={`task-section-title-${index}`}>
-          <h3 id={`task-section-title-${index}`}>{status === "Terminé" ? "Terminées" : status} <span>{column.length}</span></h3>
-          {!column.length && <p className="taskws-help">Aucune tâche dans cette section.</p>}
+          <h3 id={`task-section-title-${index}`}>{status === "Terminé" ? t("modules.tasksWorkspace.completed") : uiLabel(status, "modules")} <span>{column.length}</span></h3>
+          {!column.length && <p className="taskws-help">{t("modules.tasksWorkspace.noTasksInThisSection")}</p>}
           {column.map(task => {
             const capability = taskCapabilities(task, userId, permissions), busy = pendingIds.includes(task.id);
             return <article className="taskws-card" key={task.id} data-task-id={task.id} data-notification-target={`task-${task.id}`}>
               <button className="taskws-title" type="button" onClick={() => { setDetailId(task.id); setMessage(""); }}>{task.title}</button>
-              <div className="taskws-meta"><span className={`taskws-priority taskws-priority-${task.priority}`}>{priorityLabels[task.priority]}</span><span className={`taskws-due-${taskDueState(task.dueDate, today)}`}>{taskDueLabel(task.dueDate, today)}</span></div>
-              <p className="taskws-persons">Responsables : {task.assignees.length ? task.assignees.map(person => `${person.label}${person.active ? "" : " (accès inactif)"}`).join(", ") : "Aucun · personnelle au créateur"}</p>
-              <p className="taskws-help">Créée par {task.createdByLabel || "Auteur historique non confirmé"}</p>
+              <div className="taskws-meta"><span className={`taskws-priority taskws-priority-${task.priority}`}>{uiLabel(priorityLabels[task.priority], "modules")}</span><span className={`taskws-due-${taskDueState(task.dueDate, today)}`}>{taskDueLabel(task.dueDate, today)}</span></div>
+              <p className="taskws-persons">{t("modules.tasksWorkspace.assignees")} {task.assignees.length ? task.assignees.map(person => `${person.label}${person.active ? "" : t("modules.tasksWorkspace.inactiveAccess_594462")}`).join(", ") : t("modules.tasksWorkspace.nonePrivateToItsCreator")}</p>
+              <p className="taskws-help">{t("modules.tasksWorkspace.createdBy")} {task.createdByLabel || t("modules.tasksWorkspace.historicalAuthorUnconfirmed")}</p>
               {task.createdBy === null && <p className="taskws-help">{taskManagementLabel(task)}</p>}
               {task.notes && <p className="taskws-note-excerpt">{task.notes.length > 160 ? `${task.notes.slice(0, 160)}…` : task.notes}</p>}
-              {task.status === "Terminé" && <p className="taskws-help">Terminée le {formatTaskTimestamp(task.completedAt)}</p>}
-              <div className="taskws-card-actions"><button type="button" onClick={() => setDetailId(task.id)}>Détail</button>{capability.progress && <button type="button" disabled={busy} onClick={() => openEditor(task)}>Modifier</button>}
-                <label>Avancement<select aria-label={`Statut de ${task.title}`} value={task.status} disabled={!capability.progress || busy} onChange={event => void mutate(requests.current.prepare(task.id, task.revision, { status: event.target.value as Task["status"] }))}>{taskStatuses.map(option => <option key={option}>{option}</option>)}</select></label>
-                {capability.delete && <button type="button" disabled={busy} onClick={() => { if (window.confirm(`Supprimer la tâche « ${task.title} » ?`)) void mutate(requests.current.prepare(task.id, task.revision, {}, true)); }}>Supprimer</button>}
-              </div>{busy && <p role="status">Confirmation serveur en cours…</p>}
+              {task.status === "Terminé" && <p className="taskws-help">{t("modules.tasksWorkspace.completedOn")} {formatTaskTimestamp(task.completedAt)}</p>}
+              <div className="taskws-card-actions"><button type="button" onClick={() => setDetailId(task.id)}>{t("modules.tasksWorkspace.details")}</button>{capability.progress && <button type="button" disabled={busy} onClick={() => openEditor(task)}>{t("modules.tasksWorkspace.edit")}</button>}
+                <label>{t("modules.tasksWorkspace.progress")}<select aria-label={t("modules.tasks.statusOf", {title: task.title})} value={task.status} disabled={!capability.progress || busy} onChange={event => void mutate(requests.current.prepare(task.id, task.revision, { status: event.target.value as Task["status"] }))}>{taskStatuses.map(option => <option key={option} value={option}>{uiLabel(option, "modules")}</option>)}</select></label>
+                {capability.delete && <button type="button" disabled={busy} onClick={() => { if (window.confirm(t("modules.tasks.deleteConfirm", {title: task.title}))) void mutate(requests.current.prepare(task.id, task.revision, {}, true)); }}>{t("modules.tasksWorkspace.delete")}</button>}
+              </div>{busy && <p role="status">{t("modules.tasksWorkspace.awaitingServerConfirmation")}</p>}
             </article>;
           })}
         </section>;
       })}</div>
-      {detail && <Dialog title="Détail de la tâche" onClose={() => setDetailId(null)}>
-        <h3>{detail.title}</h3><div className="taskws-meta"><span>{priorityLabels[detail.priority]}</span><span>{taskDueLabel(detail.dueDate, today)}</span><span>{detail.status}</span></div>
-        <dl><dt>Créée par</dt><dd>{detail.createdByLabel || "Auteur historique non confirmé"}</dd><dt>Créée le</dt><dd>{formatTaskTimestamp(detail.createdAt)}</dd><dt>Responsables</dt><dd>{detail.assignees.length ? detail.assignees.map(person => `${person.label} · ${person.active ? person.access === "read" ? "Lecture" : "Contribution" : "Accès inactif"}`).join(" ; ") : "Aucun · personnelle au créateur"}</dd>{detail.status === "Terminé" && <><dt>Terminée le</dt><dd>{formatTaskTimestamp(detail.completedAt)}</dd></>}</dl>
-        {detail.createdBy === null && <p className="taskws-help">{taskManagementLabel(detail)}. Ce rôle est distinct de l’auteur historique.</p>}
-        {effectiveTaskLeadId(detail) && leadOptions.some(option => option.id === effectiveTaskLeadId(detail)) && <p>Lead lié : {leadOptions.find(option => option.id === effectiveTaskLeadId(detail))?.label}</p>}
-        {detail.contactId && <p>Contact lié : {detailContact ? taskContactLabel(detailContact) : "Rattachement conservé · détail indisponible"}</p>}
-        <h3>Notes</h3><p className="taskws-notes">{detail.notes || "Aucune note."}</p>
-        <div className="taskws-buttons"><button type="button" onClick={() => setDetailId(null)}>Fermer</button>{taskCapabilities(detail, userId, permissions).progress && <button type="button" className="taskws-primary" onClick={() => openEditor(detail)}>Modifier</button>}</div>
+      {detail && <Dialog title={t("modules.tasksWorkspace.taskDetails")} onClose={() => setDetailId(null)}>
+        <h3>{detail.title}</h3><div className="taskws-meta"><span>{uiLabel(priorityLabels[detail.priority], "modules")}</span><span>{taskDueLabel(detail.dueDate, today)}</span><span>{uiLabel(detail.status, "modules")}</span></div>
+        <dl><dt>{t("modules.tasksWorkspace.createdBy")}</dt><dd>{detail.createdByLabel || t("modules.tasksWorkspace.historicalAuthorUnconfirmed")}</dd><dt>{t("modules.tasksWorkspace.createdOn")}</dt><dd>{formatTaskTimestamp(detail.createdAt)}</dd><dt>{t("modules.tasksWorkspace.assignees_a6d3cc")}</dt><dd>{detail.assignees.length ? detail.assignees.map(person => `${person.label} · ${person.active ? person.access === "read" ? t("modules.moduleWorkspace.read") : t("modules.moduleWorkspace.contribute") : t("modules.tasksWorkspace.inactiveAccess")}`).join(" ; ") : t("modules.tasksWorkspace.nonePrivateToItsCreator")}</dd>{detail.status === "Terminé" && <><dt>{t("modules.tasksWorkspace.completedOn")}</dt><dd>{formatTaskTimestamp(detail.completedAt)}</dd></>}</dl>
+        {detail.createdBy === null && <p className="taskws-help">{taskManagementLabel(detail)}{t("modules.tasksWorkspace.thisRoleIsSeparateFromTheHistoricalAuthor")}</p>}
+        {effectiveTaskLeadId(detail) && leadOptions.some(option => option.id === effectiveTaskLeadId(detail)) && <p>{t("modules.tasksWorkspace.linkedEnquiry")} {leadOptions.find(option => option.id === effectiveTaskLeadId(detail))?.label}</p>}
+        {detail.contactId && <p>{t("modules.tasksWorkspace.linkedContact")} {detailContact ? contactLabel(detailContact) : t("modules.tasksWorkspace.linkRetainedDetailsUnavailable")}</p>}
+        <h3>{t("modules.tasksWorkspace.notes")}</h3><p className="taskws-notes">{detail.notes || t("modules.tasksWorkspace.noNotes")}</p>
+        <div className="taskws-buttons"><button type="button" onClick={() => setDetailId(null)}>{t("modules.tasksWorkspace.close")}</button>{taskCapabilities(detail, userId, permissions).progress && <button type="button" className="taskws-primary" onClick={() => openEditor(detail)}>{t("modules.tasksWorkspace.edit")}</button>}</div>
       </Dialog>}
-      {currentEditor && <Dialog title={currentEditor.base ? "Modifier la tâche" : "Ajouter une tâche"} onClose={() => { setEditor(null); callbacks.current.onDirty?.(false); }} busy={editorBusy}>
-        {message && <p role="alert" className="taskws-message">{message}</p>}
-        {currentEditor.base ? <p className="taskws-help">Créée par {currentEditor.base.createdByLabel || "Auteur historique non confirmé"} · {formatTaskTimestamp(currentEditor.base.createdAt)}{currentEditor.base.completedAt ? ` · Terminée le ${formatTaskTimestamp(currentEditor.base.completedAt)}` : ""}</p> : <p className="taskws-help">Votre identité et la date de création seront enregistrées par le serveur.</p>}
-        {currentEditor.base?.createdBy === null && <p className="taskws-help">{taskManagementLabel(latest ?? currentEditor.base)}. Le gestionnaire peut gérer les champs avec Contribution ; l’auteur ancien reste non confirmé.</p>}
-        {!editorCapabilities.fields && <p className="taskws-help">En tant que responsable contributeur, vous pouvez modifier les notes et l’avancement.</p>}
-        {conflict && latest && <section className="taskws-conflict"><h3>Une autre modification a été enregistrée</h3><p>Votre saisie reste ci-dessous. La version serveur actuelle est :</p><dl><dt>Titre</dt><dd>{latest.title}</dd><dt>Notes</dt><dd className="taskws-notes">{latest.notes || "Aucune note"}</dd><dt>Échéance</dt><dd>{taskDueLabel(latest.dueDate, today)}</dd><dt>Priorité et statut</dt><dd>{priorityLabels[latest.priority]} · {latest.status}</dd><dt>Responsables</dt><dd>{latest.assignees.map(person => person.label).join(", ") || "Aucun"}</dd></dl><button type="button" onClick={() => setEditor(previous => previous?.id === latest.id ? { ...previous, base: latest, revision: latest.revision } : previous)}>Reprendre sur cette révision avec ma saisie</button><p className="taskws-help">Cette action permet un nouvel enregistrement explicite après comparaison.</p></section>}
+      {currentEditor && <Dialog title={currentEditor.base ? t("modules.tasksWorkspace.editTask") : t("modules.tasksWorkspace.addATask")} onClose={() => { setEditor(null); callbacks.current.onDirty?.(false); }} busy={editorBusy}>
+        {message && <p role="alert" className="taskws-message">{moduleMessage(message, t)}</p>}
+        {currentEditor.base ? <p className="taskws-help">{t("modules.tasksWorkspace.createdBy")} {currentEditor.base.createdByLabel || t("modules.tasksWorkspace.historicalAuthorUnconfirmed")} · {formatTaskTimestamp(currentEditor.base.createdAt)}{currentEditor.base.completedAt ? t("modules.tasks.completedDate", {date: formatTaskTimestamp(currentEditor.base.completedAt)}) : ""}</p> : <p className="taskws-help">{t("modules.tasksWorkspace.theServerWillRecordYourIdentityAndTheCreationDate")}</p>}
+        {currentEditor.base?.createdBy === null && <p className="taskws-help">{taskManagementLabel(latest ?? currentEditor.base)}{t("modules.tasksWorkspace.theManagerCanEditFieldsWithContributeAccessTheHistoricalAuthorRemains")}</p>}
+        {!editorCapabilities.fields && <p className="taskws-help">{t("modules.tasksWorkspace.asAnAssigneeWithContributeAccessYouCanEditNotesAndProgress")}</p>}
+        {conflict && latest && <section className="taskws-conflict"><h3>{t("modules.tasksWorkspace.anotherChangeHasBeenSaved")}</h3><p>{t("modules.tasksWorkspace.yourInputIsRetainedBelowTheCurrentServerVersionIs")}</p><dl><dt>{t("modules.tasksWorkspace.title")}</dt><dd>{latest.title}</dd><dt>{t("modules.tasksWorkspace.notes")}</dt><dd className="taskws-notes">{latest.notes || t("modules.tasksWorkspace.noNotes_41980d")}</dd><dt>{t("modules.tasksWorkspace.deadline")}</dt><dd>{taskDueLabel(latest.dueDate, today)}</dd><dt>{t("modules.tasksWorkspace.priorityAndStatus")}</dt><dd>{uiLabel(priorityLabels[latest.priority], "modules")} · {uiLabel(latest.status, "modules")}</dd><dt>{t("modules.tasksWorkspace.assignees_a6d3cc")}</dt><dd>{latest.assignees.map(person => person.label).join(", ") || t("modules.tasksWorkspace.none")}</dd></dl><button type="button" onClick={() => setEditor(previous => previous?.id === latest.id ? { ...previous, base: latest, revision: latest.revision } : previous)}>{t("modules.tasksWorkspace.continueFromThisRevisionWithMyInput")}</button><p className="taskws-help">{t("modules.tasksWorkspace.thisLetsYouSaveAgainExplicitlyAfterComparingTheVersions")}</p></section>}
         <form onSubmit={submit} className="taskws-form">
-          <label className="taskws-full">Titre<input name="title" maxLength={500} required value={currentEditor.draft.title} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("title", event.target.value)} /></label>
-          <label>Date limite<input name="dueDate" type="date" value={currentEditor.draft.dueDate} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("dueDate", event.target.value)} /></label>
-          <label>Priorité<select name="priority" value={currentEditor.draft.priority} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("priority", event.target.value as TaskDraft["priority"])}>{taskPriorities.map(priority => <option key={priority} value={priority}>{priorityLabels[priority]}</option>)}</select></label>
-          <label className="taskws-full">Avancement<select name="status" value={currentEditor.draft.status} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("status", event.target.value as TaskDraft["status"])}>{taskStatuses.map(status => <option key={status}>{status}</option>)}</select></label>
-          <label className="taskws-full">Notes<textarea name="notes" rows={6} maxLength={TASK_NOTE_LIMIT} value={currentEditor.draft.notes} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("notes", event.target.value)} /><small>{currentEditor.draft.notes.length.toLocaleString("fr-FR")} / {TASK_NOTE_LIMIT.toLocaleString("fr-FR")} caractères · Texte commun aux participants autorisés</small></label>
-          <fieldset className="taskws-full" disabled={!editorCapabilities.fields || editorBusy} data-task-directory={directory.status}><legend>Responsables</legend><p className="taskws-help">Choisissez directement les comptes actifs de l’organisation disposant de Tâches. Un lecteur consulte ; un contributeur peut avancer la tâche.</p>
-            {directory.status === "loading" && <p role="status">Chargement des personnes éligibles… Votre saisie et vos sélections sont conservées.</p>}
-            {directory.status === "error" && <p role="alert">Annuaire indisponible. Votre saisie et vos sélections sont conservées. Réessayez pour actualiser les personnes éligibles.</p>}
-            <p className="taskws-help" aria-live="polite">{selectedRecipients.length} responsable{selectedRecipients.length > 1 ? "s" : ""} sélectionné{selectedRecipients.length > 1 ? "s" : ""}.</p>
-            <select name="recipientToAdd" aria-label="Sélectionner un responsable" className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">Sélectionner un responsable</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? " (moi)" : ""} · {person.access === "read" ? "Lecture" : "Contribution"}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
-            {selectedRecipients.length > 0 && <ul className="taskws-recipients" aria-label="Responsables sélectionnés">{selectedRecipients.map(id => {
-              const person = recipientDetails.get(id), label = person?.label ?? "Responsable indisponible";
+          <label className="taskws-full">{t("modules.tasksWorkspace.title")}<input name="title" maxLength={500} required value={currentEditor.draft.title} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("title", event.target.value)} /></label>
+          <label>{t("modules.tasksWorkspace.dueDate")}<input name="dueDate" type="date" value={currentEditor.draft.dueDate} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("dueDate", event.target.value)} /></label>
+          <label>{t("modules.tasksWorkspace.priority")}<select name="priority" value={currentEditor.draft.priority} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("priority", event.target.value as TaskDraft["priority"])}>{taskPriorities.map(priority => <option key={priority} value={priority}>{uiLabel(priorityLabels[priority], "modules")}</option>)}</select></label>
+          <label className="taskws-full">{t("modules.tasksWorkspace.progress")}<select name="status" value={currentEditor.draft.status} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("status", event.target.value as TaskDraft["status"])}>{taskStatuses.map(status => <option key={status} value={status}>{uiLabel(status, "modules")}</option>)}</select></label>
+          <label className="taskws-full">{t("modules.tasksWorkspace.notes")}<textarea name="notes" rows={6} maxLength={TASK_NOTE_LIMIT} value={currentEditor.draft.notes} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft("notes", event.target.value)} /><small>{currentEditor.draft.notes.length.toLocaleString(locale)} / {TASK_NOTE_LIMIT.toLocaleString(locale)}  {t("modules.tasksWorkspace.charactersSharedTextForAuthorisedParticipants")}</small></label>
+          <fieldset className="taskws-full" disabled={!editorCapabilities.fields || editorBusy} data-task-directory={directory.status}><legend>{t("modules.tasksWorkspace.assignees_a6d3cc")}</legend><p className="taskws-help">{t("modules.tasksWorkspace.selectActiveOrganisationAccountsWithAccessToTasksReadersCanViewTasks")}</p>
+            {directory.status === "loading" && <p role="status">{t("modules.tasksWorkspace.loadingEligiblePeopleYourInputAndSelectionsAreRetained")}</p>}
+            {directory.status === "error" && <p role="alert">{t("modules.tasksWorkspace.directoryUnavailableYourInputAndSelectionsAreRetainedRetryToRefreshEligible")}</p>}
+            <p className="taskws-help" aria-live="polite">{t("modules.tasks.assigneeCount", {count: selectedRecipients.length})}</p>
+            <select name="recipientToAdd" aria-label={t("modules.tasksWorkspace.selectAnAssignee")} className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">{t("modules.tasksWorkspace.selectAnAssignee")}</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? t("modules.tasksWorkspace.me") : ""} · {person.access === "read" ? t("modules.moduleWorkspace.read") : t("modules.moduleWorkspace.contribute")}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
+            {selectedRecipients.length > 0 && <ul className="taskws-recipients" aria-label={t("modules.tasksWorkspace.selectedAssignees")}>{selectedRecipients.map(id => {
+              const person = recipientDetails.get(id), label = person?.label ?? t("modules.tasksWorkspace.assigneeUnavailable");
               const retained = !recipients.some(candidate => candidate.userId === id), required = id === requiredManagerId;
-              return <li className="taskws-recipient" key={id} data-task-recipient-id={id} data-task-recipient-kind={retained ? "retained" : "eligible"}><span>{label}{id === userId ? " (moi)" : ""}<small>{retained ? required ? "Gestionnaire conservé · correction de gestion privée requise" : "Affectation conservée · accès inactif ou indisponible. Retirez-la explicitement si nécessaire." : `${person?.access === "read" ? "Lecture" : "Contribution"}${required ? " · Gestionnaire, participant conservé" : ""}`}{person?.email ? ` · ${person.email}` : ""}{person?.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</small></span><button type="button" aria-label={`Retirer ${label}`} disabled={required} onClick={() => removeRecipient(id)}>×</button></li>;
+              return <li className="taskws-recipient" key={id} data-task-recipient-id={id} data-task-recipient-kind={retained ? "retained" : "eligible"}><span>{label}{id === userId ? t("modules.tasksWorkspace.me") : ""}<small>{retained ? required ? t("modules.tasksWorkspace.managerRetainedPrivateManagementCorrectionRequired") : t("modules.tasksWorkspace.assignmentRetainedAccessInactiveOrUnavailableRemoveItExplicitlyIfNeeded") : `${person?.access === "read" ? t("modules.moduleWorkspace.read") : t("modules.moduleWorkspace.contribute")}${required ? t("modules.tasksWorkspace.managerRetainedParticipant") : ""}`}{person?.email ? ` · ${person.email}` : ""}{person?.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</small></span><button type="button" aria-label={t("modules.common.removePerson", {name: label})} disabled={required} onClick={() => removeRecipient(id)}>×</button></li>;
             })}</ul>}
-            {directory.status === "ready" && !recipients.length && <p role="status" className="taskws-help">Aucun compte éligible. Vous pouvez conserver une tâche personnelle.</p>}
-            {!selectedRecipients.length && <p className="taskws-help">Aucun responsable sélectionné : tâche personnelle, visible uniquement par son créateur.</p>}
-            <button type="button" disabled={directory.status === "loading"} onClick={() => void loadDirectory()}>{directory.status === "error" ? "Réessayer de charger les responsables" : "Actualiser les personnes éligibles"}</button>
+            {directory.status === "ready" && !recipients.length && <p role="status" className="taskws-help">{t("modules.tasksWorkspace.noEligibleAccountsYouCanKeepAPersonalTask")}</p>}
+            {!selectedRecipients.length && <p className="taskws-help">{t("modules.tasksWorkspace.noAssigneeSelectedAPersonalTaskVisibleOnlyToItsCreator")}</p>}
+            <button type="button" disabled={directory.status === "loading"} onClick={() => void loadDirectory()}>{directory.status === "error" ? t("modules.tasksWorkspace.retryLoadingAssignees") : t("modules.tasksWorkspace.refreshEligiblePeople")}</button>
           </fieldset>
-          {(leadOptions.length > 0 || currentEditor.draft.leadId) && <label className="taskws-full">Lead lié<select name="leadId" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("leadId", event.target.value)}><option value="">Aucun lead lié</option>{currentEditor.draft.leadId && !leadOptions.some(option => option.id === currentEditor.draft.leadId) && <option value={currentEditor.draft.leadId}>Rattachement conservé · détail indisponible</option>}{leadOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+          {(leadOptions.length > 0 || currentEditor.draft.leadId) && <label className="taskws-full">{t("modules.tasksWorkspace.linkedEnquiry_98abe0")}<select name="leadId" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("leadId", event.target.value)}><option value="">{t("modules.tasksWorkspace.noLinkedEnquiry")}</option>{currentEditor.draft.leadId && !leadOptions.some(option => option.id === currentEditor.draft.leadId) && <option value={currentEditor.draft.leadId}>{t("modules.tasksWorkspace.linkRetainedDetailsUnavailable")}</option>}{leadOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
           <TaskContactPicker key={currentEditor.id} options={contactOptions} contactId={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={id => changeDraft("contactId", id)} />
-          <div className="taskws-full taskws-buttons"><button type="button" disabled={editorBusy} onClick={() => { setEditor(null); callbacks.current.onDirty?.(false); }}>Annuler</button><button className="taskws-primary" type="submit" disabled={editorBusy || conflict || !editorCapabilities.progress}>{editorBusy ? "Confirmation en cours…" : currentEditor.base ? "Enregistrer" : "Créer la tâche"}</button></div>
+          <div className="taskws-full taskws-buttons"><button type="button" disabled={editorBusy} onClick={() => { setEditor(null); callbacks.current.onDirty?.(false); }}>{t("modules.tasksWorkspace.cancel")}</button><button className="taskws-primary" type="submit" disabled={editorBusy || conflict || !editorCapabilities.progress}>{editorBusy ? t("modules.tasksWorkspace.awaitingConfirmation") : currentEditor.base ? t("modules.tasksWorkspace.save") : t("modules.tasksWorkspace.createTask")}</button></div>
         </form>
       </Dialog>}
     </>}

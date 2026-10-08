@@ -1,7 +1,9 @@
 "use client";
+import { moduleMessage } from "@/lib/i18n/moduleMessage";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { BusinessForm, BusinessLabel, BusinessButton, useBusinessPermissions } from "./BusinessPermissions";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import SearchableBusinessContactPicker from "./SearchableBusinessContactPicker";
 import type {
@@ -17,7 +19,6 @@ import {
   isEligibleVendorContact
 } from "@/lib/vendorContacts";
 import {
-  formatEuroAmount,
   formatEuroInput,
   parseEuroAmount,
   sumEuroAmounts
@@ -35,18 +36,6 @@ function makeId(prefix: string) {
   }
 
   return `${prefix}-${Date.now()}`;
-}
-
-function formatDate(value?: string) {
-  if (!value) return "À compléter";
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  }).format(date);
 }
 
 function sanitizeFileName(fileName: string) {
@@ -87,6 +76,10 @@ export default function VendorQuotesView({
   onReject,
   onOpenInvoice
 }: Props) {
+  const {t, label: uiLabel, formatDate: uiDate, formatMoney} = useI18n();
+  const liveT = useRef(t);
+  useLayoutEffect(() => { liveT.current = t; }, [t]);
+
   const business=useBusinessPermissions();
   const [statusFilter, setStatusFilter] = useState<VendorQuoteStatus | "Tous">("Tous");
   const [editingQuote, setEditingQuote] = useState<VendorQuote | null>(null);
@@ -166,7 +159,7 @@ export default function VendorQuotesView({
         .download(quote.quoteDocumentStoragePath);
 
       if (error || !data) {
-        window.alert(`Téléchargement impossible : ${error?.message || "fichier introuvable"}`);
+        window.alert(liveT.current("modules.vendors.downloadFailed"));
         return;
       }
 
@@ -184,7 +177,7 @@ export default function VendorQuotesView({
       return;
     }
 
-    window.alert("Aucun devis prestataire n’est importé.");
+    window.alert(liveT.current("modules.vendorQuotesView.noSupplierQuoteHasBeenUploaded"));
   }
 
   async function previewQuoteDocument(quote: VendorQuote) {
@@ -195,7 +188,7 @@ export default function VendorQuotesView({
         .createSignedUrl(quote.quoteDocumentStoragePath, 120);
 
       if (error || !data?.signedUrl) {
-        window.alert(`Ouverture impossible : ${error?.message || "fichier introuvable"}`);
+        window.alert(liveT.current("modules.vendors.openFailed"));
         return;
       }
 
@@ -208,7 +201,7 @@ export default function VendorQuotesView({
       return;
     }
 
-    window.alert("Aucun devis prestataire n’est importé.");
+    window.alert(liveT.current("modules.vendorQuotesView.noSupplierQuoteHasBeenUploaded"));
   }
 
   async function submitQuote(event: React.FormEvent<HTMLFormElement>) {
@@ -224,12 +217,12 @@ export default function VendorQuotesView({
     const quoteFile = form.get("quoteFile");
 
     if (!contact && !preserveLegacyContact && (!business || business.read("contacts") || !editingQuote)) {
-      window.alert("Choisissez le prestataire concerné.");
+      window.alert(liveT.current("modules.vendorQuotesView.chooseTheRelevantSupplier"));
       return;
     }
 
     if (amount <= 0) {
-      window.alert("Renseignez le montant du devis.");
+      window.alert(liveT.current("modules.vendorQuotesView.enterTheQuoteAmount"));
       return;
     }
 
@@ -241,7 +234,7 @@ export default function VendorQuotesView({
         uploadedDocument = await uploadQuoteDocument(quoteFile, quoteId);
         if(business)await business.check();
       } catch (error) {
-        window.alert(`Devis non importé : ${error instanceof Error ? error.message : "erreur inconnue"}`);
+        window.alert(moduleMessage(error instanceof Error ? error.message : "", liveT.current));
         return;
       } finally {
         setUploading(false);
@@ -297,14 +290,14 @@ export default function VendorQuotesView({
 
   function validateQuote(quote: VendorQuote) {
     if (!quote.quoteDocumentStoragePath && !quote.quoteDocumentUrl) {
-      window.alert("Importez d’abord le devis réel du prestataire avant de le valider.");
+      window.alert(liveT.current("modules.vendorQuotesView.uploadTheSuppliersActualQuoteBeforeApprovingIt"));
       setEditingQuote(quote);
       return;
     }
 
     if (
       window.confirm(
-        `Valider le devis ${quote.quoteReference || quote.title} pour ${formatEuroAmount(quote.amount)} ?\n\nLa facture liée sera réutilisée ; une facture en attente sera créée uniquement si nécessaire.`
+        t("modules.vendors.approveQuote", {reference: quote.quoteReference || quote.title, amount: formatMoney(quote.amount)})
       )
     ) {
       onValidate(quote.id);
@@ -314,7 +307,7 @@ export default function VendorQuotesView({
   function rejectQuote(quote: VendorQuote) {
     if (
       window.confirm(
-        `Refuser le devis ${quote.quoteReference || quote.title} ?\n\nLa facture automatique encore en attente sera annulée si elle existe.`
+        t("modules.vendors.rejectQuote", {reference: quote.quoteReference || quote.title})
       )
     ) {
       onReject(quote.id);
@@ -332,12 +325,12 @@ export default function VendorQuotesView({
       <section className="card vendor-quotes-list-card">
         <div className="section-heading">
           <div>
-            <p className="eyebrow">Devis prestataires</p>
-            <h3>{visibleQuotes.length} devis</h3>
+            <p className="eyebrow">{t("modules.vendorQuotesView.supplierQuotes")}</p>
+            <h3>{t("modules.vendors.quoteCount", {count: visibleQuotes.length})}</h3>
           </div>
           <div>
-            <p className="eyebrow">À valider</p>
-            <h3>{formatEuroAmount(pendingAmount)}</h3>
+            <p className="eyebrow">{t("modules.vendorQuotesView.awaitingApproval")}</p>
+            <h3>{formatMoney(pendingAmount)}</h3>
           </div>
         </div>
 
@@ -349,13 +342,13 @@ export default function VendorQuotesView({
               className={statusFilter === status ? "primary-button" : "secondary-button"}
               onClick={() => setStatusFilter(status)}
             >
-              {status}
+              {uiLabel(status, "modules")}
             </BusinessButton>
           ))}
         </div>
 
         {visibleQuotes.length === 0 ? (
-          <p className="muted-line">Aucun devis prestataire pour ce filtre.</p>
+          <p className="muted-line">{t("modules.vendorQuotesView.noSupplierQuotesMatchThisFilter")}</p>
         ) : (
           <div className="list-stack oar-contact-list-stack">
             {visibleQuotes.map((quote) => {
@@ -364,7 +357,7 @@ export default function VendorQuotesView({
               const linkedContact = contacts.find((contact) => contact.id === quote.contactId);
               const businessName = linkedContact
                 ? getVendorBusinessName(linkedContact)
-                : quote.contactName || "Prestataire non défini";
+                : quote.contactName || t("modules.vendorQuotesView.supplierNotSpecified");
               const contactPersonName = linkedContact
                 ? getVendorContactPersonName(linkedContact)
                 : quote.contactPersonName || "";
@@ -381,29 +374,30 @@ export default function VendorQuotesView({
                 >
                   <div>
                     <p className="eyebrow">
-                      {profession} · {quote.quoteReference || "Référence à compléter"}
+                      {profession} · {quote.quoteReference || t("modules.vendorQuotesView.referenceRequired")}
                     </p>
                     <h3>{businessName}</h3>
                     {contactPersonName && contactPersonName !== businessName ? (
-                      <p className="muted-line">Référent : {contactPersonName}</p>
+                      <p className="muted-line">{t("modules.searchableBusinessContactPicker.contactPerson")} {contactPersonName}</p>
                     ) : null}
                     <p>{quote.title}</p>
                     <p className="muted-line">
-                      Devis : {formatDate(quote.quoteDate)} · Validité : {formatDate(quote.validUntil)}
+
+                      {t("modules.vendorQuotesView.quote")} {quote.quoteDate ? uiDate(quote.quoteDate) : t("modules.vendorQuotesView.required")}  {t("modules.vendorQuotesView.validUntil")} {quote.validUntil ? uiDate(quote.validUntil) : t("modules.vendorQuotesView.required")}
                     </p>
 
                     <div className="stats-grid vendor-invoice-stats" style={{ marginTop: 16 }}>
                       <div className="mini-stat">
-                        <span>Montant</span>
-                        <strong>{formatEuroAmount(quote.amount)}</strong>
+                        <span>{t("modules.vendorQuotesView.amount")}</span>
+                        <strong>{formatMoney(quote.amount)}</strong>
                       </div>
                       <div className="mini-stat">
-                        <span>Décision</span>
-                        <strong>{quote.status}</strong>
+                        <span>{t("modules.vendorQuotesView.decision")}</span>
+                        <strong>{uiLabel(quote.status, "modules")}</strong>
                       </div>
                       <div className="mini-stat">
-                        <span>Facture liée</span>
-                        <strong>{linkedInvoice ? linkedInvoice.status : "Non créée"}</strong>
+                        <span>{t("modules.vendorQuotesView.linkedInvoice")}</span>
+                        <strong>{linkedInvoice ? uiLabel(linkedInvoice.status) : t("modules.vendorQuotesView.notCreated")}</strong>
                       </div>
                     </div>
 
@@ -411,39 +405,45 @@ export default function VendorQuotesView({
                   </div>
 
                   <div className="item-actions contact-row-actions oar-contact-actions">
-                    <span className={`status-pill ${statusTone(quote.status)}`}>{quote.status}</span>
+                    <span className={`status-pill ${statusTone(quote.status)}`}>{uiLabel(quote.status, "modules")}</span>
 
                     {(quote.quoteDocumentStoragePath || quote.quoteDocumentUrl) && (
                       <>
                         <BusinessButton className="secondary-button" type="button" permission="export" onClick={() => void previewQuoteDocument(quote)}>
-                          Voir devis
+
+                          {t("modules.vendorQuotesView.viewQuote")}
                         </BusinessButton>
                         <BusinessButton className="secondary-button" type="button" permission="export" onClick={() => void downloadQuoteDocument(quote)}>
-                          Télécharger devis
+
+                          {t("modules.vendorQuotesView.downloadQuote")}
                         </BusinessButton>
                       </>
                     )}
 
                     {quote.status !== "Validé" && (
                       <BusinessButton className="primary-button" type="button" permission="write" disabled={Boolean(business&&!business.canWrite("vendorInvoices"))} onClick={() => validateQuote(quote)}>
-                        Valider
+
+                        {t("modules.vendorQuotesView.approve")}
                       </BusinessButton>
                     )}
 
                     {quote.status !== "Refusé" && (
                       <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => rejectQuote(quote)}>
-                        Refuser
+
+                        {t("modules.vendorQuotesView.reject")}
                       </BusinessButton>
                     )}
 
                     {linkedInvoice && (
                       <BusinessButton className="secondary-button" type="button" onClick={() => onOpenInvoice(linkedInvoice.id)}>
-                        Ouvrir facture
+
+                        {t("modules.vendorQuotesView.openInvoice")}
                       </BusinessButton>
                     )}
 
                     <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => setEditingQuote(quote)}>
-                      Modifier
+
+                      {t("modules.tasksWorkspace.edit")}
                     </BusinessButton>
 
                     <BusinessButton
@@ -452,13 +452,14 @@ export default function VendorQuotesView({
                       onClick={() => {
                         const plan = getVendorQuoteDeletionPlan({ vendorQuotes: quotes, vendorInvoices: invoices }, quote.id);
                         if (plan.invoices.length || plan.missingLink) setDeletingQuoteId(quote.id);
-                        else if (window.confirm("Supprimer ce devis prestataire ?")) {
+                        else if (window.confirm(t("modules.vendorQuotesView.deleteThisSupplierQuote"))) {
                           onDelete(quote.id);
                           if (editingQuote?.id === quote.id) setEditingQuote(null);
                         }
                       }}
                     >
-                      Supprimer
+
+                      {t("modules.tasksWorkspace.delete")}
                     </BusinessButton>
                   </div>
                 </article>
@@ -469,10 +470,11 @@ export default function VendorQuotesView({
       </section>
 
       <section className="card form-card vendor-quotes-form-card">
-        <p className="eyebrow">{editingQuote ? "Modification" : "Nouveau"}</p>
-        <h3>{editingQuote ? "Modifier le devis" : "Ajouter un devis prestataire"}</h3>
+        <p className="eyebrow">{editingQuote ? t("modules.vendorQuotesView.editing") : t("modules.vendorQuotesView.new")}</p>
+        <h3>{editingQuote ? t("modules.vendorQuotesView.editQuote") : t("modules.vendorQuotesView.addSupplierQuote")}</h3>
         <p className="muted-line">
-          Le devis doit être validé avant qu’une facture en attente soit créée.
+
+          {t("modules.vendorQuotesView.theQuoteMustBeApprovedBeforeAPendingInvoiceIsCreated")}
         </p>
 
         <BusinessForm key={editingQuote?.id || "new-vendor-quote"} className="form-grid" onSubmit={submitQuote}>
@@ -486,53 +488,54 @@ export default function VendorQuotesView({
             required
           />
 
-          <BusinessLabel>Objet du devis
-            <input name="title" defaultValue={editingQuote?.title || ""} placeholder="Ex : Entretien jardin juillet" required />
+          <BusinessLabel>{t("modules.vendorQuotesView.quoteSubject")}
+            <input name="title" defaultValue={editingQuote?.title || ""} placeholder={t("modules.vendorQuotesView.egJulyGardenMaintenance")} required />
           </BusinessLabel>
 
-          <BusinessLabel>Référence devis
-            <input name="quoteReference" defaultValue={editingQuote?.quoteReference || ""} placeholder="Créée automatiquement si vide" />
+          <BusinessLabel>{t("modules.vendorQuotesView.quoteReference")}
+            <input name="quoteReference" defaultValue={editingQuote?.quoteReference || ""} placeholder={t("modules.vendorQuotesView.createdAutomaticallyIfBlank")} />
           </BusinessLabel>
 
-          <BusinessLabel>Date du devis
+          <BusinessLabel>{t("modules.vendorQuotesView.quoteDate")}
             <input name="quoteDate" type="date" defaultValue={editingQuote?.quoteDate || new Date().toISOString().slice(0, 10)} />
           </BusinessLabel>
 
-          <BusinessLabel>Valable jusqu’au
+          <BusinessLabel>{t("modules.vendorQuotesView.validUntil_c0bec1")}
             <input name="validUntil" type="date" defaultValue={editingQuote?.validUntil || ""} />
           </BusinessLabel>
 
-          <BusinessLabel>Montant du devis
+          <BusinessLabel>{t("modules.vendorQuotesView.quoteAmount")}
             <input
               name="amount"
               type="text"
               inputMode="decimal"
               defaultValue={editingQuote ? formatEuroInput(editingQuote.amount) : ""}
-              placeholder="Ex : 1 023,70"
+              placeholder={t("modules.vendors.amountExample")}
               required
             />
           </BusinessLabel>
 
-          <BusinessLabel className="vendor-invoice-file-field">Importer le devis
+          <BusinessLabel className="vendor-invoice-file-field">{t("modules.vendorQuotesView.uploadQuote")}
             <input name="quoteFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx" />
             <span className="field-help">
               {editingQuote?.quoteDocumentName
-                ? `Fichier actuel : ${editingQuote.quoteDocumentName}`
-                : "Le document sera obligatoire au moment de la validation"}
+                ? t("modules.vendors.currentFile", {name: editingQuote.quoteDocumentName || ""})
+                : t("modules.vendorQuotesView.theDocumentWillBeRequiredForApproval")}
             </span>
           </BusinessLabel>
 
-          <BusinessLabel className="planning-entry-notes">Notes
-            <textarea name="notes" defaultValue={editingQuote?.notes || ""} placeholder="Conditions, acompte, réserve, détail technique..." />
+          <BusinessLabel className="planning-entry-notes">{t("modules.tasksWorkspace.notes")}
+            <textarea name="notes" defaultValue={editingQuote?.notes || ""} placeholder={t("modules.vendorQuotesView.termsDepositConditionsTechnicalDetails")} />
           </BusinessLabel>
 
           <div className="mobile-form-actions">
             <BusinessButton className="primary-button planning-entry-submit" type="submit" disabled={uploading}>
-              {uploading ? "Import en cours..." : editingQuote ? "Enregistrer" : "Ajouter le devis"}
+              {uploading ? t("modules.vendorQuotesView.uploading") : editingQuote ? t("modules.tasksWorkspace.save") : t("modules.vendorQuotesView.addQuote")}
             </BusinessButton>
             {editingQuote && (
               <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => setEditingQuote(null)}>
-                Annuler
+
+                {t("modules.tasksWorkspace.cancel")}
               </BusinessButton>
             )}
           </div>

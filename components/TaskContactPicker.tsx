@@ -1,4 +1,5 @@
 "use client";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { matchesTaskContact, taskContactLabel, type TaskContactOption } from "@/lib/tasks/contactOptions";
@@ -17,6 +18,9 @@ function contactInformation(contact: TaskContactOption) {
 
 /** The text is a local search only. A link changes only after an explicit choice or removal. */
 export default function TaskContactPicker({ options, contactId, onChange, disabled = false }: Props) {
+  const {t} = useI18n();
+
+  const contactLabel = (contact: TaskContactOption) => [contact.firstName, contact.name, contact.company].some(value => value?.trim()) ? taskContactLabel(contact) : t("modules.contacts.unnamed");
   const inputId = useId();
   const listId = `${inputId}-results`;
   const [query, setQuery] = useState("");
@@ -66,33 +70,33 @@ export default function TaskContactPicker({ options, contactId, onChange, disabl
       event.preventDefault(); event.stopPropagation(); setOpen(false); setActiveId("");
     }
   }}>
-    <label htmlFor={inputId}>Contact lié — facultatif</label>
+    <label htmlFor={inputId}>{t("modules.taskContactPicker.linkedContactOptional")}</label>
     {contactId && <div className="task-contact-selected">
       <div className="task-contact-identity">
-        <strong>{selected ? taskContactLabel(selected) : "Rattachement conservé · détail indisponible"}</strong>
+        <strong>{selected ? contactLabel(selected) : t("modules.tasksWorkspace.linkRetainedDetailsUnavailable")}</strong>
         {selected && contactInformation(selected) && <small>{contactInformation(selected)}</small>}
       </div>
       <button type="button" disabled={disabled} onClick={() => {
         if (disabled) return;
         onChange(""); setQuery(""); setOpen(false); setActiveId("");
-      }}>Retirer le contact lié</button>
+      }}>{t("modules.taskContactPicker.removeLinkedContact")}</button>
     </div>}
     <input id={inputId} type="search" role="combobox" aria-autocomplete="list" aria-expanded={listVisible}
       aria-controls={listId} aria-activedescendant={listVisible && activeIndex >= 0 ? `${listId}-option-${activeIndex}` : undefined}
-      autoComplete="off" placeholder="Rechercher par prénom, nom ou entreprise…" value={query} disabled={disabled}
+      autoComplete="off" placeholder={t("modules.taskContactPicker.searchByFirstNameSurnameOrCompany")} value={query} disabled={disabled}
       onFocus={() => { if (!disabled && query.trim()) setOpen(true); }}
       onChange={event => { if (!disabled) { setQuery(event.target.value); setOpen(Boolean(event.target.value.trim())); setActiveId(""); } }}
       onKeyDown={handleKeyDown} />
     {listVisible && <div className="task-contact-results">
-      <div id={listId} role="listbox" aria-label="Contacts correspondants">
+      <div id={listId} role="listbox" aria-label={t("modules.taskContactPicker.matchingContacts")}>
         {matches.map((contact, index) => <button key={contact.id} id={`${listId}-option-${index}`} type="button" role="option"
           aria-selected={index === activeIndex} tabIndex={-1} disabled={disabled}
           onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActiveId(contact.id)} onClick={() => choose(contact.id)}>
-          <strong>{taskContactLabel(contact)}</strong>
+          <strong>{contactLabel(contact)}</strong>
           {contactInformation(contact) && <small>{contactInformation(contact)}</small>}
         </button>)}
       </div>
-      {!matches.length && <p role="status">Aucun contact correspondant</p>}
+      {!matches.length && <p role="status">{t("modules.taskContactPicker.noMatchingContacts")}</p>}
     </div>}
     <style jsx>{`
       .task-contact-picker { display: flex; flex-direction: column; grid-column: 1 / -1; gap: 6px; min-width: 0; max-width: 100%; }

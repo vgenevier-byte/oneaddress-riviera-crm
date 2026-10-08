@@ -1,5 +1,7 @@
 "use client";
 
+import { useI18n } from "@/lib/i18n/I18nProvider";
+
 import {
   getCRMNavigationItem,
   mobileMoreTabs,
@@ -26,6 +28,7 @@ function MobileNavigationButton({
   badge?: number;
   onClick: () => void;
 }) {
+  const { t } = useI18n();
   const item = getCRMNavigationItem(tab);
 
   return (
@@ -36,8 +39,8 @@ function MobileNavigationButton({
       onClick={onClick}
     >
       <span className="mobile-crm-nav-icon" aria-hidden="true">{item.icon}</span>
-      <span>{item.label}</span>
-      {badge ? <span className="mobile-crm-nav-badge" aria-label={`${badge} élément(s) à traiter`}>{badge}</span> : null}
+      <span>{t(`navigation.module.${item.tab}`)}</span>
+      {badge ? <span className="mobile-crm-nav-badge" aria-label={t("navigation.pendingCount", { count: badge })}>{badge}</span> : null}
     </button>
   );
 }
@@ -49,11 +52,12 @@ export default function MobileCRMNavigation({
   onNavigate,
   onOpenMore
 }: Props) {
+  const { t } = useI18n();
   const moreBadge = mobileMoreTabs.reduce((total, tab) => total + (badgeCounts[tab] ?? 0), 0);
   const moreActive = moreOpen || mobileMoreTabs.includes(activeTab);
 
   return (
-    <nav className="mobile-crm-navigation" aria-label="Navigation mobile principale">
+    <nav className="mobile-crm-navigation" aria-label={t("navigation.mobile")}>
       {mobilePrimaryTabs.map((tab) => (
         <MobileNavigationButton
           key={tab}
@@ -72,8 +76,8 @@ export default function MobileCRMNavigation({
         onClick={onOpenMore}
       >
         <span className="mobile-crm-nav-icon" aria-hidden="true">•••</span>
-        <span>Plus</span>
-        {moreBadge ? <span className="mobile-crm-nav-badge" aria-label={`${moreBadge} élément(s) à traiter`}>{moreBadge}</span> : null}
+        <span>{t("navigation.more")}</span>
+        {moreBadge ? <span className="mobile-crm-nav-badge" aria-label={t("navigation.pendingCount", { count: moreBadge })}>{moreBadge}</span> : null}
       </button>
     </nav>
   );

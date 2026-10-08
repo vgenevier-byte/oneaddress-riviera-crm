@@ -1,4 +1,6 @@
 "use client";
+import { useI18n } from "@/lib/i18n/I18nProvider";
+import { specialistMessage } from "@/lib/i18n/catalogs/specialist";
 import { useEffect, useRef, useState } from 'react';
 import type { ModuleGrant } from '@/lib/access/modules';
 import { isCancelled } from '@/lib/access/operations';
@@ -77,16 +79,12 @@ const initialGenerationProgress: GenerationProgressState = {
 
 const activeGenerationKey = 'oar-publisher-active-generation-v1';
 
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date(`${value}T12:00:00`));
 
 export default function PublisherPage({ userId, grant, accessRevision, onUnsavedChange }: {
   userId: string; grant: ModuleGrant; accessRevision: number; onUnsavedChange?: (dirty: boolean) => void;
 }) {
+  const { t } = useI18n();
+
   const publisherApi = usePublisherApi();
   const canWrite = grant.level === 'contribute';
   const canGenerate = canWrite && grant.sensitive.generate === true;
@@ -228,22 +226,22 @@ export default function PublisherPage({ userId, grant, accessRevision, onUnsaved
   }
 
   return (
-    <div className="publisher-root"><section className="publisher-shell" aria-label="Contenu Instagram Publisher">
-      <header className="publisher-header"><div><span className="publisher-kicker">One Address Riviera</span><h1>Instagram Publisher</h1></div></header>
-      {process.env.NEXT_PUBLIC_PUBLISHER_DEMO === '1' && <p className="publisher-demo-note" role="status">Démonstration locale · générations externes simulées</p>}
-      <nav className="publisher-tabs" aria-label="Navigation du Publisher">
-        <button className={view === 'today' ? 'is-active' : ''} disabled={generating} onClick={() => void loadToday()}><Sparkles size={17} /> Aujourd’hui</button>
-        <button className={view === 'history' ? 'is-active' : ''} disabled={generating || Boolean(pendingRequestId)} onClick={() => void showHistory()}><History size={17} /> Historique</button>
+    <div className="publisher-root"><section className="publisher-shell" aria-label={t("publisher.contenu_instagram_publisher_eb540c")}>
+      <header className="publisher-header"><div><span className="publisher-kicker">{t("publisher.one_address_riviera_e73243")}</span><h1>{t("publisher.instagram_publisher_eb28ad")}</h1></div></header>
+      {process.env.NEXT_PUBLIC_PUBLISHER_DEMO === '1' && <p className="publisher-demo-note" role="status">{t("publisher.demonstration_locale_generations_externes_si_09d537")}</p>}
+      <nav className="publisher-tabs" aria-label={t("publisher.navigation_du_publisher_028590")}>
+        <button className={view === 'today' ? 'is-active' : ''} disabled={generating} onClick={() => void loadToday()}><Sparkles size={17} />{" "}{t("publisher.aujourd_hui_ba0603")}</button>
+        <button className={view === 'history' ? 'is-active' : ''} disabled={generating || Boolean(pendingRequestId)} onClick={() => void showHistory()}><History size={17} />{" "}{t("publisher.historique_34f3a0")}</button>
       </nav>
-      {error && <div className="publisher-alert" role="alert">{error}{terminalGeneration && canGenerate && <p><button className="publisher-small-button" onClick={() => { forget(); setTerminalGeneration(false); setError('Nouvelle demande préparée. Cliquez sur Créer la publication pour réessayer explicitement.'); }}>Préparer une nouvelle tentative</button></p>}{(!post || pendingRequestId) && <button className="publisher-small-button" onClick={() => void loadToday()}>Reprendre l’état</button>}</div>}
-      {!canWrite && <p className="publisher-permission-note">Accès en lecture · consultation et historique partagé.</p>}
+      {error && <div className="publisher-alert" role="alert">{specialistMessage(error,t)}{terminalGeneration && canGenerate && <p><button className="publisher-small-button" onClick={() => { forget(); setTerminalGeneration(false); setError('Nouvelle demande préparée. Cliquez sur Créer la publication pour réessayer explicitement.'); }}>{t("publisher.preparer_une_nouvelle_tentative_f4d6fd")}</button></p>}{(!post || pendingRequestId) && <button className="publisher-small-button" onClick={() => void loadToday()}>{t("publisher.reprendre_l_etat_cfe05e")}</button>}</div>}
+      {!canWrite && <p className="publisher-permission-note">{t("publisher.acces_en_lecture_consultation_et_historique_c6c5e4")}</p>}
       {loading && !generating && view === 'today' && <PublisherLoading label="Chargement du Publisher" />}
       {generating && <GenerationProgress progress={generationProgress} />}
-      {pendingRequestId && !loading && !generating && !error && <div className="publisher-empty" role="status"><p>Une demande est conservée. Consultez son état pour retrouver votre création.</p><button className="publisher-small-button" onClick={() => void loadToday()}>Reprendre l’état</button></div>}
+      {pendingRequestId && !loading && !generating && !error && <div className="publisher-empty" role="status"><p>{t("publisher.une_demande_est_conservee_consultez_son_etat_b099d2")}</p><button className="publisher-small-button" onClick={() => void loadToday()}>{t("publisher.reprendre_l_etat_cfe05e")}</button></div>}
       {view === 'today' && !loading && !generating && !pendingRequestId && !post && (
         canGenerate ? <CreativeSelector key={selectionMode} mode={selectionMode} direction={direction}
           onDirectionChange={next => { setDirection(next); setTerminalGeneration(false); }} onCreate={direction => void createPost(direction)} />
-          : <div className="publisher-empty"><Sparkles size={24} /><p>Aucune création du jour. Le droit « Générer / régénérer » est nécessaire pour en préparer une.</p></div>
+          : <div className="publisher-empty"><Sparkles size={24} /><p>{t("publisher.aucune_creation_du_jour_le_droit_generer_reg_ab9f41")}</p></div>
       )}
       {view === 'today' && !loading && !generating && !pendingRequestId && post && <PostEditor key={post.id} post={post} api={publisherApi} userId={userId} accessRevision={accessRevision}
         canWrite={canWrite} canGenerate={canGenerate} canExport={canExport} canPublish={canPublish} onChange={setPost} onError={setError} onMusicDirty={setMusicDirty}
@@ -261,15 +259,17 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
   onDirectionChange: (direction: DirectionSelection) => void;
   onCreate: (direction: CreativeDirection) => void;
 }) {
+  const { t } = useI18n();
+
   const complete = Boolean(direction.universe && direction.moment && direction.style);
 
   return (
     <section className="publisher-selector">
       <div className="publisher-selector-intro">
-        <span className="publisher-step-label">Étape 1 sur 2</span>
-        <span className="publisher-kicker">{mode === 'daily' ? 'Publication du jour' : 'Nouvelle création'}</span>
-        <h2>Choisir la direction</h2>
-        <p>Trois choix simples guident le visuel et tout le package éditorial.</p>
+        <span className="publisher-step-label">{t("publisher.etape_1_sur_2_eda9d5")}</span>
+        <span className="publisher-kicker">{mode === 'daily' ? t("publisher.publication_du_jour_136cfa") : t("publisher.nouvelle_creation_ab4945")}</span>
+        <h2>{t("publisher.choisir_la_direction_034a54")}</h2>
+        <p>{t("publisher.trois_choix_simples_guident_le_visuel_et_tou_5732a2")}</p>
       </div>
 
       <ChoiceGroup legend="1. Univers visuel" value={direction.universe} options={universes} onSelect={universe => onDirectionChange({ ...direction, universe })} />
@@ -285,9 +285,8 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
           style: direction.style as CreativeStyle,
         })}
       >
-        <Sparkles size={18} /> Créer la publication
-      </button>
-      {!complete && <p className="publisher-selection-hint">Sélectionnez une option dans chaque catégorie.</p>}
+        <Sparkles size={18} />{" "}{t("publisher.creer_la_publication_f37940")}</button>
+      {!complete && <p className="publisher-selection-hint">{t("publisher.selectionnez_une_option_dans_chaque_categori_e09bf7")}</p>}
     </section>
   );
 }
@@ -298,9 +297,11 @@ function ChoiceGroup<T extends string>({ legend, value, options, onSelect }: {
   options: Array<{ value: T; label: string; description: string }>;
   onSelect: (value: T) => void;
 }) {
+  const { label: displayLabel } = useI18n();
+
   return (
     <fieldset className="publisher-choice-group">
-      <legend>{legend}</legend>
+      <legend>{displayLabel(legend,"publisher")}</legend>
       <div className="publisher-choice-grid">
         {options.map(option => (
           <button
@@ -311,8 +312,8 @@ function ChoiceGroup<T extends string>({ legend, value, options, onSelect }: {
             onClick={() => onSelect(option.value)}
           >
             <span className="publisher-choice-check"><Check size={14} /></span>
-            <strong>{option.label}</strong>
-            <small>{option.description}</small>
+            <strong>{displayLabel(option.label,"publisher")}</strong>
+            <small>{displayLabel(option.description,"publisher")}</small>
           </button>
         ))}
       </div>
@@ -321,17 +322,19 @@ function ChoiceGroup<T extends string>({ legend, value, options, onSelect }: {
 }
 
 function GenerationProgress({ progress }: { progress: GenerationProgressState }) {
+  const { t, label: displayLabel } = useI18n();
+
   return (
     <section className="publisher-generation" aria-live="polite">
       <Loader2 className="publisher-spin" size={28} />
-      <span className="publisher-step-label">Étape 2 sur 2</span>
-      <h2>Création du package</h2>
-      <p>Le traitement peut continuer après votre départ. Son état est récupérable sans relancer une génération.</p>
+      <span className="publisher-step-label">{t("publisher.etape_2_sur_2_ce1b0e")}</span>
+      <h2>{t("publisher.creation_du_package_6deb6a")}</h2>
+      <p>{t("publisher.le_traitement_peut_continuer_apres_votre_dep_903df1")}</p>
       <ol>
         {generationSteps.map((step, index) => (
           <li className={`is-${progress[step.key]}`} key={step.key}>
             <span>{progress[step.key] === 'done' ? <Check size={14} /> : index + 1}</span>
-            {step.label}
+            {displayLabel(step.label,"publisher")}
           </li>
         ))}
       </ol>
@@ -347,6 +350,8 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
   onNewCreation: () => void;
   onMusicDirty: (dirty: boolean) => void;
 }) {
+  const { t, formatDate: screenDate } = useI18n();
+
   const [busy, setBusy] = useState<'text' | 'image' | 'publish' | 'music' | 'export' | ''>('');
   const [copied, setCopied] = useState('');
   const [selectedMusic, setSelectedMusic] = useState(() => {
@@ -457,39 +462,39 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
 
   return (
     <article className="publisher-post" data-publisher-post-id={post.id}>
-      {conflict && <section className="publisher-alert" aria-label="Conflit de révision"><strong>Vérifiez la version partagée avant de réessayer.</strong><p>Votre sélection musicale et la révision d’origine sont conservées. Aucun écrasement n’a été effectué.</p><button className="publisher-small-button" onClick={() => void compare()}>Comparer la version partagée</button>{remote && <div><p>Révision partagée {remote.revision} · {remote.caption}</p><button className="publisher-small-button" onClick={() => { mutations.current.clear(); const saved = readPublisherDraft(userId, accessRevision); if (saved) capturePublisherDraft({ ...saved, requests: {} }); onChange(remote); setRemote(null); setConflict(false); onError(''); }}>Recharger cette version et abandonner le brouillon</button></div>}</section>}
+      {conflict && <section className="publisher-alert" aria-label={t("publisher.conflit_de_revision_530d0f")}><strong>{t("publisher.verifiez_la_version_partagee_avant_de_reessa_1cd336")}</strong><p>{t("publisher.votre_selection_musicale_et_la_revision_d_or_6a4e38")}</p><button className="publisher-small-button" onClick={() => void compare()}>{t("publisher.comparer_la_version_partagee_839ad1")}</button>{remote && <div><p>{t("publisher.revision_partagee_4fbcbd")}{" "}{remote.revision} · {remote.caption}</p><button className="publisher-small-button" onClick={() => { mutations.current.clear(); const saved = readPublisherDraft(userId, accessRevision); if (saved) capturePublisherDraft({ ...saved, requests: {} }); onChange(remote); setRemote(null); setConflict(false); onError(''); }}>{t("publisher.recharger_cette_version_et_abandonner_le_bro_a8fe40")}</button></div>}</section>}
       <div className="publisher-date-row">
         <div>
-          <span className="publisher-kicker">{post.creation_mode === 'guided' ? 'Création guidée' : 'Publication du jour'}</span>
-          <h2>{formatDate(post.post_date)}</h2>
+          <span className="publisher-kicker">{post.creation_mode === 'guided' ? t("publisher.creation_guidee_f63ade") : t("publisher.publication_du_jour_136cfa")}</span>
+          <h2>{screenDate(post.post_date,{weekday:"long",day:"numeric",month:"long"})}</h2>
         </div>
         <span className={`publisher-status ${published ? 'is-published' : ''}`}>
           {published ? <CheckCircle2 size={14} /> : <span className="publisher-status-dot" />}
-          {published ? 'Publiée' : 'Brouillon'}
+          {published ? t("publisher.publiee_ebef6e") : t("publisher.brouillon_57d2d7")}
         </span>
       </div>
 
-      <div className="publisher-direction-summary" aria-label="Direction créative">
+      <div className="publisher-direction-summary" aria-label={t("publisher.direction_creative_c8f5fb")}>
         <span>{post.creative_universe}</span>
         <span>{post.creative_moment}</span>
         <span>{post.creative_style}</span>
       </div>
 
       <div className={`publisher-visual ${post.format === 'Reel' ? 'is-reel' : ''}`}>
-        <PublisherImage api={api} post={post} alt={`Proposition visuelle — ${post.theme}`} />
+        <PublisherImage api={api} post={post} alt={t("publisher.visualAlt",{theme:post.theme})} />
         <span>{post.format}</span>
       </div>
 
       <div className="publisher-action-grid">
-        <button disabled={!canExport || !!busy} onClick={() => void saveImage()}><Download size={18} /> Enregistrer</button>
-        <button disabled={!canGenerate || !!busy} onClick={onNewCreation}><RefreshCw size={18} /> Nouvelle création</button>
+        <button disabled={!canExport || !!busy} onClick={() => void saveImage()}><Download size={18} />{" "}{t("publisher.enregistrer_f7c8bc")}</button>
+        <button disabled={!canGenerate || !!busy} onClick={onNewCreation}><RefreshCw size={18} />{" "}{t("publisher.nouvelle_creation_ab4945")}</button>
       </div>
 
-      <button className="publisher-secondary-button" disabled={!canGenerate || published || !!busy} onClick={() => void regenerate('image')}><RefreshCw size={18} /> Régénérer le visuel</button>
-      {!canExport && <p className="publisher-permission-note">L’export et les commandes de copie sont désactivés pour ce compte.</p>}
+      <button className="publisher-secondary-button" disabled={!canGenerate || published || !!busy} onClick={() => void regenerate('image')}><RefreshCw size={18} />{" "}{t("publisher.regenerer_le_visuel_003ee0")}</button>
+      {!canExport && <p className="publisher-permission-note">{t("publisher.l_export_et_les_commandes_de_copie_sont_desa_77be00")}</p>}
       <section className="publisher-card">
         <div className="publisher-card-heading">
-          <div><span className="publisher-kicker">Ambiance</span><h3>Choix musical</h3></div>
+          <div><span className="publisher-kicker">{t("publisher.ambiance_baf046")}</span><h3>{t("publisher.choix_musical_1f10a2")}</h3></div>
           <Music2 size={21} />
         </div>
         <div className="publisher-music-list">
@@ -500,9 +505,9 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
                 <span><strong>{music.title}</strong><small>{music.artist}</small></span>
                 <span className="publisher-radio" aria-hidden="true" />
               </button>
-              <div className="publisher-availability" aria-label={`Disponibilité de ${music.title}`}>
-                <button disabled={!canWrite || !!busy} className={music.availability_status === 'available' ? 'is-active' : ''} onClick={() => void updateMusicStatus(music.id, 'available')}>Disponible</button>
-                <button disabled={!canWrite || !!busy} className={music.availability_status === 'unavailable' ? 'is-unavailable' : ''} onClick={() => void updateMusicStatus(music.id, 'unavailable')}>Introuvable</button>
+              <div className="publisher-availability" aria-label={t("publisher.musicAvailability",{title:music.title})}>
+                <button disabled={!canWrite || !!busy} className={music.availability_status === 'available' ? 'is-active' : ''} onClick={() => void updateMusicStatus(music.id, 'available')}>{t("publisher.disponible_264396")}</button>
+                <button disabled={!canWrite || !!busy} className={music.availability_status === 'unavailable' ? 'is-unavailable' : ''} onClick={() => void updateMusicStatus(music.id, 'unavailable')}>{t("publisher.introuvable_de000c")}</button>
               </div>
             </div>
           ))}
@@ -512,41 +517,39 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
           if (music) void copy(`${music.title} — ${music.artist}`, 'music');
         }}>
           {copied === 'music' ? <Check size={16} /> : <Clipboard size={16} />}
-          {copied === 'music' ? 'Musique copiée' : 'Copier la musique choisie'}
+          {copied === 'music' ? t("publisher.musique_copiee_af8d3a") : t("publisher.copier_la_musique_choisie_96f46c")}
         </button>
       </section>
 
       <section className="publisher-card">
         <div className="publisher-card-heading">
-          <div><span className="publisher-kicker">Texte</span><h3>Légende et hashtags</h3></div>
+          <div><span className="publisher-kicker">{t("publisher.texte_ff9afe")}</span><h3>{t("publisher.legende_et_hashtags_20d412")}</h3></div>
           <button className="publisher-small-button" disabled={!canExport || !!busy} onClick={() => void copy(copyBlock, 'text')}>
             {copied === 'text' ? <Check size={16} /> : <Clipboard size={16} />}
-            {copied === 'text' ? 'Copié' : 'Copier'}
+            {copied === 'text' ? t("publisher.copie_b3ae01") : t("publisher.copier_cdd28e")}
           </button>
         </div>
         <p className="publisher-caption">{post.caption}</p>
         <p className="publisher-hashtags">{post.hashtags.join(' ')}</p>
         <button className="publisher-secondary-button" onClick={() => void regenerate('text')} disabled={!canGenerate || published || !!busy}>
-          {busy === 'text' ? <Loader2 className="publisher-spin" size={18} /> : <RefreshCw size={18} />}
-          Régénérer le texte
-        </button>
+          {busy === 'text' ? <Loader2 className="publisher-spin" size={18} /> : <RefreshCw size={18} />}{t("publisher.regenerer_le_texte_172da7")}</button>
       </section>
 
       <section className="publisher-location-card">
         <MapPin size={20} />
-        <div><span className="publisher-kicker">Lieu Instagram</span><strong>{post.location}</strong></div>
+        <div><span className="publisher-kicker">{t("publisher.lieu_instagram_69990d")}</span><strong>{post.location}</strong></div>
       </section>
 
       <aside className="publisher-ai-note">
         <Sparkles size={18} />
-        <p><strong>ACTIVER “AJOUTER UNE MENTION IA” DANS INSTAGRAM</strong><span> Proposition générée par IA. Vérifiez le visuel, les droits musicaux et le texte avant publication.</span></p>
+        <p><strong>{t("publisher.activer_ajouter_une_mention_ia_dans_instagra_e992e7")}</strong><span>{" "}{t("publisher.proposition_generee_par_ia_verifiez_le_visue_347b8d")}</span></p>
       </aside>
 
       <div className="publisher-publish-actions">
-        <a className="publisher-secondary-button" href="https://www.instagram.com/" target="_blank" rel="noreferrer"><ArrowUpRight size={18} /> Ouvrir Instagram</a>
+        <a className="publisher-secondary-button" href="https://www.instagram.com/" target="_blank" rel="noreferrer"><ArrowUpRight size={18} />{" "}{t("publisher.ouvrir_instagram_0e7260")}</a>
         <button className="publisher-primary-button" onClick={() => void publish()} disabled={!canPublish || published || !!busy || !selectedMusic}>
           {busy === 'publish' ? <Loader2 className="publisher-spin" size={18} /> : <CheckCircle2 size={18} />}
-          {published ? 'Publication confirmée' : 'Marquer comme publié'}
+          {published ? t("publisher.publication_confirmee_e4dfe8") : t("publisher.marquer_comme_publie_ec3076")}
         </button>
       </div>
     </article>
@@ -554,16 +557,18 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
 }
 
 function HistoryGrid({ api, posts, loading, onSelect }: { api: PublisherApi; posts: PublisherPost[]; loading: boolean; onSelect: (post: PublisherPost) => void }) {
+  const { t, formatDate: screenDate } = useI18n();
+
   if (loading && posts.length === 0) return <PublisherLoading label="Chargement de l’historique" />;
-  if (posts.length === 0) return <div className="publisher-empty"><History size={24} /><p>Aucune publication dans l’historique.</p></div>;
+  if (posts.length === 0) return <div className="publisher-empty"><History size={24} /><p>{t("publisher.aucune_publication_dans_l_historique_1b3588")}</p></div>;
   return (
     <section className="publisher-history">
-      <div className="publisher-history-heading"><span className="publisher-kicker">30 dernières créations</span><h2>Historique</h2></div>
+      <div className="publisher-history-heading"><span className="publisher-kicker">{t("publisher.30_dernieres_creations_d78ff6")}</span><h2>{t("publisher.historique_34f3a0")}</h2></div>
       <div className="publisher-history-grid">
         {posts.map(item => (
-          <button key={item.id} onClick={() => onSelect(item)} aria-label={`Ouvrir ${item.creative_universe}, ${item.creative_moment}, ${item.creative_style}`}>
+          <button key={item.id} onClick={() => onSelect(item)} aria-label={t("publisher.openPost",{universe:item.creative_universe,moment:item.creative_moment,style:item.creative_style})}>
             <PublisherImage api={api} post={item} alt="" />
-            <span className="publisher-history-date">{new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short' }).format(new Date(`${item.post_date}T12:00:00`))}</span>
+            <span className="publisher-history-date">{screenDate(item.post_date,{day:"2-digit",month:"short"})}</span>
             <span className="publisher-history-direction">{item.creative_universe} · {item.creative_moment} · {item.creative_style}</span>
             {item.status === 'published' && <CheckCircle2 size={16} />}
           </button>
@@ -574,6 +579,8 @@ function HistoryGrid({ api, posts, loading, onSelect }: { api: PublisherApi; pos
 }
 
 function PublisherImage({ api, post, alt }: { api: PublisherApi; post: PublisherPost; alt: string }) {
+  const { t } = useI18n();
+
   const [source, setSource] = useState('');
   const [error, setError] = useState(false);
   useEffect(() => {
@@ -588,14 +595,16 @@ function PublisherImage({ api, post, alt }: { api: PublisherApi; post: Publisher
     }).catch(error => { if (alive && !isCancelled(error)) setError(true); });
     return () => { alive = false; stop?.(); remove(); };
   }, [api, post.id, post.revision]);
-  if (error) return <span role="status">Visuel indisponible</span>;
+  if (error) return <span role="status">{t("publisher.visuel_indisponible_ed3602")}</span>;
   // Authenticated in-memory blob only: Next image optimization must not cache it.
   // eslint-disable-next-line @next/next/no-img-element
-  return source ? <img src={source} alt={alt} /> : <span aria-label="Chargement du visuel" />;
+  return source ? <img src={source} alt={alt} /> : <span aria-label={t("publisher.chargement_du_visuel_4c31ec")} />;
 }
 
 function PublisherLoading({ label }: { label: string }) {
-  return <div className="publisher-loading"><Loader2 className="publisher-spin" size={24} /><p>{label}</p></div>;
+  const { label: displayLabel } = useI18n();
+
+  return <div className="publisher-loading"><Loader2 className="publisher-spin" size={24} /><p>{displayLabel(label,"publisher")}</p></div>;
 }
 
 function makeRequestId() {

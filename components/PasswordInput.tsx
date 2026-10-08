@@ -3,6 +3,7 @@
 import { Eye, EyeOff } from "lucide-react";
 import { useLayoutEffect, useRef, useState, type InputHTMLAttributes } from "react";
 import styles from "./PasswordInput.module.css";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 
 type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & {
   resetKey: string | number;
@@ -17,12 +18,13 @@ type InputSelection = {
 };
 
 export default function PasswordInput({ resetKey, className, disabled, ...props }: PasswordInputProps) {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const selectionRef = useRef<InputSelection | null>(null);
   const pointerSelectionRef = useRef<InputSelection | null>(null);
   const [display, setDisplay] = useState({ resetKey, visible: false });
   const visible = display.resetKey === resetKey && display.visible;
-  const label = visible ? "Masquer le mot de passe" : "Afficher le mot de passe";
+  const label = visible ? t("access.hidePassword") : t("access.showPassword");
   const Icon = visible ? EyeOff : Eye;
 
   useLayoutEffect(() => {

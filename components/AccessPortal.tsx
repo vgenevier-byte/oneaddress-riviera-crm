@@ -19,6 +19,8 @@ import { bindCRMCache, clearCRMCache, inspectPersistentCRMCache, isPersistentCRM
   type PersistentCRMCacheState, type CRMCacheRecovery } from "@/lib/access/crmCache";
 import styles from "./AccessPortal.module.css";
 import PasswordInput from "./PasswordInput";
+import { useAccountLanguage, useI18n } from "@/lib/i18n/I18nProvider";
+import LanguageSelector from "./LanguageSelector";
 
 const CRMApp = dynamic(() => import("./CRMApp"), { ssr: false });
 const PublisherPage = dynamic(() => import("./publisher/PublisherPage"), { ssr: false });
@@ -33,6 +35,7 @@ class AccessCheckFailure extends Error {
 }
 
 export default function AccessPortal({ space }: { space: "oar" | "izord" | "publisher" | "choose" | "admin" | "charges" }) {
+  const { t } = useI18n();
   const [businessDraft,setBusinessDraft]=useState<{user:string;revision:number;module:ModuleId;value:Record<string,string>}|null>(null);
   const [sourceFocus, setSourceFocus] = useState<{ module: "vendorInvoices" | "houseTracking"; id: string } | undefined>();
   const [view,setView] = useState<UnifiedTab>(space === "charges" ? "monthlyCharges" : space === "izord" ? "izord" : space === "publisher" ? "publisher" : space === "admin" ? "admin" : "dashboard");
@@ -46,6 +49,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
   const [invitationPasswordError,setInvitationPasswordError] = useState(false);
 
   const [access, setAccess] = useState<Access>(initial);
+  useAccountLanguage(access.session?.user.id ?? null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordDisplayReset, setPasswordDisplayReset] = useState(0);
@@ -74,7 +78,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
       if(failed)cleaned.searchParams.set('invitation_error','1');
       window.history.replaceState(null,'',cleaned.pathname+cleaned.search);
       setInvitationError(failed);
-      if(failed)setMessage('Lien d’invitation invalide ou expiré. Demandez une nouvelle invitation.');
+      if(failed)setMessage('access.invalidInvitation');
     }
     if(!alive)return;
     setInvitationReady(true);
@@ -115,8 +119,8 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
       stopGenerator(temporary);
       clearCRMCache();
       setAccess({ session, memberships: [], loading: false, phase: temporary ? "unavailable" : "denied", error: temporary
-        ? "Accès indisponible : vérification temporairement impossible. Les opérations sont suspendues. Le brouillon reste uniquement en mémoire dans cet onglet ; ne le fermez pas. La reprise exige le même compte et des droits revérifiés, sans sauvegarde automatique."
-        : error instanceof AccessCheckFailure ? error.message : "Session ou accès non valide. Le brouillon a été écarté. Reconnectez-vous ou contactez votre administrateur." });
+        ? "access.temporarilyUnavailable"
+        : error instanceof AccessCheckFailure ? error.message : "access.invalidAccess" });
     }
     function cacheBlocked() {
       const state = inspectPersistentCRMCache();
@@ -149,18 +153,18 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
       try {
         const { data: verified, error: authError } = await supabase.auth.getUser(session.access_token);
         if (!alive || current !== generation) return;
-        if (authError) throw new AccessCheckFailure(temporaryAccessFailure(authError), "Session non vérifiée.");
-        if (verified.user?.id !== userId) throw new AccessCheckFailure(false, "Session invalide.");
+        if (authError) throw new AccessCheckFailure(temporaryAccessFailure(authError), "access.sessionUnverified");
+        if (verified.user?.id !== userId) throw new AccessCheckFailure(false, "access.sessionInvalid");
         const { data, error, status } = await supabase.from("app_memberships")
           .select("workspace_id, role").eq("user_id", userId).eq("status", "active");
-        if (error) throw new AccessCheckFailure(temporaryAccessFailure(error, status), "Vérification des accès indisponible.");
+        if (error) throw new AccessCheckFailure(temporaryAccessFailure(error, status), "access.verificationUnavailable");
         if (!alive || current !== generation || cacheBlocked()) return;
         const { data: permissions, error: permissionError } = await supabase.rpc("crm_access_snapshot");
-        if (permissionError) throw new AccessCheckFailure(temporaryAccessFailure(permissionError), "Vérification des droits par module indisponible.");
+        if (permissionError) throw new AccessCheckFailure(temporaryAccessFailure(permissionError), "access.permissionsUnavailable");
         if (!alive || current !== generation) return;
         const fingerprint = JSON.stringify(permissions);
         if (permissionsRef.current && permissionsRef.current !== fingerprint) {
-          stopGenerator(); clearCRMCache(); setMessage("Vos droits ont changé. Les données précédentes ont été retirées ; les nouveaux droits sont appliqués.");
+          stopGenerator(); clearCRMCache(); setMessage("access.rightsChanged");
         }
         permissionsRef.current = fingerprint;
         const memberships = ((data ?? []) as Membership[]).filter(m => m.workspace_id !== "izord" || readable(permissions,"izord"));
@@ -172,7 +176,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
             // project request; even a delayed project reply cannot prolong it.
             if (draftRecovery.current && reducedIzordRole(draftRecovery.current.role, izordMembership.role)) {
               stopGenerator();
-              setMessage("Vos droits ont changé. L’ancien brouillon et ses fichiers ont été écartés ; seuls les accès actuels sont disponibles.");
+              setMessage("access.draftDiscarded");
             }
             let held = draftRecovery.current;
             const target = draftTarget(held?.draft);
@@ -183,8 +187,8 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
               const reply = await supabase.from("izord_projects").select("id,revision,status,payload").eq("id", held.draft.loaded.project.id).maybeSingle();
               if (!alive || current !== generation) return;
               if (target !== draftTarget(draftRecovery.current?.draft)) { void check(session); return; }
-              if (reply.error) throw new AccessCheckFailure(temporaryAccessFailure(reply.error, reply.status), "Vérification du dossier indisponible.");
-              if (!reply.data) throw new AccessCheckFailure(false, "L’accès à ce dossier a été retiré. Le brouillon n’est plus récupérable dans cet espace.");
+              if (reply.error) throw new AccessCheckFailure(temporaryAccessFailure(reply.error, reply.status), "access.projectUnavailable");
+              if (!reply.data) throw new AccessCheckFailure(false, "access.projectRemoved");
               project = reply.data as VerifiedDraftProject;
             }
             if (!alive || current !== generation || cacheBlocked()) return;
@@ -196,7 +200,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
               const snapshot = held && resumeGeneratorDraft(held, userId!, izordMembership.role, project);
               const reduced = held && reducedIzordRole(held.role, izordMembership.role);
               stopGenerator();
-              if (reduced) setMessage("Vos droits ont changé. L’ancien brouillon et ses fichiers ont été écartés ; seuls les accès actuels sont disponibles.");
+              if (reduced) setMessage("access.draftDiscarded");
               const next: GeneratorHost = { key: crypto.randomUUID(), userId: userId!, role: izordMembership.role, controller: new AbortController(), recovery: snapshot || undefined, capture: draft => {
                 if (generatorRef.current === next && !next.controller.signal.aborted) draftRecovery.current = { userId: next.userId, workspace: "izord", role: next.role, draft };
               } };
@@ -270,7 +274,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     return () => { alive = false; generation++; generatorRef.current?.controller.abort(); generatorRef.current = null; draftRecovery.current = null; subscription.unsubscribe(); window.clearInterval(timer); window.removeEventListener("focus", refresh); window.removeEventListener("storage", onStorage); window.removeEventListener(CRM_CACHE_CHANGED, onRecovered); channel?.close(); };
   }, [view,stopGenerator]);
 
-  function confirmLeaving() { return !(hasUnsavedChanges || draftRecovery.current?.draft.dirty || draftRecovery.current?.draft.reports.length) || window.confirm("Des modifications ne sont pas encore sauvegardées. Annulez pour les sauvegarder ou utiliser Backup fichier avant de quitter. Quitter quand même ?"); }
+  function confirmLeaving() { return !(hasUnsavedChanges || draftRecovery.current?.draft.dirty || draftRecovery.current?.draft.reports.length) || window.confirm(t("access.confirmLeaving")); }
   async function logout() {
     setBusinessDraft(null);
     if (!confirmLeaving()) return;
@@ -298,7 +302,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     const recovery = passwordRecoveryRef.current;
     if (!recovery || recoverySubmitting.current) return;
     if (recoveryPassword.length < 8) {
-      setMessage("Le mot de passe doit contenir au moins 8 caractères.");
+      setMessage("access.passwordMinimum");
       return;
     }
     recoverySubmitting.current = true;
@@ -309,42 +313,42 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
       const { data, error } = await supabase.auth.getSession();
       if (passwordRecoveryRef.current !== recovery) return;
       if (error || !data.session || data.session.user.id !== recovery.userId) {
-        setMessage("Session non valide. Rouvrez votre lien de récupération.");
+        setMessage("access.recoveryInvalid");
         return;
       }
       const verified = await supabase.auth.getUser(data.session.access_token);
       if (passwordRecoveryRef.current !== recovery) return;
       if (verified.error || verified.data.user?.id !== recovery.userId) {
-        setMessage("Session non vérifiée. Réessayez ou rouvrez votre lien de récupération.");
+        setMessage("access.recoveryUnverified");
         return;
       }
       const changed = await supabase.auth.updateUser({ password: recoveryPassword });
       if (passwordRecoveryRef.current !== recovery) return;
       if (changed.error) {
-        setMessage("Mot de passe non modifié. Réessayez.");
+        setMessage("access.passwordUnchanged");
         return;
       }
       passwordRecoveryRef.current = null;
       setPasswordRecovery(null);
       setRecoveryPassword("");
-      setMessage("Mot de passe enregistré.");
+      setMessage("access.passwordSaved");
     } catch {
-      if (passwordRecoveryRef.current === recovery) setMessage("Mot de passe non modifié. Réessayez.");
+      if (passwordRecoveryRef.current === recovery) setMessage("access.passwordUnchanged");
     } finally {
       recoverySubmitting.current = false;
       setBusy(false);
     }
   }
   if (cacheTransition) return <CacheRecovery state={cacheTransition} />;
-  if (passwordRecovery) return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>CRM privé</span></div><section className={styles.card}>
-    <h1>Réinitialiser le mot de passe</h1>
-    <p>Choisissez un nouveau mot de passe d’au moins 8 caractères.</p>
+  if (passwordRecovery) return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>{t("access.privateCRM")}</span><LanguageSelector /></div><section className={styles.card}>
+    <h1>{t("access.resetPassword")}</h1>
+    <p>{t("access.resetPasswordHint")}</p>
     <form className={styles.form} onInvalidCapture={() => setPasswordDisplayReset(value => value + 1)} onSubmit={event => { event.preventDefault(); void saveRecoveryPassword(); }}>
-      <label>Nouveau mot de passe<PasswordInput resetKey={passwordDisplayReset} name="password" autoComplete="new-password" minLength={8} required value={recoveryPassword} onChange={event => setRecoveryPassword(event.target.value)} disabled={busy} /></label>
-      <button type="submit" disabled={busy || access.loading || access.session?.user.id !== passwordRecovery.userId}>Enregistrer le mot de passe</button>
-      <button type="button" className={styles.secondary} disabled={busy} onClick={() => { passwordRecoveryRef.current = null; setPasswordRecovery(null); setRecoveryPassword(""); setPasswordDisplayReset(value => value + 1); setMessage(""); }}>Annuler</button>
+      <label>{t("access.newPassword")}<PasswordInput resetKey={passwordDisplayReset} name="password" autoComplete="new-password" minLength={8} required value={recoveryPassword} onChange={event => setRecoveryPassword(event.target.value)} disabled={busy} /></label>
+      <button type="submit" disabled={busy || access.loading || access.session?.user.id !== passwordRecovery.userId}>{t("access.savePassword")}</button>
+      <button type="button" className={styles.secondary} disabled={busy} onClick={() => { passwordRecoveryRef.current = null; setPasswordRecovery(null); setRecoveryPassword(""); setPasswordDisplayReset(value => value + 1); setMessage(""); }}>{t("access.cancel")}</button>
     </form>
-    {message && <p role="status">{message}</p>}
+    {message && <p role="status">{t(message)}</p>}
   </section></main>;
   const permissions = access.permissions;
   const izord = access.memberships.find(m => m.workspace_id === "izord");
@@ -365,8 +369,8 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
     if(selected && selected!==view) return <SelectAllowed select={()=>setView(selected)} />;
     if(selected && selected!=="monthlyCharges" && selected!=="izord" && selected!=="publisher" && selected!=="admin" && permissions.fullAccess) return <OperationProvider userId={access.session.user.id} access={permissions}><CRMApp key={access.session.user.id+":"+permissions.revision} access={permissions} initialTab={selected as CRMTab} sourceFocus={sourceFocus} onExternalNavigate={navigate} sessionUserId={access.session.user.id} sessionAccessToken={access.session.access_token} sessionEmail={access.session.user.email??"utilisateur"} onUnsavedChange={setHasUnsavedChanges} onLogout={logout} /></OperationProvider>;
     return <OperationProvider userId={access.session.user.id} access={permissions}><main className="crm-shell crm-readable-redesign"><UnifiedNavigation access={permissions} accountId={access.session.user.id} navigationRevision={navigationRevision} active={selected??"dashboard"} onNavigate={navigate} onLogout={logout}/><section className="content-panel">
-      {message&&<p role="status">{message}</p>}
-      {!selected && <div className="module-workspace"><h1>{chargesDenied ? "Charges mensuelles : accès refusé" : "Aucun accès autorisé"}</h1><p>{chargesDenied ? "Ce module n’est pas autorisé pour votre compte." : "Votre compte est connecté, mais aucun module ne lui est attribué. Contactez votre administrateur."}</p><button onClick={logout}>Se déconnecter</button></div>}
+      {message&&<p role="status">{t(message)}</p>}
+      {!selected && <div className="module-workspace"><h1>{chargesDenied ? t("access.chargesDenied") : t("access.noAccess")}</h1><p>{chargesDenied ? t("access.moduleDenied") : t("access.contactAdmin")}</p><button onClick={logout}>{t("access.signOut")}</button></div>}
       {selected==="admin"&&<AccessAdministration key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onReconnect={reconnectForDriveDiagnostic} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
       {selected==="izord"&&izord&&generatorHost&&<div className="module-workspace"><h1>IZORD Invest</h1><IzordGenerator key={generatorHost.key} role={permissions.modules.izord?.level==='read'?'reader':izord.role} canExport={Boolean(permissions.modules.izord?.sensitive.export)} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={setHasUnsavedChanges}/></div>}
       {selected==="publisher"&&permissions.modules.publisher&&<PublisherPage key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} grant={permissions.modules.publisher} accessRevision={permissions.revision} onUnsavedChange={setHasUnsavedChanges}/>}
@@ -374,14 +378,14 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
       {selected && selected!=="monthlyCharges"&&selected!=="admin"&&selected!=="izord"&&selected!=="publisher"&&<ModuleWorkspace onDraftConsumed={()=>setBusinessDraft(null)} userId={access.session.user.id} key={access.session.user.id+":"+permissions.revision+":"+selected} module={selected} sourceFocus={sourceFocus} access={permissions} onDirty={setHasUnsavedChanges} draft={businessDraft?.user===access.session.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===selected?businessDraft.value:undefined} onNavigate={(tab,value)=>{setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);navigate(tab);}}/>}
     </section></main></OperationProvider>;
   }
-  return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>CRM privé</span></div><section className={styles.card}><h1>Connexion au CRM</h1>
-    {(access.loading||!invitationReady)?<p role="status">Vérification des accès…</p>:!access.session?<><p>Connectez-vous avec votre compte individuel.</p><form className={styles.form} onInvalidCapture={() => setPasswordDisplayReset(value => value + 1)} onSubmit={async e=>{e.preventDefault();setPasswordDisplayReset(value=>value+1);setBusy(true);setMessage("");try{const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)setMessage("Connexion impossible. Vérifiez vos identifiants.");}catch{setMessage("Connexion indisponible.");}finally{setBusy(false);}}}><label>Email<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>Mot de passe<PasswordInput resetKey={"login:"+passwordDisplayReset} name="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>Se connecter</button></form></>:<>
-      <p>{access.session.user.email}</p>{(invitation||invitationAccepted)?<>{invitationPasswordError&&<p role="alert">Invitation acceptée. Mot de passe non enregistré : choisissez un autre mot de passe ou réessayez.</p>}{invitationSetup&&<label>Choisissez un mot de passe<PasswordInput resetKey={"invitation:"+passwordDisplayReset} name="password" autoComplete="new-password" minLength={8} value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy||invitationError||(invitationSetup&&password.length<8)} onClick={async()=>{
+  return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>{t("access.privateCRM")}</span><LanguageSelector /></div><section className={styles.card}><h1>{t("access.signInTitle")}</h1>
+    {(access.loading||!invitationReady)?<p role="status">{t("access.checking")}</p>:!access.session?<><p>{t("access.signInHint")}</p><form className={styles.form} onInvalidCapture={() => setPasswordDisplayReset(value => value + 1)} onSubmit={async e=>{e.preventDefault();setPasswordDisplayReset(value=>value+1);setBusy(true);setMessage("");try{const {error}=await supabase.auth.signInWithPassword({email:email.trim(),password});if(error)setMessage("access.signInFailed");}catch{setMessage("access.signInUnavailable");}finally{setBusy(false);}}}><label>{t("access.email")}<input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} required/></label><label>{t("access.password")}<PasswordInput resetKey={"login:"+passwordDisplayReset} name="password" autoComplete="current-password" value={password} onChange={e=>setPassword(e.target.value)} required/></label><button disabled={busy}>{t("access.signIn")}</button></form></>:<>
+      <p>{access.session.user.email}</p>{(invitation||invitationAccepted)?<>{invitationPasswordError&&<p role="alert">{t("access.invitationPasswordFailed")}</p>}{invitationSetup&&<label>{t("access.choosePassword")}<PasswordInput resetKey={"invitation:"+passwordDisplayReset} name="password" autoComplete="new-password" minLength={8} value={password} onChange={e=>setPassword(e.target.value)}/></label>}<button disabled={busy||invitationError||(invitationSetup&&password.length<8)} onClick={async()=>{
         setPasswordDisplayReset(value=>value+1);setBusy(true);setMessage('');
         try{
           if(!invitationAccepted){
             const r=await supabase.rpc('crm_invite_accept',{p_token:invitation});
-            if(r.error){setMessage('Invitation refusée : destinataire, expiration ou droits à faire vérifier par l’administrateur.');return;}
+            if(r.error){setMessage('access.invitationRefused');return;}
             setInvitationAccepted(true);setInvitation(null);
             // This marker only resumes password setup, never grants permissions.
             if(invitationSetup)window.history.replaceState(null,'','/?setup=1');
@@ -389,16 +393,17 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "publ
           // Validate recipient and privilege history BEFORE touching any password.
           if(invitationSetup){const changed=await supabase.auth.updateUser({password});if(changed.error){setInvitationPasswordError(true);return;}}
           setInvitationPasswordError(false);setPassword('');setInvitation(null);setInvitationAccepted(false);window.history.replaceState(null,'','/');retryAccess.current();
-        }catch{setMessage('Acceptation indisponible. Réessayez après vérification de la connexion.');}finally{setBusy(false);}
-      }}>{invitationAccepted?"Enregistrer mon mot de passe":"Accepter mon invitation"}</button></>:<><p role="alert">{access.error}</p><button onClick={()=>retryAccess.current()}>Réessayer la vérification</button></>}<button onClick={logout}>Se déconnecter</button></>}
-      {message&&<p role="status">{message}</p>}
+        }catch{setMessage('access.invitationUnavailable');}finally{setBusy(false);}
+      }}>{invitationAccepted?t("access.saveMyPassword"):t("access.acceptInvitation")}</button></>:<><p role="alert">{access.error ? t(access.error) : ""}</p><button onClick={()=>retryAccess.current()}>{t("access.retryVerification")}</button></>}<button onClick={logout}>{t("access.signOut")}</button></>}
+      {message&&<p role="status">{t(message)}</p>}
     </section></main>;
 }
-function SelectAllowed({select}:{select:()=>void}) { useEffect(select,[select]); return <p role="status">Ouverture du module autorisé…</p>; }
+function SelectAllowed({select}:{select:()=>void}) { const { t } = useI18n(); useEffect(select,[select]); return <p role="status">{t("access.opening")}</p>; }
 
 
 
 function CacheRecovery({ state }: { state: PersistentCRMCacheState }) {
+  const { t } = useI18n();
   const [responsible, setResponsible] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [recovery, setRecovery] = useState<CRMCacheRecovery | null>(null);
@@ -411,27 +416,28 @@ function CacheRecovery({ state }: { state: PersistentCRMCacheState }) {
       link.href = url; link.download = "oar-copie-recuperation.json"; link.click();
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       setRecovery(copy); setConfirmed(false); setError("");
-    } catch { setError("La copie n’a pas pu être préparée. Les données restent dans ce navigateur."); }
+    } catch { setError("access.cacheCopyFailed"); }
   }
   function purge() {
     if (!responsible || !confirmed || !recovery) return;
     try { purgeRecoveredCRMCache(recovery); window.dispatchEvent(new Event(CRM_CACHE_CHANGED)); }
-    catch { setRecovery(null); setConfirmed(false); setError("Les copies ont changé ou n’ont pas pu être effacées. Fermez les anciens onglets CRM et téléchargez une nouvelle copie avant de réessayer."); }
+    catch { setRecovery(null); setConfirmed(false); setError("access.cacheChanged"); }
   }
   return <main className={styles.shell}><section className={styles.card} data-cache-transition>
-    <p className={styles.eyebrow}>PROTECTION DU NAVIGATEUR</p>
-    <h1>Récupérer les anciennes copies CRM</h1>
-    {!state.available ? <p role="alert">Le stockage de ce navigateur est inaccessible. Les anciennes copies ne peuvent pas être vérifiées. Réservez ce profil à son propriétaire et utilisez un profil distinct pour un autre compte.</p> : <>
-      <p>{state.count} copie(s) CRM d’une utilisation antérieure sont encore enregistrées dans ce profil. La connexion et les espaces restent fermés jusqu’à leur récupération et leur effacement.</p>
-      <p>Ce profil doit rester réservé au propriétaire de ces données. Si elles ne vous appartiennent pas, fermez cette page et utilisez un autre profil navigateur.</p>
-      <p>Fermez les autres onglets de l’ancien CRM. Enregistrez la copie dans un emplacement privé sur votre ordinateur, hors du navigateur, puis vérifiez que le fichier a bien été conservé. Aucun envoi n’est effectué.</p>
-      <label className={styles.recoveryChoice}><input data-cache-owner type="checkbox" checked={responsible} onChange={event => setResponsible(event.target.checked)} />Je suis responsable de ces données et je réalise leur récupération dans mon profil privé.</label>
-      <button disabled={!responsible} onClick={downloadRecovery}>Télécharger la copie de récupération</button>
+    <LanguageSelector />
+    <p className={styles.eyebrow}>{t("access.browserProtection")}</p>
+    <h1>{t("access.recoverCopies")}</h1>
+    {!state.available ? <p role="alert">{t("access.storageUnavailable")}</p> : <>
+      <p>{t("access.cacheCopies", { count: state.count })}</p>
+      <p>{t("access.privateProfile")}</p>
+      <p>{t("access.savePrivateCopy")}</p>
+      <label className={styles.recoveryChoice}><input data-cache-owner type="checkbox" checked={responsible} onChange={event => setResponsible(event.target.checked)} />{t("access.responsible")}</label>
+      <button disabled={!responsible} onClick={downloadRecovery}>{t("access.downloadCopy")}</button>
       {recovery && <>
-        <label className={styles.recoveryChoice}><input data-cache-recovered type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />J’ai vérifié le fichier enregistré dans un emplacement privé et fermé les autres onglets de l’ancien CRM.</label>
-        <button className={styles.secondary} disabled={!responsible || !confirmed} onClick={purge}>Effacer les anciennes copies du navigateur</button>
+        <label className={styles.recoveryChoice}><input data-cache-recovered type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />{t("access.copyVerified")}</label>
+        <button className={styles.secondary} disabled={!responsible || !confirmed} onClick={purge}>{t("access.eraseCopies")}</button>
       </>}
     </>}
-    {error && <p role="alert">{error}</p>}
+    {error && <p role="alert">{t(error)}</p>}
   </section></main>;
 }

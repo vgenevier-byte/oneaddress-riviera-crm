@@ -1,0 +1,6 @@
+.selector { display:flex; gap:4px; padding:6px 0; flex-shrink:0; width:100%; }
+.selector button { display:flex; align-items:center; justify-content:center; gap:6px; min-height:42px; min-width:44px; flex:1; padding:6px 8px; border:1px solid #d4c6a9; border-radius:8px; background:transparent; color:inherit; font:inherit; font-size:12px; cursor:pointer; }
+.selector button[aria-pressed="true"] { background:#eadbbf; border-color:#a38c60; color:#20231e; font-weight:700; }
+.selector button:focus-visible { outline:3px solid #9d7b40; outline-offset:2px; }
+.compact .name { display:none; }
+@media(max-width:360px) { .name { font-size:11px; } }
