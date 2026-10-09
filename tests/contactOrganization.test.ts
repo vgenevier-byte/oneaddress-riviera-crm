@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "../lib/contactEditing";
+import { getContactLabel, validateContactIdentity, getContactIdentityValidationError } from "../lib/contactIdentity";
+import { workspaceFingerprint } from "../lib/access/workspaceSync";
 import { isEligibleVendorContact, isEligibleVendorBankContact } from "../lib/vendorContacts";
 import { getHouseTrackingWorkerHistorySummary } from "../lib/houseTracking";
 import { buildMonthlyCharges } from "../lib/monthlyCharges/calculations";
@@ -32,15 +34,17 @@ function handler(name: string, bindings: Record<string, unknown> = {}, file = so
 const historical: Contact = { ...fictionalContact, supplierCategory: "Entretien", relationshipStatus: "Prestataire", supplierZone: "Zone fictive", supplierPriceNotes: "Tarif historique", supplierStatus: "Actif", budget: 1234, preferences: "Anciennes préférences", importantNotes: "Historique conservé", supplierBankAccounts: [fictionalAccount] };
 
 for (const organizationFunction of ["Responsable fictif", ""]) {
-  test(`création membre par le handler existant, fonction ${organizationFunction ? "renseignée" : "facultative"}`, () => {
+  test(`handler membre isolé (confirmation simulée), fonction ${organizationFunction ? "renseignée" : "facultative"}`, async () => {
     const form = new FormData(); form.set("kind", memberKind); form.set("name", "Membre Fictif"); form.set("organizationFunction", organizationFunction);
     let state = { contacts: [] as Contact[] };
     const add = handler("addContact", {
       FormData: class { constructor() { return form; } }, readPostalAddress, makeId: () => "member-test", stampCreated: (c: Contact) => c,
       activeActor: "Acteur fictif", safeNumber: (v: unknown) => Number(v) || 0, getSupplierCategoryFromForm: () => { throw new Error("Aucun champ fournisseur requis"); },
-      confirmDuplicateContact: () => true, setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); }, notify: () => {}, window: { setTimeout: () => {} }
+      validateContactIdentity, currentBusinessData: { current: state },
+      persistContactRecord: async (_id: string, contact: Contact) => { state = { ...state, contacts: [contact, ...state.contacts] }; return { ok: true }; },
+      screenNotice: () => {}, confirmDuplicateContact: () => true, setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); }, notify: () => {}, window: { setTimeout: () => {} }
     });
-    add({ preventDefault() {}, currentTarget: { reset() {} } });
+    await add({ preventDefault() {}, currentTarget: { dataset: {}, reset() {} } });
     assert.equal(state.contacts[0].kind, memberKind); assert.equal(state.contacts[0].organizationFunction, organizationFunction);
     assert.equal(state.contacts[0].budget, 0); assert.equal(state.contacts[0].supplierCategory, "");
     assert.equal(isEligibleVendorContact(state.contacts[0]), false);
@@ -50,7 +54,7 @@ for (const organizationFunction of ["Responsable fictif", ""]) {
   });
 }
 
-test("reclassement réel du formulaire conserve historique et modifications concurrentes sans reclassification fournisseur", () => {
+test("formulaire isolé conserve historique et modifications concurrentes sans reclassification fournisseur", async () => {
   const form = new FormData(); form.set("kind", memberKind); form.set("organizationFunction", "  Coordination fictive  ");
   const latest = { ...historical, notes: "Note concurrente" };
   let captured: (Pick<Contact, "id"> & Partial<Contact>) | undefined;
@@ -59,11 +63,13 @@ test("reclassement réel du formulaire conserve historique et modifications conc
     FormData: class { constructor() { return form; } }, editingContact: historical, contacts: [latest], normalizeKind: handler("normalizeKind", {}, source, "ContactsView"),
     readPostalAddress, safeNumber: (v: unknown) => Number(v) || 0, getContactClientLevel: handler("getContactClientLevel"), getContactPreferredLanguage: handler("getContactPreferredLanguage"),
     getContactRelationshipStatus: handler("getContactRelationshipStatus"), getSupplierCategoryFromForm: () => { throw Error("Supplier form not mounted"); }, getContactFormUpdate, mergeContactUpdate,
+    validateContactIdentity, getContactIdentityValidationError, onDraftStateChange: () => {}, setEditingIdentityError: () => {},
     changedContactFields: { current: new Set(["kind", "organizationFunction"]) }, onUpdate: (patch: Pick<Contact, "id"> & Partial<Contact>) => { captured = patch; },
-    edition: { submit: (_form: unknown, save: () => void, after: (newer: boolean) => void) => { save(); after(false); } },
+    edition: { submit: async (_form: unknown, save: () => Promise<unknown>, after: (newer: boolean) => void) => { await save(); after(false); } },
     setEditingContact: () => {}, setSelectedContact: (c: Contact) => { selected = c; }
   }, source, "ContactsView");
   submit({ preventDefault() {}, currentTarget: {} });
+  await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(captured, { id: historical.id, kind: memberKind, organizationFunction: "Coordination fictive" });
   assert.deepEqual(selected, { ...latest, kind: memberKind, organizationFunction: "Coordination fictive" });
   assert.equal(handler("isSupplierContact")(selected), false); assert.equal(isEligibleVendorContact(selected!), false);
@@ -90,7 +96,7 @@ test("handler contributeur accepte le nouveau type sans effacer les données fou
   assert.deepEqual(mergeContactUpdate(historical, saved as Partial<Contact>), { ...historical, name: "Membre Fictif", kind: memberKind, organizationFunction: "Coordination" });
 });
 
-test("reclassement du même contact conserve liens, montants historiques et Charges mensuelles", () => {
+test("reclassement isolé (confirmation simulée) conserve liens, montants historiques et Charges mensuelles", async () => {
   const worker: HouseTrackingWorker = { id: "worker-test", contactId: historical.id, contactName: historical.name, role: "Entretien", hourlyRate: 30, status: "Actif", createdAt: "2026-09-01" };
   const entry: HouseTimeEntry = { id: "entry-test", houseId: "house-test", houseName: "Maison fictive", workerId: worker.id, workerName: historical.name, date: "2026-09-15", startTime: "08:07", endTime: "12:42", breakMinutes: 0, hourlyRate: 20, createdAt: "2026-09-15" };
   const payment: HousePayment = { id: "payment-test", houseId: "house-test", houseName: "Maison fictive", workerId: worker.id, workerName: historical.name, date: "2026-09-16", amount: 30, method: "Virement", createdAt: "2026-09-16" };
@@ -98,7 +104,9 @@ test("reclassement du même contact conserve liens, montants historiques et Char
   const before = structuredClone(state), summary = getHouseTrackingWorkerHistorySummary(worker.id, state.houseTimeEntries, state.housePayments);
   const snapshot: MonthlyChargesSnapshot = { revision: "0", sourceRevision: "0", config: { personRules: [{ source: "invoice", personId: historical.id, included: true }, { source: "hours", personId: worker.id, included: true }], exceptions: [], attachments: [] }, sources: { invoices: [{ id: fictionalInvoice.id, personId: historical.id, personLabel: historical.name, title: fictionalInvoice.title, invoiceDate: fictionalInvoice.invoiceDate, amount: fictionalInvoice.amount, status: fictionalInvoice.status }], timeEntries: [{ ...entry, personId: worker.id, personLabel: historical.name }], suppliers: [{ id: historical.id, label: historical.name }], workers: [{ id: worker.id, label: historical.name, status: "Actif" }], houses: [{ id: "house-test", name: "Maison fictive" }] }, permissions: { canContribute: true, readableSources: ["invoice", "hours"], exportableSources: ["invoice", "hours"], contactsVisible: true } };
   const total = buildMonthlyCharges(snapshot, 2026, { now: "2026-10-06" }).totalCents;
-  handler("updateContact", { mergeContactUpdate, activeActor: "Fictif", stampUpdated: (c: Contact) => c, setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); }, notify: () => {} })({ id: historical.id, kind: memberKind, organizationFunction: "Équipe fictive" });
+  await handler("updateContact", { mergeContactUpdate, validateContactIdentity, workspaceFingerprint, currentBusinessData: { current: state },
+    persistContactRecord: async (id: string, patch: Partial<Contact>) => { state = { ...state, contacts: state.contacts.map(c => c.id === id ? mergeContactUpdate(c, patch) as typeof historical : c) }; return { ok: true }; },
+    screenNotice: () => {}, activeActor: "Fictif", stampUpdated: (c: Contact) => c, setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); }, notify: () => {} })({ id: historical.id, kind: memberKind, organizationFunction: "Équipe fictive" });
   assert.deepEqual(state, { ...before, contacts: [{ ...historical, kind: memberKind, organizationFunction: "Équipe fictive" }] });
   assert.deepEqual(getHouseTrackingWorkerHistorySummary(worker.id, state.houseTimeEntries, state.housePayments), summary);
   assert.equal(buildMonthlyCharges(snapshot, 2026, { now: "2026-10-06" }).totalCents, total); assert.equal(total, 35967);
@@ -107,7 +115,7 @@ test("reclassement du même contact conserve liens, montants historiques et Char
 test("export Contacts conserve le type et Fonction dans des colonnes alignées", () => {
   const contact = { ...historical, kind: memberKind, organizationFunction: 'Coordination, "Équipe"' };
   let csv = "";
-  handler("exportCRMAsCsv", { getContactClientLevel: handler("getContactClientLevel"), getContactPreferredLanguage: handler("getContactPreferredLanguage"), getContactRelationshipStatus: handler("getContactRelationshipStatus"), toCsv: handler("toCsv", { csvEscape: handler("csvEscape") }), downloadTextFile: (_name: string, content: string) => { csv = content; } })({ contacts: [contact], leads: [], properties: [], vehicles: [], boats: [], tasks: [], planningEntries: [] });
+  handler("exportCRMAsCsv", { getContactLabel, getContactClientLevel: handler("getContactClientLevel"), getContactPreferredLanguage: handler("getContactPreferredLanguage"), getContactRelationshipStatus: handler("getContactRelationshipStatus"), toCsv: handler("toCsv", { csvEscape: handler("csvEscape") }), downloadTextFile: (_name: string, content: string) => { csv = content; } })({ contacts: [contact], leads: [], properties: [], vehicles: [], boats: [], tasks: [], planningEntries: [] });
   assert.match(csv, /Notes,Fonction\n/); assert.ok(csv.includes(memberKind)); assert.ok(csv.includes('"Coordination, ""Équipe"""'));
 });
 

@@ -6,12 +6,18 @@ export function readPostalAddress(form: FormData, existing = ""): string {
 
 // Merge into the current record so partial updates retain unrelated properties.
 export function mergeContactUpdate(contact: Contact, update: Partial<Contact>): Contact {
-  return {
+  const merged = {
     ...contact,
     ...update,
     id: contact.id,
     postalAddress: update.postalAddress ?? contact.postalAddress
   };
+  // Old clients/projections may omit the new field; omission is not deletion.
+  if (update.entityType === undefined) {
+    if (contact.entityType !== undefined) merged.entityType = contact.entityType;
+    else delete merged.entityType;
+  }
+  return merged;
 }
 
 export function getContactFormUpdate(values: Contact, changedFields: Iterable<string>): Partial<Contact> {

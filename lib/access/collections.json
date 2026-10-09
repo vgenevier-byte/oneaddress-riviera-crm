@@ -4,6 +4,14 @@
     "module": "contacts",
     "label": "Contacts",
     "fields": {
+      "entityType": {
+        "type": "string",
+        "label": "Nature de la fiche",
+        "enum": [
+          "person",
+          "company"
+        ]
+      },
       "name": {
         "type": "string",
         "label": "Nom"

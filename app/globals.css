@@ -9662,3 +9662,20 @@ html {
 .business-workspace button:disabled { opacity: .48; cursor: not-allowed; }
 .business-workspace .card { min-width: 0; }
 @media (max-width: 760px) { .business-workspace .two-columns { grid-template-columns: minmax(0,1fr); } }
+
+/* Contact identity stays mounted across draft nature and language changes. */
+[data-crm-module="contacts"] .contact-identity-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+[data-crm-module="contacts"] .contact-identity-fields .full { grid-column: 1 / -1; }
+[data-crm-module="contacts"] .contact-person-heading { margin: 2px 0 0; font-weight: 600; }
+[data-crm-module="contacts"] .contact-person-heading[hidden] { display: none; }
+[data-crm-module="contacts"] .contact-field-error { color: #9d302a; font-size: 0.82rem; line-height: 1.4; }
+[data-crm-module="contacts"] .contact-identity-fields [aria-invalid="true"] { border-color: #9d302a; }
+@media (max-width: 620px) {
+  [data-crm-module="contacts"] .contact-identity-fields { grid-template-columns: minmax(0, 1fr); }
+}

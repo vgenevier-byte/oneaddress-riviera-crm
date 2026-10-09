@@ -1,6 +1,9 @@
 /** Known application messages only; unknown errors never expose a server payload. */
 type Translate = (key: string, variables?: Record<string, string | number>) => string;
 const knownMessages: Record<string, string> = {
+  "contact_name_required": "crm.contacts.validation.contact_name_required",
+  "contact_company_name_required": "crm.contacts.validation.contact_company_name_required",
+  "contact_entity_type_invalid": "crm.contacts.validation.contact_entity_type_invalid",
   "Références indisponibles sans droit de lecture :": "modules.moduleWorkspace.referencesUnavailableWithoutReadAccess",
   ". Les données déjà liées sont conservées.": "modules.moduleWorkspace.existingLinksAreRetained",
   "Vous n’avez plus accès à Tâches.": "modules.tasksWorkspace.youNoLongerHaveAccessToTasks",

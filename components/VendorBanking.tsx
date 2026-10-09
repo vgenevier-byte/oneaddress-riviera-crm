@@ -1,7 +1,9 @@
 "use client";
+import { getContactLabel } from "@/lib/contactIdentity";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useEffect, useRef, useState } from "react";
+import type { FormSave } from "@/lib/access/useConfirmedForm";
 import type { Contact, VendorBankAccount, VendorInvoice } from "../lib/types";
 import { addVendorBankAccount, formatIban, getInvoicePaymentReference, getPrimaryVendorBankAccount, getVerifiedVendorBankAccounts, hasBankAccountChange, maskIban, normalizeBic, normalizeIban, selectInvoiceBankAccount, updateBankAccountStatus } from "../lib/vendorBanking";
 import { fetchDriveAPI } from "../lib/driveClient";
@@ -52,22 +54,31 @@ function RibDocument({ account }: { account?: VendorBankAccount }) {
     {url && <BankingDialog title={t("modules.vendorBanking.originalBankDetails")} onClose={() => setUrl("")}><iframe title={t("modules.vendorBanking.originalBankDetails")} src={url} className="banking-preview" /></BankingDialog>}
   </>;
 }
-export function VendorBankAccounts({ contact, actor, onUpdate }: { contact: Contact; actor: string; onUpdate: (contact: Contact) => void }) {
+export function VendorBankAccounts({ contact, actor, onUpdate }: { contact: Contact; actor: string; onUpdate: (contact: Contact) => FormSave }) {
   const {t, label: uiLabel, formatDate: uiDate} = useI18n();
 
   const [adding, setAdding] = useState(false);
   const [iban, setIban] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const saving = useRef(false);
   const accounts = contact.supplierBankAccounts || [];
   const changed = hasBankAccountChange(contact, iban);
-  function action(id: string, kind: "verify" | "primary" | "archive") {
+  async function action(id: string, kind: "verify" | "primary" | "archive") {
+    if (saving.current) return;
     if (kind === "verify" && !window.confirm(t("modules.vendorBanking.confirmThatYouHaveVerifiedTheseBankDetailsWithTheSupplierThrough"))) return;
-    try { onUpdate({ ...contact, supplierBankAccounts: updateBankAccountStatus(accounts, id, kind, actor) }); setError(""); }
-    catch (e) { setError(e instanceof Error ? e.message : "Action impossible."); }
+    saving.current = true; setBusy(true);
+    try {
+      const result = await onUpdate({ ...contact, supplierBankAccounts: updateBankAccountStatus(accounts, id, kind, actor) });
+      if (result && !result.ok) { setError(result.message); return; }
+      setError("");
+    } catch (e) { setError(e instanceof Error ? e.message : "Action impossible."); }
+    finally { saving.current = false; setBusy(false); }
   }
   async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setError("");
+    event.preventDefault();
+    if (saving.current) return;
+    saving.current = true; setError("");
     const form = new FormData(event.currentTarget);
     const account: VendorBankAccount = { id: crypto.randomUUID(), accountHolder: String(form.get("holder") || "").trim(), iban: normalizeIban(iban), bic: normalizeBic(String(form.get("bic") || "")), bankName: String(form.get("bank") || "").trim(), label: String(form.get("label") || "").trim(), status: "À vérifier", isPrimary: false, createdAt: new Date().toISOString(), createdBy: actor };
     try {
@@ -80,12 +91,14 @@ export function VendorBankAccounts({ contact, actor, onUpdate }: { contact: Cont
         if (!response.ok) { const payload = await response.json().catch(() => ({})); throw new Error(payload.error || "Upload RIB impossible."); }
         Object.assign(next[next.length - 1], await response.json());
       }
-      onUpdate({ ...contact, supplierBankAccounts: next }); setAdding(false); setIban("");
+      const result = await onUpdate({ ...contact, supplierBankAccounts: next });
+      if (result && !result.ok) { setError(result.message); return; }
+      setAdding(false); setIban("");
     } catch (e) { setError(e instanceof Error ? e.message : "Ajout impossible."); }
-    finally { setBusy(false); }
+    finally { saving.current = false; setBusy(false); }
   }
   return <section className="vendor-banking" aria-label={t("modules.vendorBanking.bankDetails")}>
-    <div className="banking-heading"><div><p className="eyebrow">{t("modules.vendorBanking.bankDetails")}</p><h3>{t("modules.vendorBanking.supplierBankDetails")}</h3></div><button type="button" className="primary-button" onClick={() => { setAdding(true); setError(""); }}>{t("modules.vendorBanking.addBankDetails")}</button></div>
+    <div className="banking-heading"><div><p className="eyebrow">{t("modules.vendorBanking.bankDetails")}</p><h3>{t("modules.vendorBanking.supplierBankDetails")}</h3></div><button type="button" className="primary-button" disabled={busy} onClick={() => { setAdding(true); setError(""); }}>{t("modules.vendorBanking.addBankDetails")}</button></div>
     {error && <p role="alert" className="banking-warning">{moduleMessage(error, t)}</p>}
     {!accounts.length && <p className="muted-line">{t("modules.vendorBanking.noBankDetailsRecordedForThisSupplier")}</p>}
     {accounts.map(account => <article className="banking-account" key={account.id}>
@@ -94,9 +107,9 @@ export function VendorBankAccounts({ contact, actor, onUpdate }: { contact: Cont
       {account.verifiedAt && <p className="muted-line">{t("modules.vendorBanking.verifiedOn")} {uiDate(account.verifiedAt)}  {t("modules.vendorBanking.by")} {account.verifiedBy || t("modules.vendorBanking.userNotRecorded")}</p>}
       {account.status === "À vérifier" && hasBankAccountChange(contact, account.iban) && <p className="banking-warning">{t("modules.vendorBanking.warningBankDetailsHaveChangedTheReceivedIBANDiffersFromTheCurrently")}</p>}
       <div className="banking-actions"><CopyButton label={t("modules.vendorBanking.copyIBAN")} value={normalizeIban(account.iban)} /><CopyButton label={t("modules.vendorBanking.copyBIC")} value={normalizeBic(account.bic)} />
-        {account.status === "À vérifier" && <button type="button" className="primary-button" onClick={() => action(account.id, "verify")}>{t("modules.vendorBanking.verifyBankDetails")}</button>}
-        {account.status === "Vérifié" && !account.isPrimary && <button type="button" className="secondary-button" onClick={() => action(account.id, "primary")}>{t("modules.vendorBanking.setAsPrimary")}</button>}
-        {account.status !== "Archivé" && <button type="button" className="secondary-button" onClick={() => action(account.id, "archive")}>{t("modules.vendorBanking.archive")}</button>}
+        {account.status === "À vérifier" && <button type="button" className="primary-button" disabled={busy} onClick={() => void action(account.id, "verify")}>{t("modules.vendorBanking.verifyBankDetails")}</button>}
+        {account.status === "Vérifié" && !account.isPrimary && <button type="button" className="secondary-button" disabled={busy} onClick={() => void action(account.id, "primary")}>{t("modules.vendorBanking.setAsPrimary")}</button>}
+        {account.status !== "Archivé" && <button type="button" className="secondary-button" disabled={busy} onClick={() => void action(account.id, "archive")}>{t("modules.vendorBanking.archive")}</button>}
       </div><RibDocument account={account} />
     </article>)}
     {adding && <BankingDialog title={t("modules.vendorBanking.addBankDetails_668db7")} onClose={() => { if (!busy) setAdding(false); }}>
@@ -125,7 +138,7 @@ export function VendorInvoicePayment({ invoice, contact, onUpdate, onOpenContact
   const reference = getInvoicePaymentReference(invoice);
   if (invoice.status === "Payé") return invoice.paymentMethod?.trim().toLowerCase() === "virement" && historical ? <div className="vendor-banking"><p className="muted-line">{t("modules.vendorBanking.transferMadeTo")} {normalizeIban(historical.iban).slice(-4)} · {uiLabel(historical.status, "modules")}</p><RibDocument account={historical} /></div> : null;
   if (invoice.status === "Annulé" || invoice.status === "En attente de facture" || getVendorInvoiceRemaining(invoice) <= 0) return null;
-  return <section className="vendor-banking" aria-label={t("modules.quickRepliesView.payment")}><p className="eyebrow">{t("modules.quickRepliesView.payment")}</p><p>{t("modules.vendorBanking.payee")} <strong>{defaultAccount?.accountHolder || contact?.companyName || contact?.name || invoice.contactName}</strong></p>
+  return <section className="vendor-banking" aria-label={t("modules.quickRepliesView.payment")}><p className="eyebrow">{t("modules.quickRepliesView.payment")}</p><p>{t("modules.vendorBanking.payee")} <strong>{defaultAccount?.accountHolder || (contact ? getContactLabel(contact) : invoice.contactName)}</strong></p>
     <p className="banking-status">{defaultAccount ? (defaultAccount.isPrimary ? t("modules.vendorBanking.verifiedPrimaryAccount") : t("modules.vendorBanking.verifiedSelectedAccount")) : verified.length ? t("modules.vendorBanking.chooseVerifiedBankDetails") : contact?.supplierBankAccounts?.some(a => a.status === "À vérifier") ? t("modules.vendorBanking.bankDETAILSAWAITINGVERIFICATION") : t("modules.vendorBanking.bankDetailsMissing")}</p>
     <div className="banking-actions">{verified.length > 0 && <button className="primary-button" type="button" onClick={() => { setSelected(defaultAccount?.id || ""); setError(""); setPreparing(true); }}>{t("modules.vendorBanking.preparePayment")}</button>}
       {contact && <button className="secondary-button" type="button" onClick={onOpenContact}>{verified.length ? t("modules.vendorBanking.manageBankDetails") : t("modules.vendorBanking.addSupplierBankDetails")}</button>}</div>
@@ -141,6 +154,6 @@ export function VendorInvoicePayment({ invoice, contact, onUpdate, onOpenContact
     </div></BankingDialog>}
   </section>;
 }
-export function VendorBankContactDialog({ contact, actor, onUpdate, onClose }: { contact: Contact; actor: string; onUpdate: (contact: Contact) => void; onClose: () => void }) {
-  return <BankingDialog title={contact.companyName || contact.name} onClose={onClose}><VendorBankAccounts contact={contact} actor={actor} onUpdate={onUpdate} /></BankingDialog>;
+export function VendorBankContactDialog({ contact, actor, onUpdate, onClose }: { contact: Contact; actor: string; onUpdate: (contact: Contact) => FormSave; onClose: () => void }) {
+  return <BankingDialog title={getContactLabel(contact)} onClose={onClose}><VendorBankAccounts contact={contact} actor={actor} onUpdate={onUpdate} /></BankingDialog>;
 }

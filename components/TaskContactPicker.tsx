@@ -3,6 +3,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { matchesTaskContact, taskContactLabel, type TaskContactOption } from "@/lib/tasks/contactOptions";
+import { getContactSecondaryLabel } from "@/lib/contactIdentity";
 
 type Props = {
   options: TaskContactOption[];
@@ -13,7 +14,7 @@ type Props = {
 
 function contactInformation(contact: TaskContactOption) {
   const label = taskContactLabel(contact).trim();
-  return [contact.company?.trim(), contact.email?.trim()].filter(value => value && value !== label).join(" · ");
+  return [getContactSecondaryLabel({ ...contact, companyName: contact.company }), contact.email?.trim()].filter(value => value && value !== label).join(" · ");
 }
 
 /** The text is a local search only. A link changes only after an explicit choice or removal. */

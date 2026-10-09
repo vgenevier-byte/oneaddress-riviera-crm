@@ -248,9 +248,11 @@ export default function VendorQuotesView({
       ...(editingQuote || {}),
       id: quoteId,
       contactId,
-      contactName: contact
-        ? getVendorBusinessName(contact)
-        : String(editingQuote?.contactName || "").trim(),
+      contactName: editingQuote && contactId === (editingQuote.contactId || "")
+        ? editingQuote.contactName
+        : contact
+          ? getVendorBusinessName(contact)
+          : String(editingQuote?.contactName || "").trim(),
       contactPersonName: contact
         ? getVendorContactPersonName(contact)
         : String(editingQuote?.contactPersonName || "").trim(),

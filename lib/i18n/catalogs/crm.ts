@@ -1,6 +1,20 @@
 import type { Catalogue } from "../types";
 
 export const crmMessages: Catalogue = {
+  "crm.leads.historicalContact": {"fr": "Contact historique conservé : {name}", "en": "Historical contact retained: {name}"},
+  "crm.contacts.entityType.label": {"fr": "Nature de la fiche", "en": "Record type"},
+  "crm.contacts.entityType.person": {"fr": "Personne", "en": "Person"},
+  "crm.contacts.entityType.company": {"fr": "Entreprise", "en": "Company"},
+  "crm.contacts.entityType.unqualified": {"fr": "Non renseignée", "en": "Not specified"},
+  "crm.contacts.identity.companyNameRequired": {"fr": "Nom de l’entreprise — obligatoire", "en": "Company name — required"},
+  "crm.contacts.identity.companyAffiliationOptional": {"fr": "Entreprise de rattachement — facultative", "en": "Company affiliation — optional"},
+  "crm.contacts.identity.contactPersonOptional": {"fr": "Interlocuteur — facultatif", "en": "Contact person — optional"},
+  "crm.contacts.identity.contactPerson": {"fr": "Interlocuteur :", "en": "Contact person:"},
+  "crm.contacts.identity.lastNameRequired": {"fr": "Nom de famille — obligatoire", "en": "Last name — required"},
+  "crm.contacts.identity.lastNameOptional": {"fr": "Nom de famille — facultatif", "en": "Last name — optional"},
+  "crm.contacts.validation.contact_name_required": {"fr": "Veuillez renseigner le nom de famille.", "en": "Please enter the last name."},
+  "crm.contacts.validation.contact_company_name_required": {"fr": "Veuillez renseigner le nom de l’entreprise.", "en": "Please enter the company name."},
+  "crm.contacts.validation.contact_entity_type_invalid": {"fr": "Veuillez choisir Personne ou Entreprise.", "en": "Please choose Person or Company."},
   "crm.quotes.6ba4d09b21": {
     "fr": "Sélectionnez un client.",
     "en": "Select a client."

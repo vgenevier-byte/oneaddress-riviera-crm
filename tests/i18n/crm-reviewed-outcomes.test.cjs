@@ -13,6 +13,7 @@ const {renderToStaticMarkup} = require('react-dom/server');
 const {translate} = require('../../lib/i18n/engine.ts');
 const {crmMessages} = require('../../lib/i18n/catalogs/crm.ts');
 const {modulesMessages} = require('../../lib/i18n/catalogs/modules.ts');
+const {getContactIdentityValidationError} = require('../../lib/contactIdentity.ts');
 
 const root = path.resolve(__dirname, '../..');
 const source = fs.readFileSync(path.join(root, 'components/CRMApp.tsx'), 'utf8');
@@ -39,7 +40,7 @@ const t = (key, variables) => translate(key, language, variables);
 const production = compile([
   ...['screenNotice', 'knownCRMErrors', 'knownConfirmedFormMessages', 'confirmedFormNotice', 'ConfirmedFormMessage'].map(name => declaration(name)),
   'module.exports = {confirmedFormNotice, ConfirmedFormMessage};',
-].join('\n'), {crmMessages, modulesMessages, useI18n: () => ({t})});
+].join('\n'), {crmMessages, modulesMessages, getContactIdentityValidationError, useI18n: () => ({t})});
 const newerDraft = modulesMessages['modules.common.newerDraftRetained'].fr;
 const unconfirmed = modulesMessages['modules.common.saveUnconfirmedReview'].fr;
 const renderNotice = (message, inline = false) => renderToStaticMarkup(React.createElement(production.ConfirmedFormMessage, {message, inline}));
@@ -96,8 +97,8 @@ test('all four real form renderers use the outcome component, preserving the inl
   assert.deepEqual(callers, [
     {message: 'confirmation.message', inline: false},
     {message: 'hourConfirmation.message', inline: true},
-    {message: 'creation.message', inline: false},
-    {message: 'edition.message', inline: false},
+    {message: 'getContactIdentityValidationError(creation.message) ? "" : creation.message', inline: false},
+    {message: 'getContactIdentityValidationError(edition.message) ? "" : edition.message', inline: false},
   ]);
   assert.doesNotMatch(source, /safeCRMError\((?:creation|edition|confirmation|hourConfirmation)\.message\)/);
 });

@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "../lib/contactEditing";
+import { validateContactIdentity } from "../lib/contactIdentity";
+import { workspaceFingerprint } from "../lib/access/workspaceSync";
 import { matchesContactSearch } from "../lib/contactSearch";
 import { fictionalContact, fictionalAccount } from "./fixtures/vendorBanking";
 import { isEligibleVendorContact } from "../lib/vendorContacts";
@@ -26,7 +28,7 @@ function handler(name: string, bindings: Record<string, unknown> = {}) {
 
 for (const kind of ["Client", "Prestataire", "Propriétaire"] as const) {
   for (const postalAddress of [address, ""]) {
-    test(`création réelle du handler : ${kind}, adresse ${postalAddress ? "multiligne" : "absente"}`, () => {
+    test(`handler de création isolé (confirmation simulée) : ${kind}, adresse ${postalAddress ? "multiligne" : "absente"}`, async () => {
       const form = new FormData(); form.set("kind", kind); form.set("name", "Contact Fictif");
       if (postalAddress) form.set("postalAddress", postalAddress);
       let state = { contacts: [] as Contact[] };
@@ -34,10 +36,12 @@ for (const kind of ["Client", "Prestataire", "Propriétaire"] as const) {
         FormData: class { constructor() { return form; } }, readPostalAddress,
         makeId: () => "contact-test", stampCreated: (c: Contact) => c, activeActor: "Test",
         safeNumber: (v: unknown) => Number(v) || 0, getSupplierCategoryFromForm: () => "Entretien",
+        validateContactIdentity, currentBusinessData: { current: state },
+        persistContactRecord: async (_id: string, contact: Contact) => { state = { ...state, contacts: [contact, ...state.contacts] }; return { ok: true }; },
         confirmDuplicateContact: () => true, setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); },
         notify: () => {}, screenNotice: () => {}, window: { setTimeout: () => {} }
       });
-      add({ preventDefault() {}, currentTarget: { reset() {} } });
+      await add({ preventDefault() {}, currentTarget: { dataset: {}, reset() {} } });
       assert.equal(state.contacts[0].postalAddress, postalAddress);
       assert.equal(state.contacts[0].kind, kind);
     });
@@ -54,24 +58,29 @@ test("champ absent préservé, effacement explicite, adresse étrangère et anci
   assert.equal(mergeContactUpdate(fictionalContact, { notes: "Autre note" }).postalAddress, "");
 });
 
-test("modification réelle : RIB, identité, propriétés et liens conservés, traçabilité habituelle", () => {
+test("handler de modification isolé (confirmation simulée) : RIB, identité, propriétés, liens et traçabilité conservés", async () => {
   const original = { ...fictionalContact, postalAddress: address, supplierZone: "Zone fictive", budget: 999,
     preferences: "Préférences historiques", importantNotes: "À conserver", unknownProperty: { quoteId: "q-fictif" },
     supplierBankAccounts: [fictionalAccount, { ...fictionalAccount, id: "archive", status: "Archivé" as const, isPrimary: false }] };
   const invoice = { contactId: original.id, paymentBankAccountId: fictionalAccount.id };
   let state = { contacts: [original], invoices: [invoice], quotes: [{ contactId: original.id }] };
   const initial = structuredClone(state);
-  const update = handler("updateContact", { mergeContactUpdate, activeActor: "Test",
+  const currentBusinessData = { current: state };
+  const update = handler("updateContact", { mergeContactUpdate, validateContactIdentity, workspaceFingerprint, currentBusinessData,
+    persistContactRecord: async (id: string, patch: Partial<Contact>) => {
+      state = { ...state, contacts: state.contacts.map(c => c.id === id ? { ...mergeContactUpdate(c, patch), updatedBy: "Test", updatedAt: "test-time" } as typeof original : c) };
+      currentBusinessData.current = state; return { ok: true };
+    }, activeActor: "Test",
     stampUpdated: (c: Contact, actor: string) => ({ ...c, updatedBy: actor, updatedAt: "test-time" }),
     setData: (fn: (s: typeof state) => typeof state) => { state = fn(state); }, notify: () => {}, screenNotice: () => {} });
-  update({ id: original.id, postalAddress: "新しい住所\nÉtage 2" });
+  await update({ id: original.id, postalAddress: "新しい住所\nÉtage 2" });
   assert.deepEqual(state.contacts[0], { ...original, postalAddress: "新しい住所\nÉtage 2", updatedBy: "Test", updatedAt: "test-time" });
   assert.deepEqual(state.invoices, initial.invoices); assert.deepEqual(state.quotes, initial.quotes);
-  update({ id: original.id, notes: "Notes modifiées" });
+  await update({ id: original.id, notes: "Notes modifiées" });
   assert.equal(state.contacts[0].postalAddress, "新しい住所\nÉtage 2");
-  update({ id: original.id, postalAddress: undefined });
+  await update({ id: original.id, postalAddress: undefined });
   assert.equal(state.contacts[0].postalAddress, "新しい住所\nÉtage 2");
-  update({ id: original.id, postalAddress: "" }); assert.equal(state.contacts[0].postalAddress, "");
+  await update({ id: original.id, postalAddress: "" }); assert.equal(state.contacts[0].postalAddress, "");
 });
 
 test("seuls les champs modifiés sont transmis, même si le formulaire propose des valeurs par défaut", () => {

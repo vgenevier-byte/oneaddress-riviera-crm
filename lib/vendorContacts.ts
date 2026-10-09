@@ -1,4 +1,5 @@
 import type { Contact } from "./types";
+import { getContactLabel, getContactPersonName } from "./contactIdentity";
 
 type SearchableVendorContact = Contact & {
   activity?: string;
@@ -33,11 +34,12 @@ export function normalizeVendorContactSearch(value?: string | number | null) {
 }
 
 export function getVendorContactPersonName(contact: Contact) {
-  const fullName = [contact.firstName, contact.name].filter(Boolean).join(" ").trim();
+  const fullName = getContactPersonName(contact);
   return fullName || String(contact.supplierContactName || "").trim();
 }
 
 export function getVendorBusinessName(contact: Contact) {
+  if (contact.entityType !== undefined) return getContactLabel(contact);
   return (
     String(contact.companyName || "").trim() ||
     getVendorContactPersonName(contact) ||

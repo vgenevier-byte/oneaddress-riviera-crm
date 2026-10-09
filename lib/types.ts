@@ -1,4 +1,5 @@
 export type ContactKind = "Client" | "Propriétaire" | "Prestataire" | "Membre de l’organisation";
+export type ContactEntityType = "person" | "company";
 export type SupplierCategory = string;
 export type SupplierQuality = "Standard" | "Premium" | "Très premium";
 export type SupplierReliability = "À tester" | "Fiable" | "Très fiable" | "À éviter";
@@ -53,6 +54,8 @@ export type VendorBankAccount = {
 export type Contact = {
   supplierBankAccounts?: VendorBankAccount[];
   id: string;
+  // Absent on historical records; never infer this from their category/company.
+  entityType?: ContactEntityType;
   name: string;
   firstName?: string;
   civility?: "M" | "MME" | "";
