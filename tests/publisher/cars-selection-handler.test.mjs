@@ -73,7 +73,7 @@ await test('car selections are validated before admission and retain legacy oper
   for (const invalid of [
     { carBrand: 'Ferrari' }, { carBrand: null }, { carBrand: {} },
     { carModel: 'fictional' }, { carModel: null }, { carModel: [] },
-    { carType: 'suv', carBrand: 'porsche' },
+    { carType: 'suv', carBrand: 'mclaren' },
     { carType: 'convertible', carBrand: 'land-rover' },
     { carType: 'suv', carBrand: 'land-rover', carModel: 'porsche-911-carrera-coupe-2024' },
     { carModel: 'range-rover-l460-swb-se' },

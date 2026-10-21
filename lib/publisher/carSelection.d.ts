@@ -1,5 +1,5 @@
 export type CarType = 'auto' | 'suv' | 'saloon' | 'coupe_gt' | 'sports_car' | 'convertible' | 'supercar' | 'luxury_van';
-export type CarBrandId = 'auto' | 'land-rover' | 'porsche' | 'bentley' | 'lamborghini' | 'mercedes-benz';
+export type CarBrandId = 'auto' | 'land-rover' | 'porsche' | 'bentley' | 'lamborghini' | 'mercedes-benz' | 'ferrari' | 'rolls-royce' | 'aston-martin' | 'mclaren' | 'bmw' | 'audi' | 'maserati' | 'alpine' | 'lotus' | 'bugatti' | 'pagani' | 'koenigsegg' | 'lexus' | 'cadillac' | 'jaguar';
 export interface CarSelection {
   carType: CarType;
   carBrand: CarBrandId;
@@ -23,6 +23,7 @@ export interface CarBrand {
 export const CAR_TYPES: readonly CarType[];
 export const CAR_CATALOGUE_VERSION: string;
 export const CAR_CATALOGUE: readonly CarReference[];
+export const CAR_CATALOGUES: Readonly<Record<string, readonly CarReference[]>>;
 export function normalizeCarType(value?: unknown): CarType;
 export function availableCarBrands(type?: string): CarBrand[];
 export function availableCarModels(type?: string, brand?: string): CarReference[];

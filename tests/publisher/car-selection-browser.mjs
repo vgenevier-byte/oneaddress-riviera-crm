@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { directory, fixture, trace } from './car-selection-local.mjs';
+import { CAR_TYPES, availableCarBrands, availableCarModels } from '../../lib/publisher/carSelection.js';
 const { chromium, webkit } = await import(pathToFileURL(process.env.PLAYWRIGHT_MODULE || '/Users/vg/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs').href);
 const output = new URL('../../docs/publisher/car-selection/screenshots/', import.meta.url).pathname;
 mkdirSync(output, { recursive: true });
 const checks = [], errors = [], external = [], mutations = [];
 const check = async (name, run) => { await run(); checks.push(name); writeFileSync(`${directory}/browser-progress.json`, JSON.stringify({ checks, errors, external }, null, 2)); console.log('PASS ' + name); };
-const types = ['auto','suv','saloon','coupe_gt','sports_car','convertible','supercar','luxury_van'];
+const types = CAR_TYPES;
+const brandValues = type => ['auto', ...availableCarBrands(type).map(brand => brand.id)];
+const modelValues = (type, brand) => ['auto', ...availableCarModels(type, brand).map(reference => reference.id)];
 async function ready(page) { await page.getByRole('heading', { name: 'Instagram Publisher', exact: true }).waitFor(); await page.locator('.publisher-loading').waitFor({ state: 'hidden' }); }
 async function login(page, who, navigate = true) {
   if (navigate) await page.goto(`${fixture.app}/publisher`);
@@ -58,14 +61,19 @@ try {
     const brand = page.getByLabel('Marque', { exact: true }), model = page.getByLabel('Modèle', { exact: true });
     assert.equal(await brand.inputValue(), 'auto'); assert.equal(await model.inputValue(), 'auto');
     assert.equal(await model.isDisabled(), true);
-    assert.deepEqual(await brand.locator('option').evaluateAll(options => options.map(x => x.value)), ['auto', 'land-rover', 'porsche', 'bentley', 'lamborghini', 'mercedes-benz']);
+    assert.deepEqual(await brand.locator('option').evaluateAll(options => options.map(x => x.value)), brandValues('auto'));
     assert.deepEqual(await select.locator('option').evaluateAll(options => options.map(x => x.value)), types);
-    for (const type of types) { await select.selectOption(type); assert.equal(await select.inputValue(), type); }
+    for (const type of types) {
+      await select.selectOption(type); assert.equal(await select.inputValue(), type);
+      assert.deepEqual(await brand.locator('option').evaluateAll(options => options.map(x => x.value)), brandValues(type));
+      assert.deepEqual(await model.locator('option').evaluateAll(options => options.map(x => x.value)), modelValues(type, 'auto'));
+    }
     await page.locator('.publisher-choice-grid').getByRole('button', { name: /^Matinale/ }).click();
     await page.locator('.publisher-choice-grid').getByRole('button', { name: /^Élégant/ }).click();
     await select.selectOption('suv');
-    assert.deepEqual(await brand.locator('option').evaluateAll(options => options.map(x => x.value)), ['auto', 'land-rover']);
+    assert.deepEqual(await brand.locator('option').evaluateAll(options => options.map(x => x.value)), brandValues('suv'));
     await brand.selectOption('land-rover'); assert.equal(await model.isDisabled(), false);
+    assert.deepEqual(await model.locator('option').evaluateAll(options => options.map(x => x.value)), modelValues('suv', 'land-rover'));
     await model.selectOption('range-rover-l460-swb-se');
     for (const label of [/^Paysages/, /^Immobilier/, /^Bateaux/]) {
       await page.locator('.publisher-choice-grid').getByRole('button', { name: label }).click();
@@ -94,8 +102,19 @@ try {
     assert.equal(await model.inputValue(), 'auto'); assert.equal(await brand.inputValue(), 'bentley');
     await model.selectOption('bentley-continental-gtc-speed-gen4');
     await type.selectOption('suv');
+    assert.equal(await brand.inputValue(), 'bentley'); assert.equal(await model.inputValue(), 'auto');
+    assert.equal(await model.isDisabled(), false);
+    assert.deepEqual(await model.locator('option').evaluateAll(options => options.map(x => x.value)), modelValues('suv', 'bentley'));
+    assert.match(await page.locator('.publisher-car-type [role=status]').textContent(), /Le modèle n’est plus compatible/);
+    const bentleySuvModels = availableCarModels('suv', 'bentley');
+    assert.ok(bentleySuvModels.length, 'Bentley now retains its brand through its documented SUV models');
+    await model.selectOption(bentleySuvModels[0].id);
+    const incompatibleType = types.find(candidate => candidate !== 'auto' && !availableCarBrands(candidate).some(available => available.id === 'bentley'));
+    assert.ok(incompatibleType, 'A truly incompatible type still tests clearing both brand and model');
+    await type.selectOption(incompatibleType);
     assert.equal(await brand.inputValue(), 'auto'); assert.equal(await model.inputValue(), 'auto'); assert.equal(await model.isDisabled(), true);
     assert.match(await page.locator('.publisher-car-type [role=status]').textContent(), /La marque et le modèle/);
+    await type.selectOption('suv');
     await brand.selectOption('land-rover'); await model.selectOption('range-rover-l460-swb-se');
     assert.match(await model.locator('option:checked').textContent(), /empattement standard.*L460/);
     assert.match(await page.locator('#publisher-car-selected-model').textContent(), /empattement standard.*L460/);

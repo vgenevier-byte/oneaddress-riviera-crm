@@ -52,8 +52,8 @@ await test('car generation freezes one server reference at the provider boundary
         const input = JSON.parse(request.input.find(item => item.role === 'user').content);
         calls.push({ name, input, request });
         assert.ok(journal.has(publisherContext.getStore().requestId), 'Canonical identity must be journaled before any provider call');
-        const visual = { image_prompt: 'A fictional Ferrari SUV with six doors and a fixed roof in an impossible CGI city.', visual_signature: 'A Ferrari SUV with six doors in an impossible CGI city' };
-        if (name === 'publisher_creative_plan') return { output_parsed: { ...visual, scene_summary: 'A fictional Ferrari SUV with six doors in an impossible CGI city.', ...planningVariant, format: selectedFormat } };
+        const visual = { image_prompt: 'A fictional Client Fake Six Wheel Phantom SUV with six doors and a fixed roof in an impossible CGI city.', visual_signature: 'A Client Fake Six Wheel Phantom SUV with six doors in an impossible CGI city' };
+        if (name === 'publisher_creative_plan') return { output_parsed: { ...visual, scene_summary: 'A fictional Client Fake Six Wheel Phantom SUV with six doors in an impossible CGI city.', ...planningVariant, format: selectedFormat } };
         if (name === 'publisher_image_prompt') return { output_parsed: { ...visual, ...regeneratedVisualVariant } };
         const editorial = { caption: 'The coast settles into a quieter rhythm. Evening brings a new perspective.', hashtags: ['#Riviera', '#CoastalRoad', '#EveningLight', '#Mediterranean'] };
         return { output_parsed: name === 'publisher_editorial_package' ? { ...editorial, music, location: 'French Riviera' } : editorial };
@@ -83,7 +83,7 @@ await test('car generation freezes one server reference at the provider boundary
   assert.ok(imageRequest.prompt.includes(fixed.manufacturer));
   assert.ok(imageRequest.prompt.includes(fixed.model));
   assert.ok(imageRequest.prompt.includes(fixed.variant));
-  assert.doesNotMatch(imageRequest.prompt, /Ferrari|six doors|CGI city|fixed roof/);
+  assert.doesNotMatch(imageRequest.prompt, /Client Fake|Six Wheel Phantom|six doors|CGI city|fixed roof/);
   assert.equal(imageRequest.n, 1);
   assert.equal(imageRequest.quality, 'medium');
   assert.equal(imageRequest.size, '1024x1280');
@@ -91,22 +91,22 @@ await test('car generation freezes one server reference at the provider boundary
     assert.ok(JSON.stringify(call.input.reference_automobile_immuable).includes(fixed.referenceId));
   }
   const editorialInput = calls.find(call => call.name === 'publisher_editorial_package').input;
-  assert.doesNotMatch(JSON.stringify(editorialInput), /Ferrari|six doors|CGI city|fixed roof/);
+  assert.doesNotMatch(JSON.stringify(editorialInput), /Client Fake|Six Wheel Phantom|six doors|CGI city|fixed roof/);
   assert.equal(editorialInput.mini_plan.format, 'Feed 4:5');
   assert.equal(editorialInput.mini_plan.scene_summary, created.scene_summary);
   assert.equal(editorialInput.mini_plan.visual_signature, created.visual_signature);
   assert.ok(imageRequest.prompt.includes(created.scene_summary));
   assert.ok(imageRequest.prompt.includes(created.visual_signature));
   assert.equal(created.scene_summary, carSceneForRun('f1000000-0000-4000-8000-000000000001'));
-  assert.doesNotMatch(JSON.stringify({ scene: stored.scene_summary, signature: stored.visual_signature }), /Ferrari|six doors|CGI city/);
+  assert.doesNotMatch(JSON.stringify({ scene: stored.scene_summary, signature: stored.visual_signature }), /Client Fake|Six Wheel Phantom|six doors|CGI city/);
 
   const firstImage = stored.image_url;
   calls.length = 0;
   const regenerated = await run('e1000000-0000-4000-8000-000000000002', () => regenerateImage('f1000000-0000-4000-8000-000000000002', { ...stored }));
   assert.deepEqual(regenerated.car_context, fixed);
   assert.equal(calls.length, 2, 'Existing prompt + image regeneration call count');
-  assert.doesNotMatch(calls.find(call => call.name === 'image').request.prompt, /Ferrari|six doors|CGI city|fixed roof/);
-  assert.doesNotMatch(stored.visual_signature, /Ferrari|six doors|CGI city/);
+  assert.doesNotMatch(calls.find(call => call.name === 'image').request.prompt, /Client Fake|Six Wheel Phantom|six doors|CGI city|fixed roof/);
+  assert.doesNotMatch(stored.visual_signature, /Client Fake|Six Wheel Phantom|six doors|CGI city/);
   assert.notEqual(stored.image_url, firstImage);
   assert.deepEqual(stored.alternative_music_ids, [2, 3]);
   assert.equal(deleted.includes(firstImage), true);
@@ -271,10 +271,10 @@ await test('car generation freezes one server reference at the provider boundary
   assert.equal(Object.hasOwn(legacyContext, 'requestedBrand'), false);
   stored = {
     ...stored, car_context: legacyContext,
-    scene_summary: 'A Ferrari Spider with a folding roof drives through a fictional city.',
-    visual_signature: 'Ferrari Spider; open roof; six doors and an enormous rear wing.',
-    caption: 'A Ferrari Spider awaits beside the sea.',
-    hashtags: ['#Ferrari', '#Spider', '#Convertible', '#Riviera'],
+    scene_summary: 'A Client Fake Six Wheel Phantom with a folding roof drives through a fictional city.',
+    visual_signature: 'Client Fake Six Wheel Phantom; open roof; six doors and an enormous rear wing.',
+    caption: 'A Client Fake Six Wheel Phantom awaits beside the sea.',
+    hashtags: ['#ClientFake', '#SixWheelPhantom', '#Convertible', '#Riviera'],
   };
   const historicalScene = stored.scene_summary;
   const historicalSignature = stored.visual_signature;
@@ -285,7 +285,7 @@ await test('car generation freezes one server reference at the provider boundary
   assert.equal(calls.length, 1, 'Existing one-call text regeneration count');
   const textInput = calls[0].input;
   assert.deepEqual(textInput.car_context, legacyContext);
-  assert.doesNotMatch(JSON.stringify(textInput), /Ferrari|Spider|folding roof|open roof|six doors|rear wing/);
+  assert.doesNotMatch(JSON.stringify(textInput), /Client Fake|Six Wheel Phantom|ClientFake|SixWheelPhantom|folding roof|open roof|six doors|rear wing/);
   for (const key of ['scene_summary', 'visual_signature', 'caption', 'hashtags']) assert.equal(Object.hasOwn(textInput, key), false);
   assert.equal(stored.scene_summary, historicalScene);
   assert.equal(stored.visual_signature, historicalSignature);
@@ -295,20 +295,20 @@ await test('car generation freezes one server reference at the provider boundary
 
   // Simulate another untouched historical caption to verify image regeneration
   // does not forward the free caption/hashtags through creativePost's spread.
-  const historicalInput = { ...stored, caption: 'A Ferrari Spider awaits beside the sea.', hashtags: ['#Ferrari', '#Spider'] };
+  const historicalInput = { ...stored, caption: 'A Client Fake Six Wheel Phantom awaits beside the sea.', hashtags: ['#ClientFake', '#SixWheelPhantom'] };
   calls.length = 0;
   await run('historical-image', () => regenerateImage('historical-image-run', historicalInput));
   assert.equal(calls.length, 2, 'Existing prompt plus one image regeneration count');
   const imageTextInput = calls.find(call => call.input).input;
   assert.deepEqual(imageTextInput.car_context, legacyContext);
-  assert.doesNotMatch(JSON.stringify(imageTextInput), /Ferrari|Spider|folding roof|open roof|six doors|rear wing/);
+  assert.doesNotMatch(JSON.stringify(imageTextInput), /Client Fake|Six Wheel Phantom|ClientFake|SixWheelPhantom|folding roof|open roof|six doors|rear wing/);
   assert.equal(Object.hasOwn(imageTextInput, 'caption'), false);
   assert.equal(Object.hasOwn(imageTextInput, 'hashtags'), false);
-  assert.doesNotMatch(calls.find(call => call.name === 'image').request.prompt, /Ferrari|Spider|folding roof|open roof|six doors|rear wing/);
+  assert.doesNotMatch(calls.find(call => call.name === 'image').request.prompt, /Client Fake|Six Wheel Phantom|ClientFake|SixWheelPhantom|folding roof|open roof|six doors|rear wing/);
   assert.deepEqual(stored.car_context, legacyContext);
   assert.deepEqual([stored.primary_music_id, ...stored.alternative_music_ids], historicalMusic);
 
-  // Unknown lower-case model names and new anatomy must also be rejected. A
+  // Off-reference lower-case model names and new anatomy must also be rejected. A
   // closed vocabulary must not depend on keeping a manufacturer blacklist up
   // to date. Inspect creation/editorial and both regeneration provider paths.
   const identityAttacks = [
@@ -348,9 +348,9 @@ await test('car generation freezes one server reference at the provider boundary
   // resolves/journals one reference before the text call, so that reference must
   // also govern the provider context instead of the original null context.
   stored = {
-    ...stored, car_context: null, caption: 'A Ferrari Spider awaits beside the sea.',
-    hashtags: ['#Ferrari', '#Spider'], scene_summary: 'A Ferrari Spider in a quiet courtyard.',
-    visual_signature: 'Ferrari Spider with an open folding roof.',
+    ...stored, car_context: null, caption: 'A Client Fake Six Wheel Phantom awaits beside the sea.',
+    hashtags: ['#ClientFake', '#SixWheelPhantom'], scene_summary: 'A Client Fake Six Wheel Phantom in a quiet courtyard.',
+    visual_signature: 'Client Fake Six Wheel Phantom with an open folding roof.',
   };
   regeneratedVisualVariant = null;
   calls.length = 0;
@@ -359,7 +359,7 @@ await test('car generation freezes one server reference at the provider boundary
   const legacyImageTextInput = calls.find(call => call.input).input;
   assert.ok(legacyImageTextInput.car_context?.referenceId);
   assert.deepEqual(legacyImageTextInput.car_context, journal.get('legacy-unattributed-image'));
-  assert.doesNotMatch(JSON.stringify(legacyImageTextInput), /Ferrari|Spider|folding roof/);
+  assert.doesNotMatch(JSON.stringify(legacyImageTextInput), /Client Fake|Six Wheel Phantom|ClientFake|SixWheelPhantom|folding roof/);
   assert.equal(Object.hasOwn(legacyImageTextInput, 'caption'), false);
   assert.equal(Object.hasOwn(legacyImageTextInput, 'hashtags'), false);
   assert.deepEqual(legacyImageResult.car_context, legacyImageTextInput.car_context);

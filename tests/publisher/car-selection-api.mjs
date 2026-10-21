@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { directory, trace, sql, request as rawRequest } from './car-selection-local.mjs';
+import { CAR_CATALOGUE, CAR_CATALOGUE_VERSION, CAR_TYPES, availableCarBrands, availableCarModels } from '../../lib/publisher/carSelection.js';
 const results=[];
 const request=(action,body,who='other',query={})=>rawRequest(action,body,who,query);
 const check=async(name,run)=>{await run();results.push(name);console.log('PASS '+name);};
@@ -19,6 +20,10 @@ async function create(direction,requestId=randomUUID()){
   return {post:response.data.post,body};
 }
 function assertBoundary(body,post){
+  const reference=CAR_CATALOGUE.find(candidate=>candidate.id===post.car_context.referenceId);
+  assert.ok(reference,'Resolved reference belongs to the current verified catalogue');
+  assert.equal(post.car_context.catalogueVersion,CAR_CATALOGUE_VERSION);
+  for(const field of ['manufacturer','model','variant','generation','visualFeatures'])assert.deepEqual(post.car_context[field],reference[field],`Canonical ${field} must match the exact catalogue reference`);
   const calls=callsFor(body.requestId);
   assert.equal(calls.filter(c=>c.kind==='responses').length,2);
   assert.equal(calls.filter(c=>c.kind==='images').length,1);
@@ -28,7 +33,7 @@ function assertBoundary(body,post){
   assert.match(image.prompt,new RegExp(post.car_context.model.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(image.prompt,/generation-specific|bonnet-to-cabin/);
   assert.match(image.prompt,/contact shadows/);
-  assert.doesNotMatch(image.prompt,/Client Fake|Six Wheel Phantom|fictional Ferrari/);
+  assert.doesNotMatch(image.prompt,/Client Fake|Six Wheel Phantom/);
   assert.equal(image.model,'gpt-image-2');assert.equal(image.quality,'medium');assert.equal(image.n,1);
   assert.ok(['1024x1280','1024x1536'].includes(image.size));
 }
@@ -49,11 +54,13 @@ try{
   });
   await check('falsified identifiers, types and incompatible combinations return clear 400 before provider/admission',async()=>{
     const before=trace().length;
+    const incompatibleTypeBrand=CAR_TYPES.filter(type=>type!=='auto').flatMap(carType=>availableCarBrands('auto').map(brand=>({carType,carBrand:brand.id}))).find(({carType,carBrand})=>!availableCarBrands(carType).some(brand=>brand.id===carBrand));
+    assert.ok(incompatibleTypeBrand,'Catalogue retains a genuinely incompatible type/brand pair for admission checks');
     const invalid=[
       {carType:'tank'},{carType:null},{carType:3},{carType:{}},
-      {carBrand:'Ferrari'},{carBrand:null},{carBrand:1},{carBrand:{}},
+      {carBrand:'six-wheel-phantom'},{carBrand:null},{carBrand:1},{carBrand:{}},
       {carModel:'phantom-client'},{carModel:null},{carModel:[]},
-      {carType:'suv',carBrand:'porsche'},
+      incompatibleTypeBrand,
       {carType:'convertible',carBrand:'porsche',carModel:'porsche-911-carrera-coupe-2024'},
       {carType:'coupe_gt',carBrand:'porsche',carModel:'bentley-continental-gt-speed-gen4'},
       {carType:'suv',carBrand:'auto',carModel:'range-rover-l460-swb-se'},
@@ -62,13 +69,13 @@ try{
     assert.equal(trace().length,before);
   });
   await check('type alone resolves a specific catalogue reference and saves all requested defaults',async()=>{
-    const {post,body}=await create({carType:'suv'});assert.equal(post.car_context.referenceId,'range-rover-l460-swb-se');assert.equal(post.car_context.requestedBrand,'auto');assert.equal(post.car_context.requestedModel,'auto');assertBoundary(body,post);
+    const {post,body}=await create({carType:'suv'});assert.ok(CAR_CATALOGUE.filter(reference=>reference.types.includes('suv')).some(reference=>reference.id===post.car_context.referenceId));assert.equal(post.car_context.requestedType,'suv');assert.equal(post.car_context.resolvedType,'suv');assert.equal(post.car_context.requestedBrand,'auto');assert.equal(post.car_context.requestedModel,'auto');assertBoundary(body,post);
   });
   await check('type plus brand resolves only a compatible model from that brand',async()=>{
-    const {post,body}=await create({carType:'convertible',carBrand:'porsche'});assert.equal(post.car_context.referenceId,'porsche-911-carrera-cabriolet-2024');assert.equal(post.car_context.requestedBrand,'porsche');assert.equal(post.car_context.requestedModel,'auto');assertBoundary(body,post);
+    const {post,body}=await create({carType:'convertible',carBrand:'porsche'});assert.ok(availableCarModels('convertible','porsche').some(reference=>reference.id===post.car_context.referenceId));assert.equal(post.car_context.requestedType,'convertible');assert.equal(post.car_context.resolvedType,'convertible');assert.equal(post.car_context.manufacturer,'Porsche');assert.equal(post.car_context.requestedBrand,'porsche');assert.equal(post.car_context.requestedModel,'auto');assertBoundary(body,post);
   });
   await check('type brand and model resolve the exact chosen body/generation even with supplied fake context',async()=>{
-    const {post,body}=await create({carType:'coupe_gt',carBrand:'bentley',carModel:'bentley-continental-gt-speed-gen4',manufacturer:'Client Fake',model:'Six Wheel Phantom',car_context:{referenceId:'client'},image_prompt:'fictional Ferrari'});
+    const {post,body}=await create({carType:'coupe_gt',carBrand:'bentley',carModel:'bentley-continental-gt-speed-gen4',manufacturer:'Client Fake',model:'Six Wheel Phantom',car_context:{referenceId:'client'},image_prompt:'fictional Six Wheel Phantom'});
     assert.equal(post.car_context.referenceId,'bentley-continental-gt-speed-gen4');assert.equal(post.car_context.requestedModel,post.car_context.referenceId);assert.match(post.car_context.variant,/fixed roof/);assert.match(post.car_context.generation,/Fourth/);assertBoundary(body,post);
   });
   await check('legacy all-auto payload always resolves a precise real model and retains its legacy fingerprint',async()=>{
