@@ -49,7 +49,14 @@ export function usePublisherApi() {
     return {
       begin,
       today: () => request<GenerationState>('today'),
-      generate: (mode: CreationMode, direction: CreativeDirection, requestId: string) => request<GenerationState>('generate', { mode, direction, requestId }),
+      generate: (mode: CreationMode, direction: CreativeDirection, requestId: string) => request<GenerationState>('generate', {
+        mode,
+        direction: {
+          universe: direction.universe, moment: direction.moment, style: direction.style,
+          ...(direction.universe === 'cars' ? { carType: direction.carType ?? 'auto' } : {}),
+        },
+        requestId,
+      }),
       generationStatus: (identifier: { id?: string; requestId?: string }) => request<GenerationState>('status', undefined, Object.fromEntries(Object.entries(identifier).filter((entry): entry is [string, string] => Boolean(entry[1])))),
       history: () => request<{ posts: PublisherPost[] }>('history'),
       regenerateText: (post: PublisherPost, requestId: string) => mutate('regenerate-text', { id: post.id, revision: post.revision, requestId }),

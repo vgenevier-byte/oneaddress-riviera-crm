@@ -884,6 +884,32 @@ export const specialistMessages: Catalogue = {
     "fr": "L’état de cette demande n’est pas encore disponible. Vos choix et la demande sont conservés ; reprenez son état sans lancer une nouvelle création.",
     "en": "The state of this request is not yet available. Your choices and request are retained; resume its state without starting a new creation."
   },
+  "publisher.car.typeLabel": { "fr": "Type de voiture", "en": "Car type" },
+  "publisher.car.type.auto": { "fr": "Au choix", "en": "Any type" },
+  "publisher.car.type.suv": { "fr": "SUV", "en": "SUV" },
+  "publisher.car.type.saloon": { "fr": "Berline", "en": "Saloon" },
+  "publisher.car.type.coupe_gt": { "fr": "Coupé / GT", "en": "Coupé / GT" },
+  "publisher.car.type.sports_car": { "fr": "Sportive", "en": "Sports car" },
+  "publisher.car.type.convertible": { "fr": "Cabriolet / Roadster", "en": "Convertible / Roadster" },
+  "publisher.car.type.supercar": { "fr": "Supercar", "en": "Supercar" },
+  "publisher.car.type.luxury_van": { "fr": "Van haut de gamme", "en": "Luxury van" },
+  "publisher.car.selectionHint": {
+    "fr": "Une référence de série vérifiée sera choisie dans ce type à la création.",
+    "en": "A verified production reference of this type will be selected when you create."
+  },
+  "publisher.car.referenceLabel": { "fr": "Référence automobile demandée", "en": "Requested car reference" },
+  "publisher.car.summary": {
+    "fr": "Type : {type} — Modèle de référence : {reference}",
+    "en": "Type: {type} — Reference model: {reference}"
+  },
+  "publisher.car.referenceDisclaimer": {
+    "fr": "Référence demandée, sans certification de fidélité du visuel généré.",
+    "en": "Requested reference; the generated visual is not certified as faithful to the model."
+  },
+  "publisher.car.legacyImageHint": {
+    "fr": "Ancien visuel sans référence enregistrée. Régénérer le visuel choisira une référence réelle « Au choix », enregistrée avec le nouveau visuel après réussite. Aucune référence n’est attribuée à l’ancienne image.",
+    "en": "This older visual has no recorded reference. Regenerating the visual will select a real “Any type” reference and save it with the new visual after success. No reference is assigned to the old image."
+  },
   "publisher.contenu_instagram_publisher_eb540c": {
     "fr": "Contenu Instagram Publisher",
     "en": "Instagram Publisher content"

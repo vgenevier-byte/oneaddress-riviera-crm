@@ -9,7 +9,7 @@
 }
 
 .publisher-root * { box-sizing: border-box !important; }
-.publisher-root button, .publisher-root input, .publisher-root a { font: inherit !important; }
+.publisher-root button, .publisher-root input, .publisher-root select, .publisher-root a { font: inherit !important; }
 
 .publisher-root .publisher-boot,
 .publisher-root .publisher-loading,
@@ -169,6 +169,13 @@
 .publisher-root .publisher-choice-grid button.is-selected .publisher-choice-check { border-color: #c9a467 !important; background: #c9a467 !important; color: #10243b !important; }
 .publisher-root .publisher-create-button { min-height: 54px !important; }
 .publisher-root .publisher-selection-hint { margin: 10px 0 0 !important; color: #7b838c !important; font-size: 12px !important; text-align: center !important; }
+.publisher-root .publisher-car-type { display: grid !important; gap: 9px !important; margin: -10px 0 28px !important; }
+.publisher-root .publisher-car-type label { font-size: 15px !important; font-weight: 650 !important; }
+.publisher-root .publisher-car-type select { width: 100% !important; min-height: 48px !important; padding: 10px 12px !important; border: 1px solid #d3c7b5 !important; border-radius: 10px !important; background: #fffdf8 !important; color: #10243b !important; font-size: 16px !important; }
+.publisher-root .publisher-car-type p, .publisher-root .publisher-car-context { margin: 0 !important; color: #68727d !important; font-size: 12px !important; line-height: 1.5 !important; }
+.publisher-root .publisher-car-context { margin: 0 0 16px !important; overflow-wrap: anywhere !important; }
+.publisher-root .publisher-car-context span { display: block !important; margin-top: 3px !important; }
+.publisher-root .publisher-car-type select:focus-visible { outline: 3px solid #9a7740 !important; outline-offset: 3px !important; }
 
 .publisher-root .publisher-generation {
   min-height: 62vh !important;
@@ -294,6 +301,7 @@
 .publisher-root .publisher-history-grid img { width: 100% !important; height: 100% !important; object-fit: cover !important; }
 .publisher-root .publisher-history-grid .publisher-history-date { position: absolute !important; left: 8px !important; top: 8px !important; padding: 5px 7px !important; border-radius: 5px !important; background: rgba(10,25,42,.8) !important; color: white !important; font-size: 11px !important; text-transform: uppercase !important; }
 .publisher-root .publisher-history-grid .publisher-history-direction { position: absolute !important; left: 8px !important; right: 8px !important; bottom: 8px !important; padding: 6px 7px !important; border-radius: 5px !important; background: rgba(10,25,42,.82) !important; color: white !important; font-size: 9px !important; line-height: 1.35 !important; text-align: left !important; text-transform: uppercase !important; }
+.publisher-root .publisher-history-car { display: block !important; margin-top: 4px !important; text-transform: none !important; }
 .publisher-root .publisher-history-grid svg { position: absolute !important; right: 8px !important; top: 8px !important; color: white !important; filter: drop-shadow(0 1px 3px #000) !important; }
 
 .publisher-root .publisher-login { min-height: 100dvh !important; display: grid !important; place-items: center !important; padding: max(24px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom)) !important; background: radial-gradient(circle at top, #213d58, #0d2035 60%) !important; }

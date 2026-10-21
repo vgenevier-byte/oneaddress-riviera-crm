@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { usePublisherApi, PublisherRequestError, type PublisherApi, type GenerationState } from './api';
 import type {
+  CarType,
   CreationMode,
   CreativeDirection,
   CreativeMoment,
@@ -28,6 +29,7 @@ import type {
   GenerationProgressState,
   MusicStatus,
   PublisherPost,
+  PublisherCarContext,
 } from './types';
 import './publisher.css';
 
@@ -36,9 +38,15 @@ type DirectionSelection = {
   universe: CreativeUniverse | '';
   moment: CreativeMoment | '';
   style: CreativeStyle | '';
+  carType?: CarType;
 };
 
-const emptyDirection: DirectionSelection = { universe: '', moment: '', style: '' };
+const emptyDirection: DirectionSelection = { universe: '', moment: '', style: '', carType: 'auto' };
+const carTypes: CarType[] = ['auto', 'suv', 'saloon', 'coupe_gt', 'sports_car', 'convertible', 'supercar', 'luxury_van'];
+
+function referenceLabel(context: PublisherCarContext) {
+  return `${context.manufacturer} ${context.model} — ${context.variant}`;
+}
 
 const universes: Array<{ value: CreativeUniverse; label: string; description: string }> = [
   { value: 'landscapes', label: 'Paysages', description: 'Horizons, mer et reliefs de la Riviera.' },
@@ -273,6 +281,14 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
       </div>
 
       <ChoiceGroup legend="1. Univers visuel" value={direction.universe} options={universes} onSelect={universe => onDirectionChange({ ...direction, universe })} />
+      {direction.universe === 'cars' && <div className="publisher-car-type">
+        <label htmlFor="publisher-car-type">{t('publisher.car.typeLabel')}</label>
+        <select id="publisher-car-type" value={direction.carType ?? 'auto'} aria-describedby="publisher-car-type-hint"
+          onChange={event => onDirectionChange({ ...direction, carType: event.target.value as CarType })}>
+          {carTypes.map(type => <option key={type} value={type}>{t(`publisher.car.type.${type}`)}</option>)}
+        </select>
+        <p id="publisher-car-type-hint">{t('publisher.car.selectionHint')}</p>
+      </div>}
       <ChoiceGroup legend="2. Moment" value={direction.moment} options={moments} onSelect={moment => onDirectionChange({ ...direction, moment })} />
       <ChoiceGroup legend="3. Style" value={direction.style} options={styles} onSelect={style => onDirectionChange({ ...direction, style })} />
 
@@ -283,6 +299,7 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
           universe: direction.universe as CreativeUniverse,
           moment: direction.moment as CreativeMoment,
           style: direction.style as CreativeStyle,
+          ...(direction.universe === 'cars' ? { carType: direction.carType ?? 'auto' } : {}),
         })}
       >
         <Sparkles size={18} />{" "}{t("publisher.creer_la_publication_f37940")}</button>
@@ -479,6 +496,7 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
         <span>{post.creative_moment}</span>
         <span>{post.creative_style}</span>
       </div>
+      {post.car_context && <CarContextSummary context={post.car_context} />}
 
       <div className={`publisher-visual ${post.format === 'Reel' ? 'is-reel' : ''}`}>
         <PublisherImage api={api} post={post} alt={t("publisher.visualAlt",{theme:post.theme})} />
@@ -491,6 +509,7 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
       </div>
 
       <button className="publisher-secondary-button" disabled={!canGenerate || published || !!busy} onClick={() => void regenerate('image')}><RefreshCw size={18} />{" "}{t("publisher.regenerer_le_visuel_003ee0")}</button>
+      {canGenerate && !published && !post.car_context && post.creative_universe === 'Voitures' && <p className="publisher-car-context">{t('publisher.car.legacyImageHint')}</p>}
       {!canExport && <p className="publisher-permission-note">{t("publisher.l_export_et_les_commandes_de_copie_sont_desa_77be00")}</p>}
       <section className="publisher-card">
         <div className="publisher-card-heading">
@@ -556,6 +575,16 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
   );
 }
 
+function CarContextSummary({ context }: { context: PublisherCarContext }) {
+  const { t } = useI18n();
+  const requested = t(`publisher.car.type.${context.requestedType}`);
+  const type = context.requestedType === 'auto' ? `${requested} (${t(`publisher.car.type.${context.resolvedType}`)})` : requested;
+  return <p className="publisher-car-context" aria-label={t('publisher.car.referenceLabel')}>
+    {t('publisher.car.summary', { type, reference: referenceLabel(context) })}
+    <span>{t('publisher.car.referenceDisclaimer')}</span>
+  </p>;
+}
+
 function HistoryGrid({ api, posts, loading, onSelect }: { api: PublisherApi; posts: PublisherPost[]; loading: boolean; onSelect: (post: PublisherPost) => void }) {
   const { t, formatDate: screenDate } = useI18n();
 
@@ -566,10 +595,14 @@ function HistoryGrid({ api, posts, loading, onSelect }: { api: PublisherApi; pos
       <div className="publisher-history-heading"><span className="publisher-kicker">{t("publisher.30_dernieres_creations_d78ff6")}</span><h2>{t("publisher.historique_34f3a0")}</h2></div>
       <div className="publisher-history-grid">
         {posts.map(item => (
-          <button key={item.id} onClick={() => onSelect(item)} aria-label={t("publisher.openPost",{universe:item.creative_universe,moment:item.creative_moment,style:item.creative_style})}>
+          <button key={item.id} onClick={() => onSelect(item)} aria-label={t("publisher.openPost",{universe:item.creative_universe,moment:item.creative_moment,style:item.creative_style}) + (item.car_context ? `. ${t('publisher.car.summary', { type: t(`publisher.car.type.${item.car_context.requestedType}`), reference: referenceLabel(item.car_context) })}` : '')}>
             <PublisherImage api={api} post={item} alt="" />
             <span className="publisher-history-date">{screenDate(item.post_date,{day:"2-digit",month:"short"})}</span>
-            <span className="publisher-history-direction">{item.creative_universe} · {item.creative_moment} · {item.creative_style}</span>
+            <span className="publisher-history-direction">{item.creative_universe} · {item.creative_moment} · {item.creative_style}
+              {item.car_context && <span className="publisher-history-car">{t('publisher.car.summary', {
+                type: t(`publisher.car.type.${item.car_context.requestedType}`), reference: referenceLabel(item.car_context),
+              })}</span>}
+            </span>
             {item.status === 'published' && <CheckCircle2 size={16} />}
           </button>
         ))}

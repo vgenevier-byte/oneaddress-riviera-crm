@@ -3,11 +3,26 @@ export type CreationMode = 'daily' | 'guided';
 export type CreativeUniverse = 'landscapes' | 'real_estate' | 'boats' | 'cars';
 export type CreativeMoment = 'morning' | 'day' | 'evening' | 'night';
 export type CreativeStyle = 'romantic' | 'dynamic' | 'elegant' | 'escape';
+export type CarType = 'auto' | 'suv' | 'saloon' | 'coupe_gt' | 'sports_car' | 'convertible' | 'supercar' | 'luxury_van';
+
+/** A requested reference, not a certification of the generated vehicle. */
+export interface PublisherCarContext {
+  catalogueVersion: string;
+  requestedType: CarType;
+  resolvedType: Exclude<CarType, 'auto'>;
+  referenceId: string;
+  manufacturer: string;
+  model: string;
+  variant: string;
+  generation: string;
+  visualFeatures: string[];
+}
 
 export interface CreativeDirection {
   universe: CreativeUniverse;
   moment: CreativeMoment;
   style: CreativeStyle;
+  carType?: CarType;
 }
 
 export type GenerationStageState = 'pending' | 'working' | 'done' | 'error';
@@ -36,6 +51,7 @@ export interface PublisherPost {
   creative_universe: string;
   creative_moment: string;
   creative_style: string;
+  car_context?: PublisherCarContext | null;
   theme: string;
   moment: string;
   scene_summary: string;

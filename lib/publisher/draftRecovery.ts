@@ -5,7 +5,7 @@ export type PublisherDraft = {
   accessRevision: number;
   post: PublisherPost | null;
   mode: CreationMode;
-  direction: { [K in keyof CreativeDirection]: CreativeDirection[K] | '' };
+  direction: { [K in 'universe' | 'moment' | 'style']: CreativeDirection[K] | '' } & Pick<CreativeDirection, 'carType'>;
   selectedMusic?: number;
   requests?: Record<string, string>;
 };
