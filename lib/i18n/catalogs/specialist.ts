@@ -885,6 +885,82 @@ export const specialistMessages: Catalogue = {
     "en": "The state of this request is not yet available. Your choices and request are retained; resume its state without starting a new creation."
   },
   "publisher.car.typeLabel": { "fr": "Type de voiture", "en": "Car type" },
+  "publisher.car.brandLabel": { "fr": "Marque", "en": "Brand" },
+  "publisher.car.error.type": { "fr": "Type de voiture invalide.", "en": "Invalid car type." },
+  "publisher.car.error.brand": { "fr": "Marque automobile invalide.", "en": "Invalid car brand." },
+  "publisher.car.error.model": { "fr": "Modèle automobile invalide.", "en": "Invalid car model." },
+  "publisher.car.error.selection": { "fr": "Sélection automobile invalide.", "en": "Invalid car selection." },
+  "publisher.car.error.brandIncompatible": {
+    "fr": "La marque choisie ne propose aucun modèle compatible avec ce type de voiture.",
+    "en": "The selected brand has no model compatible with this car type."
+  },
+  "publisher.car.error.brandRequired": {
+    "fr": "Choisissez une marque avant de choisir un modèle automobile.",
+    "en": "Choose a brand before selecting a car model."
+  },
+  "publisher.car.error.modelIncompatible": {
+    "fr": "Le modèle choisi est incompatible avec le type de voiture ou la marque.",
+    "en": "The selected model is incompatible with the car type or brand."
+  },
+  "publisher.car.modelLabel": { "fr": "Modèle", "en": "Model" },
+  "publisher.car.anyBrand": { "fr": "Au choix", "en": "Any brand" },
+  "publisher.car.anyModel": { "fr": "Au choix", "en": "Any model" },
+  "publisher.car.modelDisabledHint": {
+    "fr": "Choisissez une marque pour pouvoir préciser un modèle.",
+    "en": "Choose a brand to select a specific model."
+  },
+  "publisher.car.modelHint": {
+    "fr": "Un modèle choisi sera respecté exactement. « Au choix » sélectionnera une référence compatible de cette marque.",
+    "en": "A selected model will be kept exactly. “Any model” selects a compatible reference from this brand."
+  },
+  "publisher.car.reset.brand": {
+    "fr": "La marque n’est plus compatible avec ce type. Elle a été remise sur « Au choix ».",
+    "en": "The brand is no longer compatible with this type. It has been reset to “Any brand”."
+  },
+  "publisher.car.reset.model": {
+    "fr": "Le modèle n’est plus compatible avec le type ou la marque. Il a été remis sur « Au choix » ; les autres choix compatibles sont conservés.",
+    "en": "The model is no longer compatible with the type or brand. It has been reset to “Any model”; other compatible choices are retained."
+  },
+  "publisher.car.reset.brandAndModel": {
+    "fr": "La marque et le modèle ne sont plus compatibles avec ce type. Ils ont été remis sur « Au choix ».",
+    "en": "The brand and model are no longer compatible with this type. They have been reset to “Any brand” and “Any model”."
+  },
+  "publisher.car.requestedSelection": {
+    "fr": "Choix demandés — Marque : {brand} ; Modèle : {model}",
+    "en": "Requested choices — Brand: {brand}; Model: {model}"
+  },
+  "publisher.car.model.range-rover-l460-swb-se": {
+    "fr": "Land Rover Range Rover SE — SUV 5 portes, empattement standard, toit fixe — L460 (2021)",
+    "en": "Land Rover Range Rover SE — 5-door SUV, standard wheelbase, fixed roof — L460 (2021)"
+  },
+  "publisher.car.model.porsche-911-carrera-coupe-2024": {
+    "fr": "Porsche 911 Carrera — Coupé 2 portes, toit fixe, propulsion — mise à jour 2024",
+    "en": "Porsche 911 Carrera — 2-door Coupé, fixed roof, rear-wheel drive — 2024 model update"
+  },
+  "publisher.car.model.porsche-911-carrera-cabriolet-2024": {
+    "fr": "Porsche 911 Carrera Cabriolet — 2 portes, capote en toile, propulsion — mise à jour 2024",
+    "en": "Porsche 911 Carrera Cabriolet — 2 doors, fabric convertible roof, rear-wheel drive — 2024 model update"
+  },
+  "publisher.car.model.bentley-continental-gt-speed-gen4": {
+    "fr": "Bentley Continental GT Speed — Coupé Grand Tourisme 2 portes, toit fixe — 4e génération (2024)",
+    "en": "Bentley Continental GT Speed — 2-door Grand Touring Coupé, fixed roof — fourth generation (2024)"
+  },
+  "publisher.car.model.bentley-continental-gtc-speed-gen4": {
+    "fr": "Bentley Continental GTC Speed — Cabriolet Grand Tourisme 2 portes, capote en toile — 4e génération (2024)",
+    "en": "Bentley Continental GTC Speed — 2-door Grand Touring convertible, fabric roof — fourth generation (2024)"
+  },
+  "publisher.car.model.bentley-flying-spur-speed-gen4": {
+    "fr": "Bentley Flying Spur Speed — Berline 4 portes, toit fixe — 4e génération (2024)",
+    "en": "Bentley Flying Spur Speed — 4-door saloon, fixed roof — fourth generation (2024)"
+  },
+  "publisher.car.model.lamborghini-huracan-evo-coupe-2019": {
+    "fr": "Lamborghini Huracán EVO — Coupé 2 portes, toit fixe, 4 roues motrices — EVO (2019)",
+    "en": "Lamborghini Huracán EVO — 2-door Coupé, fixed roof, four-wheel drive — EVO (2019)"
+  },
+  "publisher.car.model.mercedes-v-class-avantgarde-2024": {
+    "fr": "Mercedes-Benz V-Class AVANTGARDE — Van long, toit fixe, portes arrière coulissantes — V447 restylé (2024)",
+    "en": "Mercedes-Benz V-Class AVANTGARDE — Long van, fixed roof, sliding rear side doors — V447 facelift (2024)"
+  },
   "publisher.car.type.auto": { "fr": "Au choix", "en": "Any type" },
   "publisher.car.type.suv": { "fr": "SUV", "en": "SUV" },
   "publisher.car.type.saloon": { "fr": "Berline", "en": "Saloon" },
@@ -894,8 +970,8 @@ export const specialistMessages: Catalogue = {
   "publisher.car.type.supercar": { "fr": "Supercar", "en": "Supercar" },
   "publisher.car.type.luxury_van": { "fr": "Van haut de gamme", "en": "Luxury van" },
   "publisher.car.selectionHint": {
-    "fr": "Une référence de série vérifiée sera choisie dans ce type à la création.",
-    "en": "A verified production reference of this type will be selected when you create."
+    "fr": "Seules les références de série vérifiées et compatibles sont proposées. Sans modèle précis, une référence compatible sera choisie à la création.",
+    "en": "Only verified, compatible production references are offered. Without a specific model, a compatible reference will be selected when you create."
   },
   "publisher.car.referenceLabel": { "fr": "Référence automobile demandée", "en": "Requested car reference" },
   "publisher.car.summary": {

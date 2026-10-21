@@ -171,7 +171,8 @@
 .publisher-root .publisher-selection-hint { margin: 10px 0 0 !important; color: #7b838c !important; font-size: 12px !important; text-align: center !important; }
 .publisher-root .publisher-car-type { display: grid !important; gap: 9px !important; margin: -10px 0 28px !important; }
 .publisher-root .publisher-car-type label { font-size: 15px !important; font-weight: 650 !important; }
-.publisher-root .publisher-car-type select { width: 100% !important; min-height: 48px !important; padding: 10px 12px !important; border: 1px solid #d3c7b5 !important; border-radius: 10px !important; background: #fffdf8 !important; color: #10243b !important; font-size: 16px !important; }
+.publisher-root .publisher-car-type select { width: 100% !important; min-width: 0 !important; max-width: 100% !important; min-height: 48px !important; padding: 10px 12px !important; border: 1px solid #d3c7b5 !important; border-radius: 10px !important; background: #fffdf8 !important; color: #10243b !important; font-size: 16px !important; }
+.publisher-root .publisher-car-type select:disabled { color: #68727d !important; background: #f3f1ec !important; cursor: not-allowed !important; }
 .publisher-root .publisher-car-type p, .publisher-root .publisher-car-context { margin: 0 !important; color: #68727d !important; font-size: 12px !important; line-height: 1.5 !important; }
 .publisher-root .publisher-car-context { margin: 0 0 16px !important; overflow-wrap: anywhere !important; }
 .publisher-root .publisher-car-context span { display: block !important; margin-top: 3px !important; }

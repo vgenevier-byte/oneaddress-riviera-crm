@@ -53,7 +53,9 @@ export function usePublisherApi() {
         mode,
         direction: {
           universe: direction.universe, moment: direction.moment, style: direction.style,
-          ...(direction.universe === 'cars' ? { carType: direction.carType ?? 'auto' } : {}),
+          ...(direction.universe === 'cars' ? {
+            carType: direction.carType ?? 'auto', carBrand: direction.carBrand ?? 'auto', carModel: direction.carModel ?? 'auto',
+          } : {}),
         },
         requestId,
       }),

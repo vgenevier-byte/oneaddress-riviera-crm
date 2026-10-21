@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ModuleGrant } from '@/lib/access/modules';
 import { isCancelled } from '@/lib/access/operations';
 import { capturePublisherDraft, readPublisherDraft } from '@/lib/publisher/draftRecovery';
+import { CAR_CATALOGUE, availableCarBrands, availableCarModels, reconcileCarSelection, type CarBrandId } from '@/lib/publisher/carSelection.js';
 import {
   ArrowUpRight,
   Check,
@@ -39,13 +40,29 @@ type DirectionSelection = {
   moment: CreativeMoment | '';
   style: CreativeStyle | '';
   carType?: CarType;
+  carBrand?: CarBrandId;
+  carModel?: string;
 };
 
-const emptyDirection: DirectionSelection = { universe: '', moment: '', style: '', carType: 'auto' };
+const emptyDirection: DirectionSelection = { universe: '', moment: '', style: '', carType: 'auto', carBrand: 'auto', carModel: 'auto' };
 const carTypes: CarType[] = ['auto', 'suv', 'saloon', 'coupe_gt', 'sports_car', 'convertible', 'supercar', 'luxury_van'];
 
-function referenceLabel(context: PublisherCarContext) {
-  return `${context.manufacturer} ${context.model} — ${context.variant}`;
+type PublisherTranslate = ReturnType<typeof useI18n>['t'];
+
+function referenceLabel(context: PublisherCarContext, t: PublisherTranslate) {
+  return CAR_CATALOGUE.some(reference => reference.id === context.referenceId)
+    ? t(`publisher.car.model.${context.referenceId}`)
+    : `${context.manufacturer} ${context.model} — ${context.variant} — ${context.generation}`;
+}
+
+function requestedSelectionLabel(context: PublisherCarContext, t: PublisherTranslate) {
+  if (context.requestedBrand === undefined && context.requestedModel === undefined) return '';
+  const brand = context.requestedBrand && context.requestedBrand !== 'auto'
+    ? availableCarBrands('auto').find(brand => brand.id === context.requestedBrand)?.label ?? context.requestedBrand
+    : t('publisher.car.anyBrand');
+  const model = context.requestedModel && context.requestedModel !== 'auto'
+    ? referenceLabel(context, t) : t('publisher.car.anyModel');
+  return t('publisher.car.requestedSelection', { brand, model });
 }
 
 const universes: Array<{ value: CreativeUniverse; label: string; description: string }> = [
@@ -268,6 +285,19 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
   onCreate: (direction: CreativeDirection) => void;
 }) {
   const { t } = useI18n();
+  const [selectionReset, setSelectionReset] = useState<'brandAndModel' | 'brand' | 'model' | ''>('');
+  const carType = direction.carType ?? 'auto';
+  const carBrand = direction.carBrand ?? 'auto';
+  const carModel = direction.carModel ?? 'auto';
+  const brands = availableCarBrands(carType);
+  const models = availableCarModels(carType, carBrand);
+  const selectedModel = models.find(model => model.id === carModel);
+
+  function changeCarSelection(next: { carType?: CarType; carBrand?: CarBrandId; carModel?: string }) {
+    const result = reconcileCarSelection({ carType, carBrand, carModel }, next);
+    setSelectionReset(result.reset.brand && result.reset.model ? 'brandAndModel' : result.reset.brand ? 'brand' : result.reset.model ? 'model' : '');
+    onDirectionChange({ ...direction, ...result.selection });
+  }
 
   const complete = Boolean(direction.universe && direction.moment && direction.style);
 
@@ -283,11 +313,26 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
       <ChoiceGroup legend="1. Univers visuel" value={direction.universe} options={universes} onSelect={universe => onDirectionChange({ ...direction, universe })} />
       {direction.universe === 'cars' && <div className="publisher-car-type">
         <label htmlFor="publisher-car-type">{t('publisher.car.typeLabel')}</label>
-        <select id="publisher-car-type" value={direction.carType ?? 'auto'} aria-describedby="publisher-car-type-hint"
-          onChange={event => onDirectionChange({ ...direction, carType: event.target.value as CarType })}>
+        <select id="publisher-car-type" value={carType} aria-describedby="publisher-car-type-hint"
+          onChange={event => changeCarSelection({ carType: event.target.value as CarType })}>
           {carTypes.map(type => <option key={type} value={type}>{t(`publisher.car.type.${type}`)}</option>)}
         </select>
         <p id="publisher-car-type-hint">{t('publisher.car.selectionHint')}</p>
+        <label htmlFor="publisher-car-brand">{t('publisher.car.brandLabel')}</label>
+        <select id="publisher-car-brand" value={carBrand}
+          onChange={event => changeCarSelection({ carBrand: event.target.value as CarBrandId })}>
+          <option value="auto">{t('publisher.car.anyBrand')}</option>
+          {brands.map(brand => <option key={brand.id} value={brand.id}>{brand.label}</option>)}
+        </select>
+        <label htmlFor="publisher-car-model">{t('publisher.car.modelLabel')}</label>
+        <select id="publisher-car-model" value={carModel} disabled={carBrand === 'auto'} aria-describedby={`publisher-car-model-hint${selectedModel ? ' publisher-car-selected-model' : ''}`}
+          onChange={event => changeCarSelection({ carModel: event.target.value })}>
+          <option value="auto">{t('publisher.car.anyModel')}</option>
+          {models.map(model => <option key={model.id} value={model.id}>{t(`publisher.car.model.${model.id}`)}</option>)}
+        </select>
+        {selectedModel && <p id="publisher-car-selected-model">{t(`publisher.car.model.${selectedModel.id}`)}</p>}
+        <p id="publisher-car-model-hint">{t(carBrand === 'auto' ? 'publisher.car.modelDisabledHint' : 'publisher.car.modelHint')}</p>
+        <p role="status" aria-live="polite" aria-atomic="true">{selectionReset ? t(`publisher.car.reset.${selectionReset}`) : ''}</p>
       </div>}
       <ChoiceGroup legend="2. Moment" value={direction.moment} options={moments} onSelect={moment => onDirectionChange({ ...direction, moment })} />
       <ChoiceGroup legend="3. Style" value={direction.style} options={styles} onSelect={style => onDirectionChange({ ...direction, style })} />
@@ -299,7 +344,7 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
           universe: direction.universe as CreativeUniverse,
           moment: direction.moment as CreativeMoment,
           style: direction.style as CreativeStyle,
-          ...(direction.universe === 'cars' ? { carType: direction.carType ?? 'auto' } : {}),
+          ...(direction.universe === 'cars' ? { carType, carBrand, carModel } : {}),
         })}
       >
         <Sparkles size={18} />{" "}{t("publisher.creer_la_publication_f37940")}</button>
@@ -580,7 +625,8 @@ function CarContextSummary({ context }: { context: PublisherCarContext }) {
   const requested = t(`publisher.car.type.${context.requestedType}`);
   const type = context.requestedType === 'auto' ? `${requested} (${t(`publisher.car.type.${context.resolvedType}`)})` : requested;
   return <p className="publisher-car-context" aria-label={t('publisher.car.referenceLabel')}>
-    {t('publisher.car.summary', { type, reference: referenceLabel(context) })}
+    {t('publisher.car.summary', { type, reference: referenceLabel(context, t) })}
+    {requestedSelectionLabel(context, t) && <span>{requestedSelectionLabel(context, t)}</span>}
     <span>{t('publisher.car.referenceDisclaimer')}</span>
   </p>;
 }
@@ -595,13 +641,13 @@ function HistoryGrid({ api, posts, loading, onSelect }: { api: PublisherApi; pos
       <div className="publisher-history-heading"><span className="publisher-kicker">{t("publisher.30_dernieres_creations_d78ff6")}</span><h2>{t("publisher.historique_34f3a0")}</h2></div>
       <div className="publisher-history-grid">
         {posts.map(item => (
-          <button key={item.id} onClick={() => onSelect(item)} aria-label={t("publisher.openPost",{universe:item.creative_universe,moment:item.creative_moment,style:item.creative_style}) + (item.car_context ? `. ${t('publisher.car.summary', { type: t(`publisher.car.type.${item.car_context.requestedType}`), reference: referenceLabel(item.car_context) })}` : '')}>
+          <button key={item.id} onClick={() => onSelect(item)} aria-label={t("publisher.openPost",{universe:item.creative_universe,moment:item.creative_moment,style:item.creative_style}) + (item.car_context ? `. ${t('publisher.car.summary', { type: t(`publisher.car.type.${item.car_context.requestedType}`), reference: referenceLabel(item.car_context, t) })}. ${requestedSelectionLabel(item.car_context, t)}` : '')}>
             <PublisherImage api={api} post={item} alt="" />
             <span className="publisher-history-date">{screenDate(item.post_date,{day:"2-digit",month:"short"})}</span>
             <span className="publisher-history-direction">{item.creative_universe} · {item.creative_moment} · {item.creative_style}
               {item.car_context && <span className="publisher-history-car">{t('publisher.car.summary', {
-                type: t(`publisher.car.type.${item.car_context.requestedType}`), reference: referenceLabel(item.car_context),
-              })}</span>}
+                type: t(`publisher.car.type.${item.car_context.requestedType}`), reference: referenceLabel(item.car_context, t),
+              })}{requestedSelectionLabel(item.car_context, t) && <span>{requestedSelectionLabel(item.car_context, t)}</span>}</span>}
             </span>
             {item.status === 'published' && <CheckCircle2 size={16} />}
           </button>

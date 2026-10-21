@@ -1,3 +1,5 @@
+import type { CarBrandId } from '@/lib/publisher/carSelection.js';
+
 export type MusicStatus = 'available' | 'unavailable' | 'unknown';
 export type CreationMode = 'daily' | 'guided';
 export type CreativeUniverse = 'landscapes' | 'real_estate' | 'boats' | 'cars';
@@ -9,6 +11,8 @@ export type CarType = 'auto' | 'suv' | 'saloon' | 'coupe_gt' | 'sports_car' | 'c
 export interface PublisherCarContext {
   catalogueVersion: string;
   requestedType: CarType;
+  requestedBrand?: string;
+  requestedModel?: string;
   resolvedType: Exclude<CarType, 'auto'>;
   referenceId: string;
   manufacturer: string;
@@ -23,6 +27,8 @@ export interface CreativeDirection {
   moment: CreativeMoment;
   style: CreativeStyle;
   carType?: CarType;
+  carBrand?: CarBrandId;
+  carModel?: string;
 }
 
 export type GenerationStageState = 'pending' | 'working' | 'done' | 'error';
