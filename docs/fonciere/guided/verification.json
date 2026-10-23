@@ -1,0 +1,196 @@
+{
+  "scope": "Fonciere guided forms and canonical Contacts links",
+  "environment": "Loopback-only fictional Auth/PostgreSQL/Storage and actual Chromium; no Production business test writes",
+  "unitTests": {
+    "passed": 37
+  },
+  "serverGroups": {
+    "passed": 18
+  },
+  "browserGroups": {
+    "passed": 21
+  },
+  "typeScript": "passed",
+  "lint": {
+    "errors": 0,
+    "preExistingWarnings": 2
+  },
+  "productionBuild": "passed",
+  "results": {
+    "guided-server-results.json": {
+      "environment": "disposable-loopback-auth-rpc-sql",
+      "results": [
+        {
+          "name": "house, apartment, land and mixed property actual save/reload through Auth and SQL",
+          "passed": true
+        },
+        {
+          "name": "SQL rejects forged fields, identity keys, unknown options, exclusive None, fractional counts and bad source references",
+          "passed": true
+        },
+        {
+          "name": "legacy free strings survive a real reload/resave with no content loss",
+          "passed": true
+        },
+        {
+          "name": "retained type-specific data persists inactive across SQL and is excluded from new presentation",
+          "passed": true
+        },
+        {
+          "name": "read-only, denied and anonymous users cannot save guided payloads",
+          "passed": true
+        },
+        {
+          "name": "permission boundaries and optimistic concurrency reject stale save without losing current values",
+          "passed": true
+        },
+        {
+          "name": "evidence document links accept own finalized sources and reject foreign-property sources",
+          "passed": true
+        },
+        {
+          "name": "new private validators cannot be called by anonymous or authenticated roles",
+          "passed": true
+        }
+      ],
+      "projectIds": [
+        "8fda8426-def4-43b7-88e5-69ae8fdbce37",
+        "f57a2e0c-ebbd-4ee8-a06a-40bbce66b03e",
+        "4a7b4173-074c-4aac-a399-352a0b8103b8",
+        "76b96282-6d4b-4463-8ea2-8723454e8cd2",
+        "3713fc6d-9f14-4fc4-a0d8-ab48e9bd31b0",
+        "68a9c83c-8b5f-44e3-a3f8-949f3aa007b5"
+      ]
+    },
+    "contacts-server-results.json": {
+      "passed": true,
+      "actualLocalAuthDatabase": true,
+      "remoteWrites": 0,
+      "results": [
+        {
+          "name": "additive contact migration preserves CRM records, projects, links, memberships and grants",
+          "passed": true
+        },
+        {
+          "name": "fictional canonical company and separate people with different classifications",
+          "passed": true
+        },
+        {
+          "name": "same authorized person found through company, names, reverse order, combined fragments and phone variants",
+          "passed": true
+        },
+        {
+          "name": "separate canonical agency and agent IDs save then reload independently of searches",
+          "passed": true
+        },
+        {
+          "name": "no-Contacts contributor cannot read/search/forge either ID and saving preserves invisible old links",
+          "passed": true
+        },
+        {
+          "name": "server rejects absent canonical identity and person masquerading as company",
+          "passed": true
+        },
+        {
+          "name": "old four-argument save API preserves the newer separate agency identity",
+          "passed": true
+        },
+        {
+          "name": "protected agency and agent identities cannot be deleted while linked",
+          "passed": true
+        },
+        {
+          "name": "switch and unlink persist without mixed person coordinates or agency loss",
+          "passed": true
+        },
+        {
+          "name": "Contacts read-only role cannot create and duplicate checks prevent existing person/phone/company",
+          "passed": true
+        }
+      ]
+    },
+    "guided-browser-results.json": {
+      "kind": "Real loopback fictional Auth/PostgreSQL/Storage/browser; no Production business writes",
+      "phase": "real presentation source and PowerPoint output",
+      "run": "1792747796749",
+      "checks": [
+        "House/apartment/land/commercial created, real saved and reloaded; localized amounts, leading zero postcode, large counts and type fields",
+        "Exclusive None/Not applicable, zero vs empty, planned pool, checklist starts unverified, fees and weekly rental; invalid numeric draft blocks save",
+        "Company/first/last/reverse/mixed/accent/phone searches, separate same-company agents; canonical hydration; corrections confirmation; switch clears missing values; unlink preserves company",
+        "Failed contact search and save retain project-local input and allow retry",
+        "Legacy atypical free text retained byte-for-byte on ordinary save",
+        "Actual PDF extraction populates guided review; edited proposals apply; reimport preserves corrected price",
+        "Desktop/mobile FR/EN, no horizontal overflow, labeled controls and keyboard navigation",
+        "Real saved-property presentation and PowerPoint inspected: included fees, payer, planned pool and weekly rate; no monthly conversion or doubled asking price",
+        "No uncaught browser errors"
+      ],
+      "errors": [],
+      "records": {
+        "house": "de7f62b0-3e3a-4cc2-81f5-74aa9d4e032c",
+        "apartment": "8257cc49-6b90-4764-b21e-42214fd73b8f",
+        "land": "93cad238-01e0-49a9-bc45-fc32a94a13e7",
+        "commercial": "c8aed81f-0ad3-4faf-b620-e52e462bb3e5",
+        "legacy": "a9b2593d-da6f-4ad7-a933-953a1868a112",
+        "imported": "8bcf4abd-5fd6-47b1-b636-69511db073ac",
+        "presentation": "6dff4a43-5c98-4fa4-b085-aba2f6106cf6"
+      }
+    },
+    "contacts-browser-results.json": {
+      "passed": true,
+      "actualLocalAuthBrowser": true,
+      "remoteWrites": 0,
+      "phase": "Contacts read-only creation controls",
+      "results": [
+        {
+          "name": "Creation prefilled from person fields, duplicate rejected through actual CRM projection, form and project input retained",
+          "passed": true
+        },
+        {
+          "name": "Pending contact creation blocks project save with a clear message and preserves both drafts",
+          "passed": true
+        },
+        {
+          "name": "Actual asynchronous contact creation preserves project edits made during the request and selects the canonical created ID",
+          "passed": true
+        },
+        {
+          "name": "Created contact and canonical link save and reopen through real Auth/RLS; selected contact loads independently of current search",
+          "passed": true
+        },
+        {
+          "name": "Contacts read-only contributor can search existing contacts but sees no contact/company creation controls",
+          "passed": true
+        },
+        {
+          "name": "No uncaught browser errors in supplemental contact creation flows",
+          "passed": true
+        }
+      ],
+      "errors": [],
+      "projectId": "dd7235d5-5bd1-4a33-bb3b-e38434b94336",
+      "createdContactId": "bda9b9fa-db12-4ede-bfb5-fa9e5113e1cf"
+    },
+    "context-browser-results.json": {
+      "kind": "Independent actual Chrome; fictional loopback Auth/PostgreSQL/browser only; no Production writes",
+      "phase": "French mobile layout and keyboard traversal",
+      "run": "1792748025050",
+      "projectId": "976ad9f8-c632-407f-92d5-147172ee9f7d",
+      "checks": [
+        "Name is proposed only while empty, requires explicit adoption and never overwrites a typed name after context changes",
+        "House to land removes current bedroom/pool controls, preserves zero, rooms and pool details as inactive, and survives real save/reload",
+        "Return to house keeps former facts inactive until each explicit confirmation; zero and pool details remain unchanged after another save/reload",
+        "Same-company agents stay unselected after typing or Enter alone; ArrowDown plus Enter selects the explicitly highlighted canonical contact",
+        "French mobile record and contextual controls fit a 390px viewport with no horizontal overflow; keyboard Tab follows labeled controls",
+        "No uncaught browser exceptions or external requests in the isolated local context"
+      ],
+      "errors": [],
+      "externalRequests": []
+    }
+  },
+  "productionFunctionalProof": false,
+  "limits": [
+    "Desktop/mobile tested in headless Chrome, not a physical device",
+    "Existing OCR engine retained; digital known PDF verified, no new exhaustive OCR campaign",
+    "Nightly/yearly rental assumptions remain readable; only explicit weekly/monthly periods map into existing calculator inputs"
+  ]
+}

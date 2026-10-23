@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Archive, ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, Download, FileText, FolderOpen, ImagePlus, MapPin, Plus, RefreshCw, Save, Search, Upload, UserRound } from "lucide-react";
-import { isCancelled, useScopedOperations, type ScopedOperation } from "@/lib/access/operations";
+import { Archive, ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, Download, FileText, FolderOpen, ImagePlus, MapPin, Plus, RefreshCw, Save, Search, Upload } from "lucide-react";
+import { isCancelled, useScopedOperations } from "@/lib/access/operations";
 import { createFonciereData, FONCIERE_DOCUMENT_LIMIT, type FonciereData, type FonciereField } from "@/lib/fonciere/model";
 import { useFonciereLocale } from "@/lib/fonciere/locale";
-import { createFonciereRepository, type ContactOption, type FonciereAssetRecord, type LoadedFonciereProject } from "@/lib/fonciere/repository";
+import { createFonciereRepository, type FonciereAssetRecord, type LoadedFonciereProject } from "@/lib/fonciere/repository";
 import { agencyReportToFonciere, applyAgencyImport, proposeAgencyImport } from "@/lib/fonciere/import";
 import { analyzeAgencyFiles, type AgencyReport } from "@/lib/izord/agency";
 import { addPhotoFile } from "@/lib/izord/photos";
@@ -14,20 +14,24 @@ import { LIMITS } from "@/lib/izord/model";
 import { normalizeContactSearch } from "@/lib/contactSearch";
 import styles from "./ProjectsWorkspace.module.css";
 import ProjectAccess from "./ProjectAccess";
+import ProjectContacts from "./ProjectContacts";
+import GuidedProjectField, { type GuidedFieldSpec } from "./GuidedProjectField";
+import { GUIDED_FIELD_DEFINITIONS, currentGuidedValue, guidedReadableFields, isGuidedFieldApplicable, readGuidedField, reconfirmGuidedField, suggestedFonciereName, type GuidedKey } from "@/lib/fonciere/guided";
 
-type Lang = "fr" | "en";
-type FieldKey = FonciereField;
-type Field = { key: FieldKey; fr: string; en: string; long?: boolean; wide?: boolean; numeric?: boolean; };
+type FieldKey = FonciereField | GuidedKey;
+type Field = GuidedFieldSpec;
 type Section = { id: string; fr: string; en: string; noteFr?: string; noteEn?: string; fields: Field[] };
-type ImportReview = { report: AgencyReport; imported: FonciereData; values: Partial<Record<FonciereField, string>>; selected: Set<FonciereField>; photos: boolean; };
-type Props = { userId: string; canWrite: boolean; canManageAccess?: boolean; accessRevision: number; accessSignal?: AbortSignal; onUnsavedChange?: (dirty: boolean) => void; onOpenContact?: (id: string) => void; };
+type ImportReview = { report: AgencyReport; imported: FonciereData; selected: Set<FonciereField>; photos: boolean; };
+type Props = { userId: string; canWrite: boolean; canReadContacts?: boolean; canWriteContacts?: boolean; canManageAccess?: boolean; accessRevision: number; accessSignal?: AbortSignal; onUnsavedChange?: (dirty: boolean) => void; onOpenContact?: (id: string) => void; };
 const sections: Section[] = [
   { id: "identity", fr: "Identification", en: "Identification", fields: [
     { key: "name", fr: "Nom du projet", en: "Project name", wide: true },
     { key: "propertyType", fr: "Type de bien", en: "Property type" }, { key: "agencyReference", fr: "Référence agence", en: "Agency reference" },
     { key: "propertyAddress", fr: "Adresse du bien", en: "Property address", wide: true },
     { key: "city", fr: "Ville", en: "City" }, { key: "postalCode", fr: "Code postal", en: "Postal code" },
-    { key: "location", fr: "Localisation / coordonnées", en: "Location / coordinates", wide: true },
+    { key: "location", fr: "Quartier / secteur", en: "District / area", wide: true },
+    { key: "locationPrecision", fr: "Précision de la localisation", en: "Location precision", wide: true },
+    { key: "coordinates", fr: "Coordonnées géographiques", en: "Geographic coordinates", wide: true },
   ] },
   { id: "agency", fr: "Agence et interlocuteurs", en: "Agency and contacts", noteFr: "L’adresse de l’agence est distincte de celle du bien. Le contact CRM de l’agent se choisit ci-dessous.", noteEn: "The agency address is separate from the property address. Link the agent to a CRM contact below.", fields: [
     { key: "agencyName", fr: "Nom de l’agence", en: "Agency name", wide: true }, { key: "agencyAddress", fr: "Adresse de l’agence", en: "Agency address", wide: true },
@@ -35,40 +39,40 @@ const sections: Section[] = [
     { key: "agentName", fr: "Nom de l’agent", en: "Agent name", wide: true }, { key: "agentPhone", fr: "Téléphone agent", en: "Agent phone" }, { key: "agentEmail", fr: "Email agent", en: "Agent email" },
   ] },
   { id: "property", fr: "Caractéristiques du bien", en: "Property details", fields: [
-    { key: "askingPrice", fr: "Prix demandé (€)", en: "Asking price (€)", numeric: true }, { key: "fees", fr: "Honoraires et répartition", en: "Fees and allocation" },
+    { key: "askingPrice", fr: "Prix demandé (€)", en: "Asking price (€)", numeric: true }, { key: "fees", fr: "Honoraires et répartition", en: "Fees and allocation", wide: true },
     { key: "area", fr: "Surface annoncée (m²)", en: "Advertised area (m²)", numeric: true }, { key: "areaKind", fr: "Nature de la surface", en: "Type of measurement" },
     { key: "land", fr: "Terrain (m²)", en: "Land area (m²)", numeric: true }, { key: "rooms", fr: "Pièces", en: "Rooms", numeric: true }, { key: "bedrooms", fr: "Chambres", en: "Bedrooms", numeric: true },
     { key: "condition", fr: "État du bien", en: "Property condition" },
+    { key: "floor", fr: "Étage", en: "Floor" }, { key: "lots", fr: "Nombre de lots / logements", en: "Lots / dwellings" },
+    { key: "uses", fr: "Usages", en: "Uses", wide: true }, { key: "occupancy", fr: "Occupation du bien", en: "Occupancy" },
+    { key: "servicing", fr: "Viabilisation", en: "Utilities" }, { key: "buildability", fr: "Constructibilité à documenter", en: "Buildability — evidence required", wide: true },
+    { key: "parkingSpaces", fr: "Nombre de places", en: "Parking spaces" }, { key: "parkingType", fr: "Type de stationnement", en: "Parking type" }, { key: "access", fr: "Accès", en: "Access" },
     { key: "equipment", fr: "Équipements", en: "Equipment", long: true }, { key: "annexes", fr: "Annexes / dépendances", en: "Annexes / outbuildings", long: true },
-    { key: "exterior", fr: "Extérieurs", en: "Outdoor spaces", long: true }, { key: "pool", fr: "Piscine", en: "Pool" }, { key: "view", fr: "Vue", en: "View" },
+    { key: "annexCount", fr: "Quantité d’annexes", en: "Number of outbuildings" }, { key: "annexArea", fr: "Surface des annexes", en: "Outbuilding area" },
+    { key: "exterior", fr: "Extérieurs", en: "Outdoor spaces", long: true }, { key: "exteriorArea", fr: "Surface des extérieurs", en: "Outdoor area" },
+    { key: "pool", fr: "Piscine", en: "Pool", wide: true }, { key: "poolDetails", fr: "Détails de la piscine", en: "Pool details", wide: true },
+    { key: "view", fr: "Vue", en: "View", wide: true }, { key: "seaExtent", fr: "Précision de la vue mer", en: "Sea view extent" },
   ] },
   { id: "description", fr: "Description et potentiel annoncé", en: "Description and advertised potential", noteFr: "Faits et possibilités annoncés par l’agence. Une possibilité mentionnée ne constitue pas une autorisation ni une rentabilité acquise.", noteEn: "Facts and possibilities advertised by the agency. An advertised possibility does not establish planning approval or guaranteed returns.", fields: [
     { key: "description", fr: "Description du bien", en: "Property description", long: true, wide: true },
     { key: "agencyPotential", fr: "Potentiel annoncé par l’agence", en: "Potential advertised by the agency", long: true, wide: true },
-    { key: "renovation", fr: "Rénovation mentionnée", en: "Mentioned renovation", long: true }, { key: "division", fr: "Division mentionnée", en: "Mentioned subdivision", long: true },
-    { key: "extension", fr: "Agrandissement mentionné", en: "Mentioned extension", long: true }, { key: "resale", fr: "Revente mentionnée", en: "Mentioned resale", long: true }, { key: "rental", fr: "Location mentionnée", en: "Mentioned rental", long: true },
+    { key: "renovation", fr: "Rénovation mentionnée", en: "Mentioned renovation", long: true, wide: true }, { key: "division", fr: "Division mentionnée", en: "Mentioned subdivision", long: true, wide: true },
+    { key: "extension", fr: "Agrandissement mentionné", en: "Mentioned extension", long: true, wide: true }, { key: "resale", fr: "Revente mentionnée", en: "Mentioned resale", long: true }, { key: "rental", fr: "Location mentionnée", en: "Mentioned rental", long: true },
     { key: "pointsOfInterest", fr: "Points d’intérêt", en: "Points of interest", long: true }, { key: "pointsToVerify", fr: "Points à vérifier", en: "Points to verify", long: true, wide: true },
   ] },
   { id: "additional", fr: "Diagnostics, charges et contraintes", en: "Reports, charges and constraints", fields: [
-    { key: "diagnostics", fr: "Diagnostics mentionnés", en: "Mentioned diagnostic reports", long: true }, { key: "charges", fr: "Charges et périodicité", en: "Charges and frequency", long: true }, { key: "constraints", fr: "Contraintes mentionnées", en: "Mentioned constraints", long: true, wide: true },
+    { key: "diagnostics", fr: "Diagnostics mentionnés", en: "Mentioned diagnostic reports", long: true, wide: true }, { key: "charges", fr: "Charges et périodicité", en: "Charges and frequency", long: true, wide: true }, { key: "constraints", fr: "Contraintes mentionnées", en: "Mentioned constraints", long: true, wide: true },
   ] },
   { id: "hypotheses", fr: "Hypothèses personnelles", en: "Personal assumptions", noteFr: "Estimations et hypothèses de travail à renseigner personnellement. Elles restent distinctes des informations issues de la fiche d’agence.", noteEn: "Estimates and working assumptions to enter personally. These remain separate from the agency brochure information.", fields: [
     { key: "worksHypothesis", fr: "Travaux envisagés / budget estimé", en: "Planned works / estimated budget", long: true, wide: true },
-    { key: "resaleHypothesis", fr: "Hypothèses de revente", en: "Resale assumptions", long: true }, { key: "rentalHypothesis", fr: "Hypothèses de location", en: "Rental assumptions", long: true },
+    { key: "resaleHypothesis", fr: "Hypothèses de revente", en: "Resale assumptions", long: true, wide: true }, { key: "rentalHypothesis", fr: "Hypothèses de location", en: "Rental assumptions", long: true, wide: true },
     { key: "notes", fr: "Notes personnelles", en: "Personal notes", long: true, wide: true },
   ] },
 ];
 const fieldLabels = new Map(sections.flatMap(section => section.fields.map(field => [field.key, field] as const)));
 function messageOf(error: unknown) { return error instanceof Error ? error.message : "L’opération n’a pas été confirmée. Le brouillon est conservé."; }
 function bytes(value: number) { return value > 1_000_000 ? `${(value / 1_000_000).toFixed(1)} Mo` : `${Math.ceil(value / 1000)} Ko`; }
-function price(value: string, lang: Lang) { const amount = Number(value.replace(/[\s\u00a0\u202f]/g, "").replace(",", ".")); return amount > 0 ? new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-GB", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(amount) : ""; }
-function contactTitle(contact: ContactOption) { return [contact.firstName, contact.name].filter(Boolean).join(" ") || contact.companyName; }
-function contactMatches(contact: ContactOption, data: FonciereData) {
-  const digits = (value: string) => value.replace(/\D/g, "").replace(/^00/, "");
-  return Boolean(data.agentEmail && contact.email?.trim().toLowerCase() === data.agentEmail.trim().toLowerCase() || data.agentPhone && digits(data.agentPhone).length >= 8 && digits(contact.phone || "").slice(-9) === digits(data.agentPhone).slice(-9));
-}
-
-export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = false, accessRevision, accessSignal, onUnsavedChange, onOpenContact }: Props) {
+export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = false, canWriteContacts = false, canManageAccess = false, accessRevision, accessSignal, onUnsavedChange, onOpenContact }: Props) {
   const [lang, setLang] = useFonciereLocale();
   const t = (fr: string, en: string) => lang === "fr" ? fr : en;
   const begin = useScopedOperations("izord");
@@ -82,19 +86,13 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [accessBusy,setAccessBusy]=useState(false);
+  const [contactPending, setContactPending] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [review, setReview] = useState<ImportReview | null>(null);
-  const [contactQuery, setContactQuery] = useState("");
-  const [contacts, setContacts] = useState<ContactOption[]>([]);
-  const [contactLoading, setContactLoading] = useState(false);
-  const [contactError, setContactError] = useState("");
-  const [createContact, setCreateContact] = useState(false);
-  const [contactDraft, setContactDraft] = useState({ name: "", firstName: "", companyName: "", email: "", phone: "", city: "", postalAddress: "" });
   const [activeSection, setActiveSection] = useState("identity");
   const controller = useRef<AbortController | null>(null);
   const epoch = useRef(0);
-  const contactEpoch = useRef(0);
   const initialProjectHandled = useRef(false);
   const importInput = useRef<HTMLInputElement>(null);
   const photoInput = useRef<HTMLInputElement>(null);
@@ -103,8 +101,6 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
   const label = (key: string) => { const value = fieldLabels.get(key as FieldKey); return value ? t(value.fr, value.en) : key; };
   const importPending = review !== null;
   const writable = canWrite && loaded?.project.status !== "archived";
-  const hasData = Boolean(data);
-  const agentEmail = data?.agentEmail || "", agentPhone = data?.agentPhone || "", agentName = data?.agentName || "", agentContactId = data?.agentContactId || "";
 
   const operation = useCallback(async () => {
     controller.current?.abort();
@@ -117,9 +113,9 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
     return { id, scoped, signal, repository: createFonciereRepository(scoped.client) };
   }, [begin, accessSignal]);
   function current(id: number) { return epoch.current === id && !controller.current?.signal.aborted && !accessSignal?.aborted; }
-  function leave() { return !(dirty || accessBusy) || window.confirm(t("Ce projet contient des modifications non enregistrées. Quitter sans les enregistrer ?", "This project has unsaved changes. Leave without saving?")); }
+  function leave() { return !(dirty || accessBusy || contactPending) || window.confirm(t("Ce projet contient des modifications non enregistrées. Quitter sans les enregistrer ?", "This project has unsaved changes. Leave without saving?")); }
   function edit(next: FonciereData) { if (!writable || busy || accessSignal?.aborted) return; setData(next); setDirty(true); setError(""); setNotice(""); }
-  function editField(key: FieldKey, value: string) { if (data) edit({ ...data, [key]: value }); }
+  function editField(key: FonciereField, value: string) { if (data) edit({ ...data, [key]: value }); }
 
   const reload = useCallback(async () => {
     const op = await operation();
@@ -132,17 +128,17 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
   useEffect(() => {
     let alive = true;
     const timer = window.setTimeout(() => { if (alive) void reload().catch(failure => { if (alive && !isCancelled(failure)) { setError(messageOf(failure)); setListLoading(false); } }); }, 0);
-    const stop = () => { controller.current?.abort(); epoch.current++; contactEpoch.current++; };
+    const stop = () => { controller.current?.abort(); epoch.current++; };
     accessSignal?.addEventListener("abort", stop, { once: true });
     return () => { alive = false; window.clearTimeout(timer); stop(); accessSignal?.removeEventListener("abort", stop); };
   }, [userId, accessRevision, reload, accessSignal]);
-  useEffect(() => { onUnsavedChange?.(dirty || importPending || accessBusy); return () => onUnsavedChange?.(false); }, [dirty, importPending, accessBusy, onUnsavedChange]);
-  useEffect(() => { if (!dirty && !importPending) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, [dirty, importPending]);
+  useEffect(() => { onUnsavedChange?.(dirty || importPending || accessBusy || contactPending); return () => onUnsavedChange?.(false); }, [dirty, importPending, accessBusy, contactPending, onUnsavedChange]);
+  useEffect(() => { if (!dirty && !importPending && !contactPending) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, [dirty, importPending, contactPending]);
   useEffect(() => {
     if (!importPending) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const dialog = reviewRef.current;
-    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),[tabindex="0"]') || []);
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),select:not(:disabled),[tabindex="0"]') || []);
     focusable()[0]?.focus();
     const trap = (event: KeyboardEvent) => {
       if (event.key !== "Tab") return;
@@ -153,25 +149,6 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
     dialog?.addEventListener("keydown", trap);
     return () => { dialog?.removeEventListener("keydown", trap); previous?.focus(); };
   }, [importPending]);
-
-  // Search only the server-authorized CRM projection. Never keep contacts in a browser cache.
-  useEffect(() => {
-    const generation = ++contactEpoch.current;
-    if (!hasData || !writable) return;
-    const search = contactQuery.trim() || agentEmail || agentPhone || agentName;
-    const timer = window.setTimeout(async () => {
-      if (search.length < 2) { setContacts([]); return; }
-      setContactLoading(true); setContactError("");
-      try {
-        const op = await begin();
-        const signal = accessSignal ? AbortSignal.any([op.signal, accessSignal]) : op.signal;
-        const result = await op.run(() => createFonciereRepository(op.client).searchContacts(search, { signal }));
-        if (contactEpoch.current === generation && !signal.aborted) setContacts(result);
-      } catch (failure) { if (contactEpoch.current === generation && !isCancelled(failure)) { setContacts([]); setContactError(messageOf(failure)); } }
-      finally { if (contactEpoch.current === generation) setContactLoading(false); }
-    }, 300);
-    return () => { window.clearTimeout(timer); };
-  }, [agentEmail, agentPhone, agentName, agentContactId, contactQuery, begin, accessSignal, writable, hasData]);
 
   const visibleProjects = useMemo(() => projects.filter(project => {
     if ((project.status === "archived") !== archived) return false;
@@ -188,15 +165,14 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
     return projects.filter(project => { if (project.id === loaded?.project.id) return false; const other = (project.payload as { data?: Partial<FonciereData> } | undefined)?.data; return Boolean(ref && ref === normalizeContactSearch(other?.agencyReference || "") || address.length > 8 && address === normalizeContactSearch(other?.propertyAddress || "")); });
   }, [data, projects, loaded?.project.id]);
 
-  function resetContacts() { setContacts([]); setContactQuery(""); setContactError(""); setCreateContact(false); contactEpoch.current++; }
   function fresh() {
     if (!canWrite || busy || !leave()) return;
     controller.current?.abort(); epoch.current++;
-    window.history.replaceState(null, "", "/fonciere"); setData(createFonciereData()); setLoaded(null); setDirty(false); setSourceFiles([]); setReview(null); setError(""); setNotice(""); setActiveSection("identity"); resetContacts();
+    window.history.replaceState(null, "", "/fonciere"); setData(createFonciereData()); setLoaded(null); setDirty(false); setSourceFiles([]); setReview(null); setError(""); setNotice(""); setActiveSection("identity");
   }
   async function open(id: string) {
     if (busy || !leave()) return;
-    setBusy(true); setError(""); setReview(null); resetContacts();
+    setBusy(true); setError(""); setReview(null);
     let op: Awaited<ReturnType<typeof operation>> | undefined;
     try { op = await operation(); const value = await op.scoped.run(() => op!.repository.loadProject(id, { signal: op!.signal })); if (current(op.id)) { window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(value.project.id)}`); setLoaded(value); setData(value.data); setDirty(false); setSourceFiles([]); setNotice(""); setActiveSection("identity"); } }
     catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) setError(messageOf(failure)); }
@@ -217,6 +193,9 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
   }, [listLoading, projects]);
   async function save() {
     if (!data || !writable || busy || review) return;
+    if (contactPending) { setError(t("Terminez ou annulez la création du contact avant d’enregistrer le projet. Les deux brouillons sont conservés.", "Finish or cancel contact creation before saving the project. Both drafts are retained.")); document.querySelector<HTMLElement>('[aria-label="Création de contact CRM"], [aria-label="Create CRM contact"]')?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    const invalid = document.querySelector<HTMLElement>('[data-fonciere-projects] [aria-invalid="true"]');
+    if (invalid) { setError(t("Corrigez le nombre signalé avant d’enregistrer. Le brouillon est conservé.", "Correct the highlighted number before saving. Your draft is retained.")); invalid.focus(); return; }
     if (!data.name.trim()) { setActiveSection("identity"); setError(t("Le nom du projet est obligatoire. Les autres champs peuvent rester vides.", "A project name is required. Other fields can remain empty.")); document.getElementById("fonciere-name")?.focus(); return; }
     setBusy(true); setError(""); setNotice(t("Enregistrement des informations et des documents…", "Saving information and documents…"));
     let op: Awaited<ReturnType<typeof operation>> | undefined;
@@ -250,14 +229,16 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
       const report = reports[0]; if (!report) throw new Error(t("Aucune donnée extraite. Le document original reste joint ; complétez manuellement.", "No data extracted. The original is attached; complete the form manually."));
       const imported = await agencyReportToFonciere(report, op.signal);
       op.signal.throwIfAborted();
-      if (current(op.id)) { const proposals = proposeAgencyImport(initial, imported); setReview({ report, imported, values: Object.fromEntries(proposals.map(item => [item.key, item.proposed])), selected: new Set(proposals.filter(item => !item.current.trim()).map(item => item.key)), photos: true }); setNotice(""); }
+      if (current(op.id)) { const proposals = proposeAgencyImport(initial, imported); setReview({ report, imported, selected: new Set(proposals.filter(item => !item.current.trim()).map(item => item.key)), photos: true }); setNotice(""); }
     } catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) { setError(messageOf(failure)); setNotice(t("Extraction impossible ou partielle. Le document original reste joint au brouillon. Les champs peuvent être complétés manuellement.", "Extraction failed or was partial. The original remains attached to the draft. Fields can be completed manually.")); } }
     finally { if (!op || current(op.id)) setBusy(false); }
   }
   function acceptImport() {
     if (!review || !data || !writable) return;
+    const invalid = reviewRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+    if (invalid) { invalid.focus(); setError(t("Corrigez le nombre signalé avant d’appliquer l’import.", "Correct the highlighted number before applying the import.")); return; }
     try {
-      const imported = { ...review.imported, ...Object.fromEntries(Object.entries(review.values)) } as FonciereData;
+      const imported = structuredClone(review.imported);
       if (!review.photos) imported.presentationData = { ...imported.presentationData, importGallery: [], photos: createFonciereData().presentationData.photos, photoGalleryRoles: {} };
       const next = applyAgencyImport(data, imported, [...review.selected]);
       edit(next); setReview(null); setNotice(t("Propositions retenues appliquées au brouillon. Vérifiez puis enregistrez le projet.", "Selected proposals applied to the draft. Review and save the project."));
@@ -284,21 +265,39 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
     catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) setError(messageOf(failure)); }
     finally { if (!op || current(op.id)) setBusy(false); }
   }
-  function prepareContact() {
-    if (!data) return;
-    setContactDraft({ name: data.agentName, firstName: "", companyName: data.agencyName, email: data.agentEmail, phone: data.agentPhone, city: "", postalAddress: "" }); setCreateContact(true); setContactError("");
-  }
-  async function saveContact() {
-    if (!data || !writable || busy || !contactDraft.name.trim()) return;
-    setBusy(true); setContactError(""); let op: ScopedOperation | undefined;
-    try { op = await begin(); const signal = accessSignal ? AbortSignal.any([op.signal, accessSignal]) : op.signal; const repository = createFonciereRepository(op.client); const existing = await op.run(() => repository.searchContacts(contactDraft.email || contactDraft.phone || contactDraft.name, { signal })); const match = existing.find(contact => contactMatches(contact, { ...data, agentEmail: contactDraft.email, agentPhone: contactDraft.phone })); if (match) { setContacts(existing); setContactError(t("Un contact correspond à cet email ou téléphone. Sélectionnez-le dans les résultats avant toute création.", "A contact matches this email or phone. Select it from the results before creating another.")); return; } const created = await op.run(() => repository.createContact(contactDraft, { signal })); signal.throwIfAborted(); setData({ ...data, agentContactId: created.id }); setDirty(true); setContacts(previous => [created, ...previous]); setCreateContact(false); setNotice(t("Contact créé dans le CRM et sélectionné. Enregistrez le projet pour confirmer le lien.", "Contact created in the CRM and selected. Save the project to confirm the link.")); }
-    catch (failure) { if (!isCancelled(failure)) setContactError(messageOf(failure)); }
-    finally { if (!op?.signal.aborted && !accessSignal?.aborted) setBusy(false); }
-  }
-
-  const linkedContact = data ? contacts.find(contact => contact.id === data.agentContactId) : undefined;
   const gallery = data?.presentationData.importGallery || [];
   const sourceAssets = loaded?.assets.filter(asset => asset.lifecycle === "finalized" && loaded.sourceDocuments.includes(asset.id)) || [];
+  const documentOptions = sourceAssets.map(asset => ({ id: asset.id, label: asset.original_name || t("Document du projet", "Project document") }));
+  const guidedText = data ? guidedReadableFields(data, lang) : null;
+  const propertyType = data ? readGuidedField(data, "propertyType") : undefined;
+  const suggestedName = data ? suggestedFonciereName(data, lang) : "";
+  const hasSelections = (key: GuidedKey, allowed?: string[]) => {
+    const value = data ? currentGuidedValue(data, key) : undefined;
+    return Array.isArray(value) && value.some(item => typeof item === "string" && (allowed ? allowed.includes(item) : !["none", "not_applicable", "to_confirm"].includes(item)));
+  };
+  function fieldContextApplies(key: FieldKey) {
+    if (!(key in GUIDED_FIELD_DEFINITIONS) || !data) return true;
+    const guidedKey = key as GuidedKey, def = GUIDED_FIELD_DEFINITIONS[guidedKey];
+    if (!isGuidedFieldApplicable(guidedKey, propertyType) || "types" in def && !propertyType) return false;
+    if (["annexCount", "annexArea"].includes(key)) return hasSelections("annexes");
+    if (key === "exteriorArea") return hasSelections("exterior");
+    if (key === "poolDetails") return ["private", "shared", "planned"].includes(String(currentGuidedValue(data, "pool")));
+    if (key === "seaExtent") return hasSelections("view", ["sea"]);
+    return true;
+  }
+  function isVisibleField(key: FieldKey) { return fieldContextApplies(key) && !(data && key in GUIDED_FIELD_DEFINITIONS && data.guided.inactive.includes(key as GuidedKey)); }
+  function retainedFields(section: Section) {
+    if (!data) return [];
+    return section.fields.filter(field => field.key in GUIDED_FIELD_DEFINITIONS && !isVisibleField(field.key) && (readGuidedField(data, field.key as GuidedKey) !== undefined && readGuidedField(data, field.key as GuidedKey) !== null || typeof data[field.key as FonciereField] === "string" && Boolean(data[field.key as FonciereField]) || Boolean(data.guided.details[field.key as GuidedKey])));
+  }
+  function suggestionsFor(key: FieldKey): string[] {
+    if (!["propertyAddress", "city", "postalCode"].includes(key)) return [];
+    return [...new Set(projects.flatMap(project => {
+      const saved = (project.payload as { data?: Partial<FonciereData> } | undefined)?.data;
+      const value = saved?.[key as FonciereField];
+      return typeof value === "string" && value.trim() ? [value] : [];
+    }))].sort((a, b) => a.localeCompare(b, lang)).slice(0, 100);
+  }
 
   return <div className={styles.workspace} lang={lang} data-fonciere-projects>
     <input ref={importInput} className={styles.hidden} type="file" accept="application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp" onChange={event => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void importAgency(file); }} aria-label={t("Importer une fiche d’agence", "Import an agency brochure")} />
@@ -313,16 +312,17 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
     {!data ? <>
       <div className={styles.listToolbar}><label className={styles.search}><Search size={17} /><span className={styles.srOnly}>{t("Rechercher un projet", "Search projects")}</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t("Nom, adresse ou référence agence…", "Name, address or agency reference…")} /></label><div className={styles.tabs}><button aria-pressed={!archived} onClick={() => setArchived(false)}>{t("En cours", "Active")} <span>{projects.filter(project => project.status !== "archived").length}</span></button><button aria-pressed={archived} onClick={() => setArchived(true)}>{t("Archivés", "Archived")}</button></div><button className={styles.iconButton} disabled={listLoading || busy} onClick={() => void reload().catch(failure => setError(messageOf(failure)))} aria-label={t("Actualiser la liste", "Refresh list")}><RefreshCw size={17} /></button></div>
       {canWrite && <button className={styles.importBanner} disabled={busy} onClick={() => importInput.current?.click()}><span className={styles.uploadIcon}><Upload size={22} /></span><span><strong>{t("Importer une fiche d’agence", "Import an agency brochure")}</strong><span>{t("PDF ou image · extraction et OCR · validation avant enregistrement", "PDF or image · extraction and OCR · review before saving")}</span></span><ArrowUpRight size={20} /></button>}
-      {listLoading ? <div className={styles.empty} role="status"><RefreshCw size={28} /><h2>{t("Chargement des projets…", "Loading projects…")}</h2></div> : visibleProjects.length ? <div className={styles.projectGrid}>{visibleProjects.map(project => { const item = (project.payload as { data?: Partial<FonciereData> } | undefined)?.data; return <button key={project.id} className={styles.projectCard} disabled={busy} onClick={() => void open(project.id)}><div className={styles.cardTop}><span className={styles.propertyIcon}><Building2 size={23} /></span><span className={styles.pill}>{archived ? t("Archivé", "Archived") : item?.propertyType || t("Projet immobilier", "Property project")}</span></div><h2>{project.title}</h2><p className={styles.location}><MapPin size={14} />{[item?.propertyAddress, item?.city].filter(Boolean).join(" · ") || t("Adresse à compléter", "Address to complete")}</p><div className={styles.cardBottom}><span>{item?.askingPrice ? price(item.askingPrice, lang) : item?.agencyReference ? `${t("Réf.", "Ref.")} ${item.agencyReference}` : t("Fiche à enrichir", "Ready to enrich")}</span><ChevronRight size={18} /></div></button>; })}</div> : <div className={styles.empty}><FolderOpen size={38} strokeWidth={1} /><h2>{query ? t("Aucun projet trouvé", "No matching projects") : archived ? t("Aucun projet archivé", "No archived projects") : t("Votre premier projet commence ici", "Your first project starts here")}</h2><p>{query ? t("Essayez un nom, une adresse ou une référence différente.", "Try a different name, address or reference.") : t("Créez une fiche à votre rythme ou partez d’une fiche d’agence. Seul le nom du projet est nécessaire.", "Create a record at your own pace or start with an agency brochure. Only a project name is required.")}</p>{canWrite && !archived && <button className={styles.secondary} onClick={fresh}><Plus size={16} />{t("Créer un projet", "Create a project")}</button>}</div>}
+      {listLoading ? <div className={styles.empty} role="status"><RefreshCw size={28} /><h2>{t("Chargement des projets…", "Loading projects…")}</h2></div> : visibleProjects.length ? <div className={styles.projectGrid}>{visibleProjects.map(project => { const item = (project.payload as { data?: Partial<FonciereData> } | undefined)?.data; const display = item ? guidedReadableFields({ ...createFonciereData(), ...item }, lang) : undefined; return <button key={project.id} className={styles.projectCard} disabled={busy} onClick={() => void open(project.id)}><div className={styles.cardTop}><span className={styles.propertyIcon}><Building2 size={23} /></span><span className={styles.pill}>{archived ? t("Archivé", "Archived") : display?.propertyType || t("Projet immobilier", "Property project")}</span></div><h2>{project.title}</h2><p className={styles.location}><MapPin size={14} />{[item?.propertyAddress, item?.city].filter(Boolean).join(" · ") || t("Adresse à compléter", "Address to complete")}</p><div className={styles.cardBottom}><span>{display?.askingPrice ? display.askingPrice : item?.agencyReference ? `${t("Réf.", "Ref.")} ${item.agencyReference}` : t("Fiche à enrichir", "Ready to enrich")}</span><ChevronRight size={18} /></div></button>; })}</div> : <div className={styles.empty}><FolderOpen size={38} strokeWidth={1} /><h2>{query ? t("Aucun projet trouvé", "No matching projects") : archived ? t("Aucun projet archivé", "No archived projects") : t("Votre premier projet commence ici", "Your first project starts here")}</h2><p>{query ? t("Essayez un nom, une adresse ou une référence différente.", "Try a different name, address or reference.") : t("Créez une fiche à votre rythme ou partez d’une fiche d’agence. Seul le nom du projet est nécessaire.", "Create a record at your own pace or start with an agency brochure. Only a project name is required.")}</p>{canWrite && !archived && <button className={styles.secondary} onClick={fresh}><Plus size={16} />{t("Créer un projet", "Create a project")}</button>}</div>}
     </> : <>
-      <div className={styles.recordToolbar}><button className={styles.back} disabled={busy || importPending} onClick={() => { if (leave()) { window.history.replaceState(null, "", "/fonciere"); controller.current?.abort(); epoch.current++; setData(null); setLoaded(null); setDirty(false); setSourceFiles([]); setReview(null); setError(""); setNotice(""); resetContacts(); } }}><ArrowLeft size={16} />{t("Tous les projets", "All projects")}</button><span className={styles.saveState}>{busy ? t("Opération en cours…", "Working…") : dirty ? t("Modifications non enregistrées", "Unsaved changes") : loaded ? `${t("Enregistré", "Saved")} · r${loaded.project.revision}` : t("Nouveau projet", "New project")}</span><div className={styles.recordActions}>{canWrite && loaded && <button className={styles.secondary} disabled={busy || importPending} onClick={() => void archive()}><Archive size={15} />{loaded.project.status === "archived" ? t("Réactiver", "Restore") : t("Archiver", "Archive")}</button>}{writable && <button className={styles.primary} disabled={busy || importPending} onClick={() => void save()}><Save size={16} />{t("Enregistrer", "Save project")}</button>}</div></div>
-      <div className={styles.recordHero}><div><p className={styles.eyebrow}>{loaded?.project.status === "archived" ? t("PROJET ARCHIVÉ", "ARCHIVED PROJECT") : t("FICHE PROJET", "PROJECT RECORD")}</p><h2>{data.name || t("Nouveau projet", "New project")}</h2><p><MapPin size={15} />{[data.propertyAddress, data.city].filter(Boolean).join(" · ") || t("Adresse du bien à renseigner", "Property address to complete")}</p></div><div className={styles.heroMetrics}>{data.askingPrice && <div><span>{t("Prix demandé", "Asking price")}</span><strong>{price(data.askingPrice, lang) || data.askingPrice}</strong></div>}{data.area && <div><span>{data.areaKind || t("Surface annoncée", "Advertised area")}</span><strong>{data.area} <small>m²</small></strong></div>}{data.agencyReference && <div><span>{t("Référence agence", "Agency reference")}</span><strong className={styles.reference}>{data.agencyReference}</strong></div>}</div></div>
+      <div className={styles.recordToolbar}><button className={styles.back} disabled={busy || importPending} onClick={() => { if (leave()) { window.history.replaceState(null, "", "/fonciere"); controller.current?.abort(); epoch.current++; setData(null); setLoaded(null); setDirty(false); setSourceFiles([]); setReview(null); setError(""); setNotice(""); } }}><ArrowLeft size={16} />{t("Tous les projets", "All projects")}</button><span className={styles.saveState}>{busy ? t("Opération en cours…", "Working…") : dirty ? t("Modifications non enregistrées", "Unsaved changes") : loaded ? `${t("Enregistré", "Saved")} · r${loaded.project.revision}` : t("Nouveau projet", "New project")}</span><div className={styles.recordActions}>{canWrite && loaded && <button className={styles.secondary} disabled={busy || importPending} onClick={() => void archive()}><Archive size={15} />{loaded.project.status === "archived" ? t("Réactiver", "Restore") : t("Archiver", "Archive")}</button>}{writable && <button className={styles.primary} disabled={busy || importPending} onClick={() => void save()}><Save size={16} />{t("Enregistrer", "Save project")}</button>}</div></div>
+      <div className={styles.recordHero}><div><p className={styles.eyebrow}>{loaded?.project.status === "archived" ? t("PROJET ARCHIVÉ", "ARCHIVED PROJECT") : t("FICHE PROJET", "PROJECT RECORD")}</p><h2>{data.name || t("Nouveau projet", "New project")}</h2><p><MapPin size={15} />{[data.propertyAddress, data.city].filter(Boolean).join(" · ") || t("Adresse du bien à renseigner", "Property address to complete")}</p></div><div className={styles.heroMetrics}>{guidedText?.askingPrice && <div><span>{t("Prix demandé", "Asking price")}</span><strong>{guidedText.askingPrice}</strong></div>}{guidedText?.area && <div><span>{guidedText?.areaKind || t("Surface annoncée", "Advertised area")}</span><strong>{guidedText.area}</strong></div>}{data.agencyReference && <div><span>{t("Référence agence", "Agency reference")}</span><strong className={styles.reference}>{data.agencyReference}</strong></div>}</div></div>
       {duplicates.length > 0 && <div className={styles.warning} role="status"><strong>{t("Doublon possible", "Possible duplicate")}</strong><p>{t("Une référence agence ou une adresse correspond à : ", "An agency reference or address matches: ")}{duplicates.map(project => project.title).join(", ")}. {t("Vérifiez avant d’enregistrer. Aucun rapprochement automatique.", "Check before saving. Records are never merged automatically.")}</p></div>}
       <div className={styles.recordLayout}>
         <nav className={styles.sectionNav} aria-label={t("Sections de la fiche projet", "Project record sections")}>{sections.map((section, index) => <a key={section.id} href={`#fonciere-section-${section.id}`} aria-current={activeSection === section.id ? "location" : undefined} onClick={() => setActiveSection(section.id)}><span>{String(index + 1).padStart(2, "0")}</span>{t(section.fr, section.en)}</a>)}<a href="#fonciere-documents" onClick={() => setActiveSection("documents")} aria-current={activeSection === "documents" ? "location" : undefined}><span>07</span>{t("Documents et visuels", "Documents and visuals")}</a></nav>
         <div className={styles.sections}>
-          {sections.map((section, index) => <section key={section.id} id={`fonciere-section-${section.id}`} className={`${styles.section} ${section.id === "hypotheses" ? styles.assumptions : ""}`}><header className={styles.sectionHeading}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{t(section.fr, section.en)}</h3>{section.noteFr && <p>{t(section.noteFr, section.noteEn || "")}</p>}</div></header><fieldset disabled={!writable || busy || importPending} className={styles.fieldset}><div className={styles.fieldGrid}>{section.fields.map(field => <label key={field.key} className={field.wide ? styles.wide : ""} htmlFor={`fonciere-${field.key}`}><span>{t(field.fr, field.en)}{field.key === "name" && <span className={styles.required}> *</span>}</span>{field.long ? <textarea id={`fonciere-${field.key}`} value={data[field.key]} maxLength={10000} rows={field.wide ? 4 : 3} onChange={event => editField(field.key, event.target.value)} placeholder={t("À compléter / à confirmer", "To complete / to confirm")} /> : <input id={`fonciere-${field.key}`} value={data[field.key]} inputMode={field.numeric ? "decimal" : undefined} maxLength={field.key === "name" ? 200 : 1000} autoComplete="off" required={field.key === "name"} onChange={event => editField(field.key, event.target.value)} placeholder={field.key === "name" ? t("Ex. Villa des Oliviers", "E.g. Villa des Oliviers") : t("À compléter", "To complete")} />}</label>)}</div></fieldset>
-            {section.id === "agency" && <div className={styles.contactLink}><div className={styles.contactHeader}><UserRound size={17} /><h4>{t("Contact CRM de l’agent", "Agent’s CRM contact")}</h4></div>{data.agentContactId && <div className={styles.linked}><span><Check size={16} />{linkedContact ? contactTitle(linkedContact) : data.agentName || t("Contact lié", "Linked contact")}</span><button className={styles.textButton} onClick={() => onOpenContact ? onOpenContact(data.agentContactId) : window.open(`/?module=contacts#contact-${encodeURIComponent(data.agentContactId)}`, "_blank", "noopener,noreferrer")}><ArrowUpRight size={15} />{t("Ouvrir le contact", "Open contact")}</button>{writable && <button className={styles.textButton} disabled={busy} onClick={() => editField("agentContactId", "")}>{t("Retirer le lien", "Unlink")}</button>}</div>}{writable && <><label className={styles.search}><Search size={16} /><span className={styles.srOnly}>{t("Rechercher un contact CRM", "Search CRM contacts")}</span><input value={contactQuery} disabled={busy || importPending} onChange={event => setContactQuery(event.target.value)} placeholder={t("Rechercher par nom, email ou téléphone…", "Search by name, email or phone…")} /></label>{contactLoading && <p className={styles.muted} role="status">{t("Recherche des contacts autorisés…", "Searching authorized contacts…")}</p>}{contacts.length > 0 && <div className={styles.contactResults}>{contacts.map(contact => <button key={contact.id} disabled={busy || importPending} onClick={() => editField("agentContactId", contact.id)}><span><strong>{contactTitle(contact)}</strong><span>{[contact.companyName, contact.email, contact.phone].filter(Boolean).join(" · ")}</span></span>{contact.id === data.agentContactId ? <Check size={17} /> : contactMatches(contact, data) ? <span className={styles.match}>{t("Coordonnées identiques", "Matching details")}</span> : <Plus size={16} />}</button>)}</div>}{contactError && <p role="alert" className={styles.error}>{contactError}</p>}{!createContact ? <button className={styles.textButton} disabled={busy || importPending} onClick={prepareContact}><Plus size={16} />{t("Créer un contact à partir des coordonnées", "Create a contact using these details")}</button> : <div className={styles.contactCreate}><h4>{t("Nouveau contact CRM", "New CRM contact")}</h4><p>{t("Vérifiez les coordonnées préremplies. La création est soumise aux droits Contacts ; un contact de même email ou téléphone doit être sélectionné.", "Review the prefilled details. Creation requires Contacts permissions; select an existing contact if the email or phone matches.")}</p><fieldset disabled={busy}><div className={styles.fieldGrid}>{([['name', 'Nom', 'Last name'], ['firstName', 'Prénom', 'First name'], ['companyName', 'Société / agence', 'Company / agency'], ['email', 'Email', 'Email'], ['phone', 'Téléphone', 'Phone'], ['city', 'Ville du contact', 'Contact city'], ['postalAddress', 'Adresse du contact', 'Contact address']] as const).map(([key, fr, en]) => <label key={key}><span>{t(fr, en)}</span><input value={contactDraft[key]} maxLength={500} onChange={event => setContactDraft(previous => ({ ...previous, [key]: event.target.value }))} /></label>)}</div></fieldset><div className={styles.inlineActions}><button className={styles.secondary} disabled={busy} onClick={() => setCreateContact(false)}>{t("Annuler", "Cancel")}</button><button className={styles.primary} disabled={busy || !contactDraft.name.trim()} onClick={() => void saveContact()}>{t("Créer et sélectionner", "Create and select")}</button></div></div>}</>}</div>}
+          {sections.map((section, index) => <section key={section.id} id={`fonciere-section-${section.id}`} className={`${styles.section} ${section.id === "hypotheses" ? styles.assumptions : ""}`}><header className={styles.sectionHeading}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{t(section.fr, section.en)}</h3>{section.noteFr && <p>{t(section.noteFr, section.noteEn || "")}</p>}</div></header><fieldset disabled={!writable || busy || importPending} className={styles.fieldset}><div className={styles.fieldGrid}>{section.fields.filter(field => section.id !== "agency" && isVisibleField(field.key)).map(field => <GuidedProjectField key={field.key} field={field} data={data} onChange={edit} lang={lang} disabled={!writable || busy || importPending} suggestions={suggestionsFor(field.key)} documents={documentOptions} />)}</div>{section.id === "identity" && !data.name.trim() && suggestedName && <div className={styles.suggestedName}><span>{t("Nom suggéré", "Suggested name")} : {suggestedName}</span><button type="button" onClick={() => editField("name", suggestedName)}>{t("Utiliser ce nom", "Use this name")}</button></div>}</fieldset>
+            {retainedFields(section).length > 0 && <details className={styles.contextNote} data-retained-fields><summary>{t("Informations conservées à revoir", "Retained information to review")} ({retainedFields(section).length})</summary><p>{t("Ces informations restent enregistrées. Elles ne sont pas utilisées comme caractéristiques actuelles tant que leur contexte n’est pas confirmé. Revenez au type concerné pour les confirmer, ou consultez-les ici.", "This information remains saved. It is excluded from current property characteristics until its context is confirmed. Return to the relevant property type to confirm it, or review it here.")}</p><fieldset disabled={!writable || busy || importPending}><div className={styles.fieldGrid}>{retainedFields(section).map(field => <div key={field.key} className={field.wide ? styles.wide : ""}><GuidedProjectField field={field} data={data} onChange={next => { const key = field.key as GuidedKey; edit({ ...next, guided: { ...next.guided, inactive: [...new Set([...next.guided.inactive, key])] } }); }} lang={lang} disabled={!writable || busy || importPending} documents={documentOptions} idPrefix="fonciere-retained" />{fieldContextApplies(field.key) && <button type="button" className={styles.reconfirm} onClick={() => edit(reconfirmGuidedField(data, field.key as GuidedKey))}>{t("Confirmer pour ce type de bien", "Confirm for this property type")}</button>}</div>)}</div></fieldset></details>}
+            {section.id === "agency" && <ProjectContacts key={loaded?.project.id || "new"} data={data} onChange={edit} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setContactPending} />}
           </section>)}
           <section id="fonciere-documents" className={styles.section}><header className={styles.sectionHeading}><span>07</span><div><h3>{t("Documents et visuels", "Documents and visuals")}</h3><p>{t("Conservez la fiche originale, les plans et les photos. Les fichiers sont enregistrés avec le projet.", "Keep the original brochure, plans and photos. Files are saved with the project.")}</p></div></header>{writable && <div className={styles.documentActions}><button className={styles.secondary} disabled={busy || importPending} onClick={() => importInput.current?.click()}><Upload size={16} />{t("Importer une fiche d’agence", "Import an agency brochure")}</button><button className={styles.secondary} disabled={busy || importPending} onClick={() => attachmentInput.current?.click()}><FileText size={16} />{t("Ajouter un document / plan", "Add a document / plan")}</button><button className={styles.secondary} disabled={busy || importPending} onClick={() => photoInput.current?.click()}><ImagePlus size={16} />{t("Ajouter des photos", "Add photos")}</button></div>}<p className={styles.muted}>{t("PDF, JPEG, PNG ou WebP · 25 Mo par fichier · 30 documents sources maximum. Les photos sont optimisées pour les présentations.", "PDF, JPEG, PNG or WebP · 25 MB per file · up to 30 source documents. Photos are optimized for presentations.")}</p><div className={styles.documentList}>{sourceAssets.map(asset => <div key={asset.id} className={styles.document}><FileText size={20} /><span><strong>{asset.original_name || t("Document original", "Original document")}</strong><span>{bytes(asset.expected_size)} · {t("Enregistré", "Saved")}</span></span><button disabled={busy} className={styles.iconButton} onClick={() => void download(asset)} aria-label={`${t("Télécharger", "Download")} ${asset.original_name || "document"}`}><Download size={17} /></button></div>)}{sourceFiles.map((file, index) => <div key={`${file.name}-${index}`} className={styles.document}><FileText size={20} /><span><strong>{file.name}</strong><span>{bytes(file.size)} · {t("À enregistrer avec le projet", "Pending project save")}</span></span><span className={styles.pending}>{t("Brouillon", "Draft")}</span></div>)}</div>{gallery.length > 0 && <div className={styles.gallery} data-project-gallery>{gallery.map((photo, index) => <figure key={`${index}-${photo.label}`}><Image src={photo.data} alt={photo.label || `${t("Photo du projet", "Project photo")} ${index + 1}`} width={260} height={170} unoptimized /><figcaption>{photo.label || `${t("Photo", "Photo")} ${index + 1}`}{photo.source && <span>{photo.source}</span>}</figcaption></figure>)}</div>}{!gallery.length && !sourceFiles.length && !sourceAssets.length && <div className={styles.documentEmpty}><FileText size={23} /><p>{t("Aucun document joint pour le moment.", "No documents attached yet.")}</p></div>}{data.provenance.length > 0 && <details className={styles.provenance}><summary>{t("Provenance des informations importées", "Imported information sources")} <span>{data.provenance.length}</span></summary><p className={styles.muted}>{t("Sources lues lors des imports. Les valeurs retenues dans la fiche restent modifiables.", "Sources read during import. Values retained in the record remain editable.")}</p>{data.provenance.map(source => <article className={styles.source} key={source.id}><h4>{source.filename}</h4><p>{source.method === "ocr" ? t("Lecture OCR", "OCR reading") : source.method === "mixed" ? t("Texte et OCR", "Text and OCR") : t("Lecture du texte", "Text extraction")} · {new Intl.DateTimeFormat(lang === "fr" ? "fr-FR" : "en-GB", { dateStyle: "medium" }).format(new Date(source.importedAt))}</p><dl>{Object.entries(source.fields).map(([key, evidence]) => <div key={key}><dt>{label(key)}{evidence.page ? ` · p. ${evidence.page}` : ""}</dt><dd>{evidence.extract}</dd></div>)}</dl>{source.warnings.length > 0 && <ul>{source.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</article>)}</details>}</section>
           {canManageAccess && loaded && <ProjectAccess key={loaded.project.id} projectId={loaded.project.id} userId={userId} accessSignal={accessSignal} onDirty={setAccessBusy}/>}
@@ -330,6 +330,6 @@ export default function ProjectsWorkspace({ userId, canWrite, canManageAccess = 
         </div>
       </div>
     </>}
-    {review && data && <div className={styles.reviewBackdrop}><section ref={reviewRef} className={styles.review} role="dialog" aria-modal="true" aria-labelledby="fonciere-review-title"><header><p className={styles.eyebrow}>{t("IMPORT DE FICHE D’AGENCE", "AGENCY BROCHURE IMPORT")}</p><h2 id="fonciere-review-title">{t("Vérifiez les informations extraites", "Review extracted information")}</h2><p>{review.report.filename} · {review.report.pages} {t("page(s)", "page(s)")} · {review.report.gallery.length} {t("visuel(s)", "visual(s)")}</p><p>{t("Seuls les champs cochés seront appliqués. Les champs déjà renseignés restent décochés pour préserver vos corrections. Vous pouvez modifier chaque proposition.", "Only selected fields will be applied. Existing values remain unselected to preserve your corrections. Every proposed value is editable.")}</p></header>{[...review.report.warnings, ...review.report.readerWarnings].length > 0 && <div className={styles.warning}><strong>{t("Limites et points à vérifier", "Limitations and points to check")}</strong><ul>{[...new Set([...review.report.warnings, ...review.report.readerWarnings])].map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}<div className={styles.reviewFields}>{proposeAgencyImport(data, review.imported).map(proposal => <div className={styles.proposal} data-project-proposal={proposal.key} key={proposal.key}><label className={styles.checkLabel}><input type="checkbox" checked={review.selected.has(proposal.key)} onChange={event => { const selected = new Set(review.selected); if (event.target.checked) selected.add(proposal.key); else selected.delete(proposal.key); setReview({ ...review, selected }); }} /><strong>{label(proposal.key)}</strong></label>{proposal.current && <div className={styles.currentValue}><span>{t("Valeur actuelle", "Current value")}</span><p>{proposal.current}</p></div>}<label><span className={styles.muted}>{t("Proposition modifiable", "Editable proposal")}</span><textarea rows={2} maxLength={10000} value={review.values[proposal.key] ?? proposal.proposed} onChange={event => setReview({ ...review, values: { ...review.values, [proposal.key]: event.target.value } })} /></label></div>)}</div>{review.report.gallery.length > 0 && <label className={styles.checkLabel}><input type="checkbox" checked={review.photos} onChange={event => setReview({ ...review, photos: event.target.checked })} />{t("Ajouter les visuels extraits à la photothèque du projet", "Add extracted visuals to the project gallery")} ({review.report.gallery.length})</label>}<p className={styles.muted}>{t("Le document original est joint au brouillon dans tous les cas. L’import ne complète pas vos hypothèses financières personnelles.", "The original is attached to the draft in all cases. Import does not populate personal financial assumptions.")}</p><div className={styles.reviewFooter}><button className={styles.secondary} onClick={() => { setReview(null); setNotice(t("Document original joint. Aucune proposition appliquée ; complétez la fiche manuellement.", "Original attached. No proposals applied; complete the record manually.")); }}>{t("Conserver seulement le document", "Keep original only")}</button><button className={styles.primary} onClick={acceptImport}><Check size={16} />{t("Appliquer les propositions cochées", "Apply selected proposals")}</button></div></section></div>}
+    {review && data && <div className={styles.reviewBackdrop}><section ref={reviewRef} className={styles.review} role="dialog" aria-modal="true" aria-labelledby="fonciere-review-title"><header><p className={styles.eyebrow}>{t("IMPORT DE FICHE D’AGENCE", "AGENCY BROCHURE IMPORT")}</p><h2 id="fonciere-review-title">{t("Vérifiez les informations extraites", "Review extracted information")}</h2><p>{review.report.filename} · {review.report.pages} {t("page(s)", "page(s)")} · {review.report.gallery.length} {t("visuel(s)", "visual(s)")}</p><p>{t("Seuls les champs cochés seront appliqués. Les champs déjà renseignés restent décochés pour préserver vos corrections. Vous pouvez modifier chaque proposition.", "Only selected fields will be applied. Existing values remain unselected to preserve your corrections. Every proposed value is editable.")}</p></header>{[...review.report.warnings, ...review.report.readerWarnings].length > 0 && <div className={styles.warning}><strong>{t("Limites et points à vérifier", "Limitations and points to check")}</strong><ul>{[...new Set([...review.report.warnings, ...review.report.readerWarnings])].map((warning, index) => <li key={index}>{warning}</li>)}</ul></div>}<div className={styles.reviewFields}>{proposeAgencyImport(data, review.imported).map(proposal => <div className={styles.proposal} data-project-proposal={proposal.key} key={proposal.key}><label className={styles.checkLabel}><input type="checkbox" checked={review.selected.has(proposal.key)} onChange={event => { const selected = new Set(review.selected); if (event.target.checked) selected.add(proposal.key); else selected.delete(proposal.key); setReview({ ...review, selected }); }} /><strong>{label(proposal.key)}</strong></label>{proposal.current && <div className={styles.currentValue}><span>{t("Valeur actuelle", "Current value")}</span><p>{proposal.current}</p></div>}<div className={styles.importField}><GuidedProjectField field={fieldLabels.get(proposal.key) || { key: proposal.key, fr: proposal.key, en: proposal.key }} data={review.imported} onChange={next => setReview({ ...review, imported: next })} lang={lang} idPrefix="fonciere-import" documents={documentOptions} /></div></div>)}</div>{review.report.gallery.length > 0 && <label className={styles.checkLabel}><input type="checkbox" checked={review.photos} onChange={event => setReview({ ...review, photos: event.target.checked })} />{t("Ajouter les visuels extraits à la photothèque du projet", "Add extracted visuals to the project gallery")} ({review.report.gallery.length})</label>}<p className={styles.muted}>{t("Le document original est joint au brouillon dans tous les cas. L’import ne complète pas vos hypothèses financières personnelles.", "The original is attached to the draft in all cases. Import does not populate personal financial assumptions.")}</p><div className={styles.reviewFooter}><button className={styles.secondary} onClick={() => { setReview(null); setNotice(t("Document original joint. Aucune proposition appliquée ; complétez la fiche manuellement.", "Original attached. No proposals applied; complete the record manually.")); }}>{t("Conserver seulement le document", "Keep original only")}</button><button className={styles.primary} onClick={acceptImport}><Check size={16} />{t("Appliquer les propositions cochées", "Apply selected proposals")}</button></div></section></div>}
   </div>;
 }

@@ -23,6 +23,18 @@ type Props = {
   label?: string;
   name?: string;
   required?: boolean;
+  /** Optional controlled mode; legacy supplier consumers keep their behavior. */
+  value?: string;
+  onSelect?: (contact: Contact | null) => boolean | void;
+  onQueryChange?: (query: string) => void;
+  queryValue?: string;
+  selectedRecord?: Contact | null;
+  searchMode?: "vendor" | "all";
+  loading?: boolean;
+  disabled?: boolean;
+  onOpenContact?: (id: string) => void;
+  resultLabel?: (contact: Contact) => string;
+  labels?: { placeholder?: string; empty?: string; change?: string; clear?: string; open?: string; loading?: string; unavailable?: string };
 };
 
 export default function SearchableBusinessContactPicker({
@@ -35,7 +47,9 @@ export default function SearchableBusinessContactPicker({
   fallbackPhone = "",
   label = "Prestataire",
   name = "contactId",
-  required = false
+  required = false,
+  value, onSelect, onQueryChange, queryValue, selectedRecord, searchMode = "vendor",
+  loading = false, disabled = false, onOpenContact, resultLabel, labels
 }: Props) {
   const {t} = useI18n();
 
@@ -62,16 +76,26 @@ export default function SearchableBusinessContactPicker({
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
 
+  const controlled = value !== undefined;
+  const effectiveId = controlled ? value : selectedContactId;
+  const [changing, setChanging] = useState(false);
   const selectedContact = useMemo(
     () =>
-      contacts.find((contact) => contact.id === selectedContactId) ||
-      (defaultContact?.id === selectedContactId ? defaultContact : null),
-    [contacts, defaultContact, selectedContactId]
+      contacts.find((contact) => contact.id === effectiveId) ||
+      (selectedRecord?.id === effectiveId ? selectedRecord : null) ||
+      (defaultContact?.id === effectiveId ? defaultContact : null),
+    [contacts, defaultContact, effectiveId, selectedRecord]
   );
-  const normalizedQuery = normalizeVendorContactSearch(query);
+  const normalizedQuery = normalizeVendorContactSearch(queryValue ?? query);
+  const [previousQueryValue, setPreviousQueryValue] = useState(queryValue);
+  if (previousQueryValue !== queryValue) {
+    setPreviousQueryValue(queryValue);
+    setIsOpen(Boolean(queryValue && normalizedQuery.length >= 2));
+    setActiveIndex(-1);
+  }
   const results = useMemo(
-    () => searchVendorContacts(contacts, normalizedQuery, 10),
-    [contacts, normalizedQuery]
+    () => searchMode === "all" ? contacts.slice(0, 50) : searchVendorContacts(contacts, normalizedQuery, 10),
+    [contacts, normalizedQuery, searchMode]
   );
   if (
     previousDefaults.defaultContactId !== defaultContactId ||
@@ -80,6 +104,7 @@ export default function SearchableBusinessContactPicker({
   ) {
     setPreviousDefaults({ defaultContactId, fallbackContactName, hasDefaultContact });
     setSelectedContactId(defaultContactId);
+    setChanging(false);
     setPreserveFallback(Boolean(fallbackContactName && !hasDefaultContact));
     setQuery("");
     setIsOpen(false);
@@ -94,6 +119,7 @@ export default function SearchableBusinessContactPicker({
 
     function resetPicker() {
       setSelectedContactId(defaultContactId);
+      setChanging(false);
       setPreserveFallback(Boolean(fallbackContactName && !hasDefaultContact));
       setQuery("");
       setIsOpen(false);
@@ -111,24 +137,32 @@ export default function SearchableBusinessContactPicker({
       }
     }
 
-    document.addEventListener("mousedown", closeOnOutsideClick);
-    return () => document.removeEventListener("mousedown", closeOnOutsideClick);
-  }, []);
+    // Controlled consumers may display results in the document flow. Closing
+    // after click prevents the outside target from moving before mouseup.
+    const eventName = controlled ? "click" : "mousedown";
+    document.addEventListener(eventName, closeOnOutsideClick);
+    return () => document.removeEventListener(eventName, closeOnOutsideClick);
+  }, [controlled]);
 
   function focusSearch() {
     window.requestAnimationFrame(() => inputRef.current?.focus());
   }
 
   function startChanging() {
-    setSelectedContactId("");
+    if (disabled) return;
+    if (!controlled) setSelectedContactId("");
+    setChanging(true);
     setPreserveFallback(false);
     setQuery("");
+    onQueryChange?.("");
     setIsOpen(false);
     setActiveIndex(-1);
     focusSearch();
   }
 
   function clearSelection() {
+    if (disabled || onSelect?.(null) === false) return;
+    setChanging(false);
     setSelectedContactId("");
     setPreserveFallback(false);
     setQuery("");
@@ -137,6 +171,8 @@ export default function SearchableBusinessContactPicker({
   }
 
   function selectContact(contact: Contact) {
+    if (disabled || onSelect?.(contact) === false) return;
+    setChanging(false);
     setSelectedContactId(contact.id);
     setPreserveFallback(false);
     setQuery("");
@@ -172,10 +208,11 @@ export default function SearchableBusinessContactPicker({
     }
   }
 
-  const showSelectedCard = Boolean(selectedContact || (preserveFallback && fallbackContactName));
+  const unresolvedSelection = Boolean(controlled && effectiveId && !selectedContact);
+  const showSelectedCard = !changing && Boolean(selectedContact || unresolvedSelection || (preserveFallback && fallbackContactName));
   const selectedBusinessName = selectedContact
     ? getVendorBusinessName(selectedContact)
-    : fallbackContactName;
+    : fallbackContactName || labels?.unavailable || "Contact lié";
   const selectedPersonName = selectedContact
     ? getVendorContactPersonName(selectedContact)
     : fallbackContactPersonName;
@@ -189,32 +226,33 @@ export default function SearchableBusinessContactPicker({
       <label className="business-contact-picker-label" htmlFor={inputId}>
         {label === "Prestataire" ? t("modules.moduleWorkspace.supplier") : label}
       </label>
-      <input type="hidden" name={name} value={selectedContactId} />
+      <input type="hidden" name={name} value={effectiveId} />
       <input
         type="hidden"
         name="preserveLegacyContact"
-        value={preserveFallback ? "true" : ""}
+        value={!controlled && preserveFallback ? "true" : ""}
       />
 
       {showSelectedCard ? (
         <div className="business-contact-picker-selection">
           <div className="business-contact-picker-selection-copy">
-            <strong>{selectedBusinessName}</strong>
+            <strong>{selectedContact && resultLabel ? resultLabel(selectedContact) : selectedBusinessName}</strong>
             {selectedPersonName && selectedPersonName !== selectedBusinessName ? (
               <span>{t("modules.searchableBusinessContactPicker.contactPerson")} {selectedPersonName}</span>
             ) : null}
             {selectedProfession ? <span>{selectedProfession}</span> : null}
             {selectedPhone ? <span>{selectedPhone}</span> : null}
-            {preserveFallback ? <small>{t("modules.searchableBusinessContactPicker.historicalContactNotLinkedToTheCRM")}</small> : null}
+            {!controlled && preserveFallback ? <small>{t("modules.searchableBusinessContactPicker.historicalContactNotLinkedToTheCRM")}</small> : null}
           </div>
           <div className="business-contact-picker-actions">
-            <button type="button" className="secondary-button" onClick={startChanging}>
+            {effectiveId && onOpenContact && <button type="button" className="secondary-button" onClick={() => onOpenContact(effectiveId)}>{labels?.open || "Ouvrir le contact"}</button>}
+            <button type="button" className="secondary-button" disabled={disabled} onClick={startChanging}>
 
-              {t("modules.searchableBusinessContactPicker.change")}
+              {labels?.change || t("modules.searchableBusinessContactPicker.change")}
             </button>
-            <button type="button" className="danger-link" onClick={clearSelection}>
+            <button type="button" className="danger-link" disabled={disabled} onClick={clearSelection}>
 
-              {t("modules.searchableBusinessContactPicker.clear")}
+              {labels?.clear || t("modules.searchableBusinessContactPicker.clear")}
             </button>
           </div>
         </div>
@@ -235,11 +273,13 @@ export default function SearchableBusinessContactPicker({
             }
             aria-required={required}
             autoComplete="off"
-            value={query}
-            placeholder={t("modules.searchableBusinessContactPicker.searchForACompanyOrContact")}
+            value={queryValue ?? query}
+            disabled={disabled}
+            placeholder={labels?.placeholder || t("modules.searchableBusinessContactPicker.searchForACompanyOrContact")}
             onChange={(event) => {
               const nextQuery = event.target.value;
               setQuery(nextQuery);
+              onQueryChange?.(nextQuery);
               setIsOpen(normalizeVendorContactSearch(nextQuery).length >= 2);
               setActiveIndex(-1);
             }}
@@ -270,11 +310,12 @@ export default function SearchableBusinessContactPicker({
                       type="button"
                       role="option"
                       aria-selected={index === activeIndex}
+                      disabled={disabled}
                       className={`business-contact-picker-result${index === activeIndex ? " is-active" : ""}`}
                       onMouseEnter={() => setActiveIndex(index)}
                       onClick={() => selectContact(contact)}
                     >
-                      <strong>{businessName}</strong>
+                      <strong>{resultLabel ? resultLabel(contact) : businessName}</strong>
                       {secondaryParts.filter(Boolean).length > 0 ? (
                         <span>{secondaryParts.filter(Boolean).join(" · ")}</span>
                       ) : null}
@@ -285,7 +326,7 @@ export default function SearchableBusinessContactPicker({
               ) : (
                 <p className="business-contact-picker-empty" role="status">
 
-                  {t("modules.searchableBusinessContactPicker.noSuppliersFound")}
+                  {loading ? labels?.loading || "Recherche…" : labels?.empty || t("modules.searchableBusinessContactPicker.noSuppliersFound")}
                 </p>
               )}
             </div>

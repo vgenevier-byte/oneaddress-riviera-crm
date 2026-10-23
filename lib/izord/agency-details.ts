@@ -26,6 +26,10 @@ export function enrichAgencyFacts(base: AgencyExtraction, pages: PdfPage[]): Age
     }
   };
   labelled("project", "Nom du (?:projet|bien)|Titre de l.annonce");
+  // Keep the explicit agency category verbatim, including Villa and uncommon
+  // commercial categories. Guided conversion handles exact known labels only.
+  labelled("type", "Type de bien|Typologie(?: du bien)?");
+  labelled("areaKind", "Nature (?:de la |de |des )?surfaces?|Type de surface");
   labelled("city", "Ville(?: du bien)?|Commune(?: du bien)?");
   labelled("postalCode", "Code postal(?: du bien)?");
   labelled("location", "Localisation(?: du bien)?|Quartier|Secteur");
@@ -55,8 +59,8 @@ export function enrichAgencyFacts(base: AgencyExtraction, pages: PdfPage[]): Age
   labelled("charges", "Charges(?: de copropri[ée]t[ée]| annuelles| mensuelles)?", true);
   labelled("constraints", "Contraintes|Servitudes|R[èe]gles d.urbanisme", true);
   const textualFields: [string, RegExp][] = [
-    ["rooms", /\b(?:Nombre (?:de )?pi[èe]ces|Pi[èe]ces)\s*:?\s*(\d{1,2})\b/i],
-    ["bedrooms", /\b(?:Nombre de chambres|Chambres)\s*:?\s*(\d{1,2})\b/i],
+    ["rooms", /\b(?:Nombre (?:de )?pi[èe]ces|Pi[èe]ces)\s*:?\s*(\d+)\b/i],
+    ["bedrooms", /\b(?:Nombre de chambres|Chambres)\s*:?\s*(\d+)\b/i],
   ];
   for (const [key, re] of textualFields) if (!fields[key]) for (const entry of entries) { const match = entry.text.match(re); if (match) { set(key, match[1], entry.page, match[0]); break; } }
   for (const entry of entries) {
@@ -65,7 +69,7 @@ export function enrichAgencyFacts(base: AgencyExtraction, pages: PdfPage[]): Age
       fields.diagnostics = [fields.diagnostics, entry.text].filter(Boolean).join("\n");
       evidence.diagnostics ??= { page: entry.page, extract: entry.text.slice(0, 230) };
     }
-    if (!fields.areaKind && /^Surface\b/i.test(entry.text) && /m\s*[²2]/i.test(entry.text)) set("areaKind", entry.text.match(/^Surface\s*(habitable|(?:Loi )?Carrez|utile|totale)/i)?.[0] || "Surface annoncée — nature à confirmer", entry.page, entry.text);
+    if (!fields.areaKind && /^Surface\b/i.test(entry.text) && /m\s*[²2]/i.test(entry.text)) set("areaKind", entry.text.match(/^Surface\s*(habitable|(?:Loi )?Carrez|utile|plancher)/i)?.[1]?.replace(/^Loi\s+/i, "") || "Surface annoncée — nature à confirmer", entry.page, entry.text);
   }
   // An unlabelled agency footer may contain an address. Never promote it to the property address.
   for (const key of ["city", "postalCode"]) if (fields[key]) fields[key] = fields[key].replace(/\s*[;|].*$/, "").trim();

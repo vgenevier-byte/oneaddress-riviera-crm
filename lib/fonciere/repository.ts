@@ -2,13 +2,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createProjectData, LIMITS, PHOTO_ROLES } from "../izord/model";
 import { assertEncodedImageBudget, assertImageByteBudget, encodedJpegLength } from "../izord/image-budget";
 import { photoDataToBlob, validateUploadBlob, type OperationOptions } from "../izord/repository";
+import { matchesProjectContact, duplicateProjectContacts, type ProjectContact, type ContactCreateInput } from "./contacts";
 import { FONCIERE_DOCUMENT_LIMIT, FONCIERE_SCHEMA, validateFonciereData, type FonciereData } from "./model";
 
 export type FonciereProjectRecord = { id: string; owner_id: string; title: string; revision: number; status: "active" | "archived"; payload: StoredFoncierePayload; created_at: string; updated_at: string };
 export type FonciereAssetRecord = { id: string; project_id: string; object_path: string; kind: "pdf" | "photo" | "attachment"; lifecycle: "pending" | "finalized" | "withdrawn"; created_by: string; created_at: string; expected_size: number; expected_mime: string; original_name: string };
 export type StoredFoncierePayload = { schema: typeof FONCIERE_SCHEMA; data: FonciereData; sourceDocuments: string[] };
 export type LoadedFonciereProject = { project: FonciereProjectRecord; data: FonciereData; assets: FonciereAssetRecord[]; sourceDocuments: string[] };
-export type ContactOption = { id: string; name: string; firstName: string; companyName: string; email: string; phone: string; city: string; postalAddress: string };
+export type ContactOption = ProjectContact;
+export type { ContactCreateInput } from "./contacts";
 export class FonciereConflictError extends Error { constructor() { super("Une autre modification a été enregistrée. Votre saisie est conservée ; rechargez la fiche avant de rapprocher les changements."); this.name = "FonciereConflictError"; } }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function aborted(signal?: AbortSignal) { if (signal?.aborted) throw new DOMException("Opération interrompue.", "AbortError"); }
@@ -31,10 +33,9 @@ async function blobData(blob: Blob, options: OperationOptions) {
   for (let offset = 0; offset < bytes.length; offset += 32768) binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
   return `data:${blob.type || "image/jpeg"};base64,${btoa(binary)}`;
 }
-const compare = (value: string) => value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 function contactOption(row: Record<string, unknown>): ContactOption {
   const text = (key: string) => typeof row[key] === "string" ? row[key] as string : "";
-  return { id: text("id"), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), postalAddress: text("postalAddress") };
+  return { id: text("id"), ...(row.entityType === "company" || row.entityType === "person" ? { entityType: row.entityType } : {}), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), postalAddress: text("postalAddress") };
 }
 
 /** Captured-token clients from useScopedOperations are supported. Auth, Contacts
@@ -55,9 +56,10 @@ export function createFonciereRepository(client: SupabaseClient) {
   }
   async function loadProject(id: string, options: OperationOptions = {}): Promise<LoadedFonciereProject> {
     const project = await readProject(id, options), saved = payload(project.payload), assets = await listAssets(id, options);
-    const link = await guarded(options.signal, () => client.from("fonciere_project_contacts").select("contact_id").eq("project_id", id).maybeSingle()); failure(link.error);
+    const link = await guarded(options.signal, () => client.from("fonciere_project_contacts").select("contact_id,agency_contact_id").eq("project_id", id).maybeSingle()); failure(link.error);
     const data = structuredClone(saved.data), empty = createProjectData(), cache = new Map<string, string>();
     data.agentContactId = link.data?.contact_id || "";
+    data.agencyContactId = link.data?.agency_contact_id || "";
     const refs = [...PHOTO_ROLES.map(role => data.presentationData.photos[role]), ...data.presentationData.importGallery.map(item => item.data)].filter(Boolean);
     const declared = refs.map(ref => ({ id: ref, bytes: assets.find(asset => asset.id === ref)?.expected_size || 0 }));
     assertImageByteBudget(declared); assertEncodedImageBudget(declared.map(entry => encodedJpegLength(entry.bytes)));
@@ -103,6 +105,7 @@ export function createFonciereRepository(client: SupabaseClient) {
       const data = validateFonciereData(input.data), persisted = structuredClone(data), empty = createProjectData();
       // Contact identity has a separate Contacts-protected projection in SQL.
       delete (persisted as Partial<FonciereData>).agentContactId;
+      delete (persisted as Partial<FonciereData>).agencyContactId;
       const before = input.previous, old = before ? payload(before.project.payload) : null, reuse = new Map<string, string>();
       if (old && before) {
         for (const role of PHOTO_ROLES) if (old.data.presentationData.photos[role]) reuse.set(before.data.presentationData.photos[role], old.data.presentationData.photos[role]);
@@ -111,7 +114,7 @@ export function createFonciereRepository(client: SupabaseClient) {
       let project = before?.project;
       if (!project) {
         const initial = structuredClone(persisted); initial.presentationData.photos = { main: "", view: "", inside: "", operation: "" }; initial.presentationData.importGallery = []; initial.presentationData.photoGalleryRoles = {};
-        const created = await guarded(options.signal, () => client.rpc("fonciere_save_project", { p_id: null, p_expected_revision: null, p_payload: { schema: FONCIERE_SCHEMA, data: initial, sourceDocuments: [] }, p_contact: data.agentContactId })); failure(created.error);
+        const created = await guarded(options.signal, () => client.rpc("fonciere_save_project", { p_id: null, p_expected_revision: null, p_payload: { schema: FONCIERE_SCHEMA, data: initial, sourceDocuments: [] }, p_contact: data.agentContactId, p_agency_contact: data.agencyContactId })); failure(created.error);
         project = await readProject(String(created.data), options);
         // Surface the confirmed identity before any fallible byte transfer. The
         // editor retains it on failure so retry cannot create a second property.
@@ -132,7 +135,7 @@ export function createFonciereRepository(client: SupabaseClient) {
       const value: StoredFoncierePayload = { schema: FONCIERE_SCHEMA, data: persisted, sourceDocuments };
       if (new TextEncoder().encode(JSON.stringify(value)).length > 950000) throw new Error("Métadonnées du projet trop volumineuses. Votre saisie est conservée.");
       options.onProgress?.({ stage: "save", completed: 0, total: 1, label: "Enregistrement du projet" });
-      const saved = await guarded(options.signal, () => client.rpc("fonciere_save_project", { p_id: target.id, p_expected_revision: target.revision, p_payload: value, p_contact: data.agentContactId })); failure(saved.error);
+      const saved = await guarded(options.signal, () => client.rpc("fonciere_save_project", { p_id: target.id, p_expected_revision: target.revision, p_payload: value, p_contact: data.agentContactId, p_agency_contact: data.agencyContactId })); failure(saved.error);
       const confirmed = await readProject(target.id, options);
       if (confirmed.revision !== target.revision + 1) throw new FonciereConflictError();
       options.onProgress?.({ stage: "save", completed: 1, total: 1, label: "Projet enregistré" });
@@ -143,14 +146,19 @@ export function createFonciereRepository(client: SupabaseClient) {
       const confirmed = await readProject(project.id, options); if (confirmed.revision !== Number(result.data)) throw new FonciereConflictError(); return confirmed;
     },
     async searchContacts(query: string, options: OperationOptions = {}): Promise<ContactOption[]> {
-      const rows = (await contacts(options)).contacts, needle = compare(query.trim());
-      return rows.filter(row => !needle || compare([row.name, row.firstName, row.companyName, row.email, row.phone].join(" ")).includes(needle)).slice(0, 50);
+      const rows = (await contacts(options)).contacts;
+      return rows.filter(row => matchesProjectContact(row, query.trim())).slice(0, 50);
     },
-    async createContact(input: Omit<ContactOption, "id"> | { name: string; firstName?: string; companyName?: string; email?: string; phone?: string; city?: string; postalAddress?: string }, options: OperationOptions = {}): Promise<ContactOption> {
-      const name = input.name.trim(); if (!name) throw new Error("Le nom du contact est obligatoire.");
-      const snapshot = await contacts(options), email = (input.email || "").trim().toLowerCase(), phone = (input.phone || "").replace(/\D/g, "");
-      if (snapshot.contacts.some(row => email && row.email.trim().toLowerCase() === email || phone.length >= 7 && row.phone.replace(/\D/g, "") === phone)) throw new Error("Un contact possède déjà ces coordonnées. Sélectionnez-le dans les résultats de recherche.");
-      const id = crypto.randomUUID(), patch = { entityType: "person", name, firstName: input.firstName || "", companyName: input.companyName || "", email: input.email || "", phone: input.phone || "", city: input.city || "", postalAddress: input.postalAddress || "", kind: "Prestataire", supplierCategory: "Agence immobilière" };
+    async readContact(id: string, options: OperationOptions = {}): Promise<ContactOption | null> {
+      if (!id || id.length > 180) return null;
+      return (await contacts(options)).contacts.find(row => row.id === id) || null;
+    },
+    async createContact(input: ContactCreateInput, options: OperationOptions = {}): Promise<ContactOption> {
+      const name = input.name.trim(), companyName = input.companyName.trim(), entityType = input.entityType === "company" ? "company" : "person";
+      if (entityType === "company" ? !companyName : !name) throw new Error(entityType === "company" ? "Le nom de l’entreprise est obligatoire." : "Le nom du contact est obligatoire.");
+      const snapshot = await contacts(options);
+      if (duplicateProjectContacts(snapshot.contacts, input).length) throw new Error("Un contact possède déjà cette identité ou ces coordonnées. Sélectionnez-le dans les résultats de recherche.");
+      const id = crypto.randomUUID(), patch = { entityType, name, firstName: input.firstName || "", companyName, email: input.email || "", phone: input.phone || "", city: input.city || "", postalAddress: input.postalAddress || "", kind: "Prestataire", supplierCategory: "Agence immobilière" };
       const result = await guarded(options.signal, () => client.rpc("crm_mutate_record", { p_module: "contacts", p_collection: "contacts", p_id: id, p_patch: patch, p_revision: snapshot.revision, p_delete: false })); failure(result.error);
       const row = (result.data as { collections?: { contacts?: Record<string, unknown>[] } })?.collections?.contacts?.find(row => row.id === id);
       if (!row) throw new Error("La création du contact n’a pas été confirmée."); return contactOption(row);
