@@ -37,6 +37,69 @@ function csvRows(text: string): string[][] {
   return rows;
 }
 
+test("intervention expenses are allocated once with hours and distinguished in detailed exports", () => {
+  const state = snapshot([], [hours("expense", { startTime: "09:00", endTime: "13:00", hourlyRate: 25, expenseAmount: 48.6 })]);
+  const before = structuredClone(state);
+  const result = buildMonthlyCharges(state, 2026, filter);
+  assert.equal(result.totalCents, 14860);
+  assert.equal(result.months[8].hoursCents, 14860);
+  assert.equal(result.groups.length, 1);
+  assert.equal(result.groups[0].totalCents, 14860);
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0].hoursAmountCents, 10000);
+  assert.equal(result.entries[0].expenseAmountCents, 4860);
+  assert.deepEqual(result.entries[0].allocations, [{ month: "2026-09", amountCents: 14860, origin: "Date d’intervention" }]);
+  const detail = csvRows(exportDetailedChargesCsv(result, {}, "2026-09"));
+  const columns = new Map(detail[0].map((label, index) => [label, index]));
+  assert.equal(detail[1][columns.get("Montant source (€)")!], "148,60");
+  assert.equal(detail[1][columns.get("Montant retenu (€)")!], "148,60");
+  assert.equal(detail[1][columns.get("Montant des heures (€)")!], "100,00");
+  assert.equal(detail[1][columns.get("Frais annexes (€)")!], "48,60");
+  assert.equal(detail.at(-1)![columns.get("Montant retenu (€)")!], "148,60");
+  assert.ok(detail.every(row => row.length === detail[0].length));
+  assert.equal(csvRows(exportAnnualChargesCsv(result)).at(-1)!.at(-1), "148,60");
+  assert.deepEqual(state, before);
+  state.sources.timeEntries.push(state.sources.timeEntries[0]);
+  assert.equal(buildMonthlyCharges(state, 2026, filter).totalCents, 14860);
+  state.config.exceptions.push({ source: "hours", sourceId: "expense", included: false });
+  assert.equal(buildMonthlyCharges(state, 2026, filter).totalCents, 0);
+});
+
+test("absent or zero expenses preserve historical Charges while invalid expenses remain visible as anomalies", () => {
+  for (const expenseAmount of [undefined, null, 0, "", "0,00"]) {
+    const result = buildMonthlyCharges(snapshot([], [hours("legacy", { expenseAmount })]), 2026, filter);
+    assert.equal(result.totalCents, 30000);
+    assert.equal(result.entries[0].hoursAmountCents, 30000);
+    assert.equal(result.entries[0].expenseAmountCents, 0);
+    assert.deepEqual(result.issues, []);
+  }
+  for (const expenseAmount of [-1, "-0,01", "invalid", NaN, Infinity, 1.234, "1,234", true, {}, 100000000000.01]) {
+    const result = buildMonthlyCharges(snapshot([], [hours("invalid-expense", { expenseAmount })]), 2026, filter);
+    assert.equal(result.totalCents, 0);
+    assert.equal(result.entries[0].status, "invalid");
+    assert.equal(result.entries[0].amountCents, null);
+    assert.equal(result.entries[0].hoursAmountCents, 30000);
+    assert.equal(result.entries[0].expenseAmountCents, null);
+    assert.match(result.entries[0].issues.join(" "), /Frais annexes/);
+  }
+});
+
+test("correcting and clearing expenses recalculate existing source totals without changing selection or hours", () => {
+  const state = snapshot([], [hours("existing", { startTime: "09:00", endTime: "13:00", hourlyRate: 25, expenseAmount: 48.6 })]);
+  const original = structuredClone(state);
+  state.sources.timeEntries[0].expenseAmount = 20;
+  let result = buildMonthlyCharges(state, 2026, filter);
+  assert.equal(result.totalCents, 12000);
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.entries[0].sourceId, "existing");
+  assert.equal(result.entries[0].hoursAmountCents, 10000);
+  state.sources.timeEntries[0].expenseAmount = 0;
+  result = buildMonthlyCharges(state, 2026, filter);
+  assert.equal(result.totalCents, 10000);
+  assert.deepEqual(state.config, original.config);
+  assert.deepEqual({ ...state.sources.timeEntries[0], expenseAmount: 48.6 }, original.sources.timeEntries[0]);
+});
+
 test("600 € de factures et 10 h × 30 € restent 900 € en septembre indépendamment des paiements d’octobre", () => {
   const state = snapshot();
   const before = JSON.stringify(state);

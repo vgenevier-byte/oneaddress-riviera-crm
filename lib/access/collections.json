@@ -862,6 +862,14 @@
         "type": "number",
         "label": "Taux horaire"
       },
+      "expenseAmount": {
+        "type": "number",
+        "label": "Frais annexes (€)"
+      },
+      "expenseNote": {
+        "type": "string",
+        "label": "Motif des frais"
+      },
       "houseName": {
         "type": "string",
         "label": "houseName"

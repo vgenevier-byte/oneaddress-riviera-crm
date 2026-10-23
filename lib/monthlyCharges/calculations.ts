@@ -1,5 +1,5 @@
 import { euroAmountToCents } from "../currency";
-import { getHouseTimeHours } from "../houseTracking";
+import { getHouseTimeHours, parseHouseExpenseAmount } from "../houseTracking";
 import type {
   MonthlyChargeAttachment, MonthlyChargeSource, MonthlyChargesSnapshot,
   MonthlyInvoiceSource, MonthlyTimeSource
@@ -17,6 +17,7 @@ export type MonthlyChargeEntry = {
   status: "included" | "excluded" | "expected" | "unattached" | "invalid" | "missing";
   allocations: MonthlyChargeAllocation[]; issues: string[]; houseId?: string; houseName?: string;
   sourceStatus?: string;
+  hoursAmountCents?: number | null; expenseAmountCents?: number | null;
 };
 export type MonthlyChargesFilter = {
   source?: MonthlyChargeSource | "all"; houseId?: string; now?: string;
@@ -146,6 +147,8 @@ export function evaluateMonthlyChargeEntries(snapshot: MonthlyChargesSnapshot): 
     let status: MonthlyChargeEntry["status"] = selected ? "included" : "excluded";
     let sourceDate: string;
     let title: string;
+    let hoursAmountCents: number | null | undefined;
+    let expenseAmountCents: number | null | undefined;
     if (source === "invoice") {
       const invoice = record as MonthlyInvoiceSource;
       amountCents = parseMonthlyChargeCents(invoice.amount);
@@ -164,7 +167,14 @@ export function evaluateMonthlyChargeEntries(snapshot: MonthlyChargesSnapshot): 
       }
     } else {
       const hours = record as MonthlyTimeSource;
-      amountCents = hourAmount(hours, issues);
+      hoursAmountCents = hourAmount(hours, issues);
+      const expense = hours.expenseAmount == null ? 0 :
+        typeof hours.expenseAmount === "number" || typeof hours.expenseAmount === "string"
+          ? parseHouseExpenseAmount(String(hours.expenseAmount)) : null;
+      expenseAmountCents = expense === null ? null : parseMonthlyChargeCents(expense);
+      if (expenseAmountCents === null) issues.push("Frais annexes manquants ou invalides.");
+      amountCents = hoursAmountCents === null || expenseAmountCents === null
+        ? null : addCents(hoursAmountCents, expenseAmountCents);
       sourceDate = hours.date || "";
       title = `Intervention ${hours.startTime || "?"} – ${hours.endTime || "?"}`;
       if (!isMonthlyChargeCivilDate(sourceDate)) issues.push("Date d’intervention manquante ou invalide.");
@@ -178,7 +188,8 @@ export function evaluateMonthlyChargeEntries(snapshot: MonthlyChargesSnapshot): 
       title, sourceDate, amountCents, selected, selectionOrigin: exception ? "individual" : followed ? "person" : "none",
       reason: exception?.reason || (source === "invoice" && (record as MonthlyInvoiceSource).status === "Annulé" ? "Facture annulée" : ""),
       status, allocations, issues,
-      ...(source === "hours" ? { houseId: (record as MonthlyTimeSource).houseId, houseName: (record as MonthlyTimeSource).houseName } : {}),
+      ...(source === "hours" ? { houseId: (record as MonthlyTimeSource).houseId, houseName: (record as MonthlyTimeSource).houseName,
+        hoursAmountCents, expenseAmountCents } : {}),
       ...(source === "invoice" ? { sourceStatus: (record as MonthlyInvoiceSource).status } : {})
     });
   };
@@ -292,7 +303,7 @@ export function exportAnnualChargesCsv(result: MonthlyChargesResult, scope: Mont
 export function exportDetailedChargesCsv(result: MonthlyChargesResult, scope: MonthlyChargesExportScope = {}, month?: string): string {
   if (month && (!isMonthlyChargeMonth(month) || Number(month.slice(0, 4)) !== result.year)) throw new Error("Mois d’export invalide.");
   const perimeter = scopeLabel(result, scope);
-  const rows: unknown[][] = [["Période", "Périmètre", "Origine", "Identifiant source", "Fournisseur / intervenant", "Intitulé", "Date source", "Mois retenu", "Rattachement", "Sélection", "Rubrique", "Montant source (€)", "Montant retenu (€)", "Motif / qualité"]];
+  const rows: unknown[][] = [["Période", "Périmètre", "Origine", "Identifiant source", "Fournisseur / intervenant", "Intitulé", "Date source", "Mois retenu", "Rattachement", "Sélection", "Rubrique", "Montant source (€)", "Montant retenu (€)", "Motif / qualité", "Montant des heures (€)", "Frais annexes (€)"]];
   const append = (entry: MonthlyChargeEntry, unknownHouse = false) => {
     const allocations = entry.allocations.filter(allocation => Number(allocation.month.slice(0, 4)) === result.year && (!month || allocation.month === month));
     if (month && entry.allocations.length && !allocations.length) return;
@@ -302,12 +313,13 @@ export function exportDetailedChargesCsv(result: MonthlyChargesResult, scope: Mo
       rows.push([month || String(result.year), perimeter, sourceLabel(entry.source), entry.sourceId, entry.personLabel, entry.title,
         entry.sourceDate, allocation?.month || "", allocation?.origin || "À vérifier", entry.selected ? "Retenue" : "Non retenue",
         unknownHouse ? "Maison non renseignée · hors total" : entry.status === "included" ? "Charges" : `${statusLabels[entry.status]} · hors total`,
-        decimal(entry.amountCents), decimal(counted ? allocation!.amountCents : 0), [entry.reason, ...entry.issues].filter(Boolean).join(" · ")]);
+        decimal(entry.amountCents), decimal(counted ? allocation!.amountCents : 0), [entry.reason, ...entry.issues].filter(Boolean).join(" · "),
+        decimal(entry.hoursAmountCents ?? null), decimal(entry.expenseAmountCents ?? null)]);
     }
   };
   result.entries.forEach(entry => append(entry));
   result.houseUnknown.forEach(entry => append(entry, true));
   const total = month ? result.months.find(item => item.month === month)!.totalCents : result.totalCents;
-  rows.push([month || String(result.year), perimeter, "Total des charges sélectionnées", "", "", "", "", "", "Montants enregistrés dans le CRM", "", "Total", "", decimal(total), ""]);
+  rows.push([month || String(result.year), perimeter, "Total des charges sélectionnées", "", "", "", "", "", "Montants enregistrés dans le CRM", "", "Total", "", decimal(total), "", "", ""]);
   return csv(rows);
 }

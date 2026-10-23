@@ -22,7 +22,7 @@ export type MonthlyInvoiceSource = {
 };
 export type MonthlyTimeSource = {
   id: string; personId: string; personLabel: string; houseId?: string; houseName?: string;
-  date?: string; startTime?: string; endTime?: string; breakMinutes?: unknown; hourlyRate?: unknown;
+  date?: string; startTime?: string; endTime?: string; breakMinutes?: unknown; hourlyRate?: unknown; expenseAmount?: unknown;
 };
 export type MonthlyChargesSnapshot = {
   revision: string;

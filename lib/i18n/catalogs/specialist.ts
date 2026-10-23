@@ -1,5 +1,6 @@
 import type { Catalogue, Variables } from "../types";
 export const specialistMessages: Catalogue = {
+  "charges.expenses.invalidStored": {"fr": "Frais annexes manquants ou invalides.", "en": "Additional expenses are missing or invalid."},
   "charges.un_montant_source_a_change_les_rattachements_cce0f0": {
     "fr": "Un montant source a changé. Les rattachements personnalisés et répartitions sont recalculés depuis les montants actuellement enregistrés.",
     "en": "A source amount has changed. Custom allocations and spreads are recalculated from the amounts currently recorded."

@@ -268,6 +268,11 @@ export default function MonthlyChargesWorkspace({ access, userId, onDirtyChange,
       <span className={styles.badge}>{entry.selectionOrigin === "individual" ? t("charges.exception_individuelle_e457cd") : entry.selectionOrigin === "person" ? t("charges.regle_de_personne_b70de5") : t("charges.aucune_regle_3738a8")}</span>
       {entry.sourceStatus && <span className={styles.badge}>{t("charges.statut_source_b1adcf")}{" "}{displayLabel(entry.sourceStatus,"crm")}</span>}
       {(outsideTotal || entry.status !== "included") && <span className={`${styles.badge} ${styles.excludedBadge}`}>{t("charges.hors_total_mensuel_39fc9e")}</span>}
+      {entry.source === "hours" && entry.hoursAmountCents !== undefined && <dl className={styles.metadata}>
+        <div><dt>{t("crm.house.expenses.hoursAmount")}</dt><dd>{money(entry.hoursAmountCents)}</dd></div>
+        <div><dt>{t("crm.house.expenses.expenseAmount")}</dt><dd>{money(entry.expenseAmountCents ?? null)}</dd></div>
+        <div><dt>{t("crm.house.expenses.totalDue")}</dt><dd>{money(entry.amountCents)}</dd></div>
+      </dl>}
       <dl className={styles.metadata}><div><dt>{t("charges.date_source_effbb2")}</dt><dd>{entry.sourceDate ? screenDate(entry.sourceDate) : t("charges.non_renseignee_d6a3c5")}</dd></div><div><dt>{t("charges.mois_retenu_8b6fea")}</dt><dd>{allocation?.month ?? (entry.allocations.length ? entry.allocations.map(row => row.month).join(", ") : t("charges.chooseMonth"))}</dd></div><div><dt>{t("charges.provenance_dd35a8")}</dt><dd>{displayLabel(origin ?? (entry.source === "hours" ? "Date d’intervention" : "Rattachement à définir"),"charges")}</dd></div></dl>
       {entry.reason && <p className={styles.muted}>{t("charges.motif_15bdb0")}{" "}{entry.reason}</p>}
       {entry.issues.length > 0 && <p className={styles.error}>{entry.issues.map(issue => displayLabel(issue,"charges")).join(" · ")}</p>}

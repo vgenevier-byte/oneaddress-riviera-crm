@@ -8,11 +8,17 @@ export function parseHouseHourlyRate(value: string): number | null {
   return Number.isFinite(amount) && amount <= 100000000000 ? amount : null;
 }
 
+/** Expenses are optional; a blank input explicitly means no reimbursement. */
+export function parseHouseExpenseAmount(value: string): number | null {
+  return value.trim() === "" ? 0 : parseHouseHourlyRate(value);
+}
+
 export function houseHourlyRateInput(worker?: Pick<HouseTrackingWorker, "hourlyRate">) {
   return worker?.hourlyRate == null ? "" : String(worker.hourlyRate);
 }
 
 export type HouseWorkerEdit = { hourlyRate: number; notes?: string };
+export type HouseTimeExpenseEdit = { expenseAmount: number; expenseNote?: string };
 
 export const QUARTER_HOUR_TIME_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => {
   const hours = Math.floor(index / 4).toString().padStart(2, "0");
@@ -49,6 +55,15 @@ export function getHouseTimeHours(entry: Pick<HouseTimeEntry, "startTime" | "end
 
 export function getHouseTimeAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate">) {
   return getHouseTimeHours(entry) * Number(entry.hourlyRate || 0);
+}
+
+export function getHouseTimeExpenseAmount(entry: Pick<HouseTimeEntry, "expenseAmount">) {
+  return parseHouseExpenseAmount(String(entry.expenseAmount ?? "")) ?? 0;
+}
+
+/** Keep the historical hours calculation unchanged, then add the intervention's expense once. */
+export function getHouseTimeTotalAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate" | "expenseAmount">) {
+  return getHouseTimeAmount(entry) + getHouseTimeExpenseAmount(entry);
 }
 
 export function houseTrackingWorkerHasHistory(
@@ -93,7 +108,7 @@ export function getHouseTrackingWorkerHistorySummary(
   const workerEntries = timeEntries.filter((entry) => entry.workerId === workerId);
   const workerPayments = payments.filter((payment) => payment.workerId === workerId);
   const hours = workerEntries.reduce((sum, entry) => sum + getHouseTimeHours(entry), 0);
-  const due = workerEntries.reduce((sum, entry) => sum + getHouseTimeAmount(entry), 0);
+  const due = workerEntries.reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
   const paid = workerPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
   return {

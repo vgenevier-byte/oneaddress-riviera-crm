@@ -261,6 +261,8 @@ export type HouseTimeEntry = {
   endTime: string;
   breakMinutes: number;
   hourlyRate: number;
+  expenseAmount?: number;
+  expenseNote?: string;
   note?: string;
   createdAt: string;
   createdBy?: string;

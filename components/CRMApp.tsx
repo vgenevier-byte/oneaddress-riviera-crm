@@ -6,6 +6,7 @@ import { translate } from "@/lib/i18n/engine";
 import { crmMessages } from "@/lib/i18n/catalogs/crm";
 import { modulesMessages } from "@/lib/i18n/catalogs/modules";
 import collectionCatalog from "@/lib/access/collections.json";
+import { monthlyChargesCsvCell } from "@/lib/monthlyCharges/calculations";
 const contactMutationFields = new Set([...Object.keys(collectionCatalog.find(schema => schema.collection === "contacts")?.fields ?? {}), "notes", "preferences", "importantNotes", "supplierPriceNotes", "supplierCommissionNotes"]);
 
 type UITranslate = ReturnType<typeof useI18n>["t"];
@@ -91,6 +92,7 @@ import { BusinessForm, BusinessLabel, BusinessButton, BusinessSelect, useBusines
 import { useConfirmedForm, type FormSave, type FormSaveResult } from "@/lib/access/useConfirmedForm";
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import HouseWorkerEditor from "./HouseWorkerEditor";
+import HouseTimeExpenseEditor from "./HouseTimeExpenseEditor";
 import QuickRepliesView from "./QuickRepliesView";
 import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
 import ContactDocuments, { ContactDocumentLibrary } from "./ContactDocuments";
@@ -165,6 +167,8 @@ import {
 } from "@/lib/vendorContacts";
 import {
   getHouseTimeAmount,
+  getHouseTimeExpenseAmount,
+  getHouseTimeTotalAmount,
   getHouseTimeHours,
   getHouseTrackingWorkerHistorySummary,
   houseTrackingWorkerHasHistory,
@@ -173,8 +177,10 @@ import {
   permanentlyDeleteHouseTrackingWorker,
   QUARTER_HOUR_TIME_OPTIONS,
   parseHouseHourlyRate,
+  parseHouseExpenseAmount,
   houseHourlyRateInput,
   type HouseWorkerEdit,
+  type HouseTimeExpenseEdit,
   setHouseTrackingWorkerStatus
 } from "@/lib/houseTracking";
 import {
@@ -613,6 +619,8 @@ function normalizeHouseTimeEntry(value: unknown): HouseTimeEntry | null {
     breakMinutes: Number.isFinite(breakMinutes) ? breakMinutes : 0,
     hourlyRate: Number.isFinite(hourlyRate) ? hourlyRate : 0,
     note: String(raw.note || ""),
+    ...(Object.hasOwn(raw, "expenseAmount") ? { expenseAmount: getHouseTimeExpenseAmount(raw as HouseTimeEntry) } : {}),
+    ...(Object.hasOwn(raw, "expenseNote") ? { expenseNote: String(raw.expenseNote || "") } : {}),
     createdAt: String(raw.createdAt || new Date().toISOString()),
     createdBy: raw.createdBy ? String(raw.createdBy) : undefined,
     updatedBy: raw.updatedBy ? String(raw.updatedBy) : undefined,
@@ -3457,6 +3465,7 @@ function HouseTrackingView({
   onReactivateWorker,
   onPermanentlyDeleteWorker,
   onAddTimeEntry,
+  onUpdateTimeExpenses,
   onDeleteTimeEntry,
   onAddPayment,
   onDeletePayment,
@@ -3477,6 +3486,7 @@ function HouseTrackingView({
   onReactivateWorker: (id: string) => void;
   onPermanentlyDeleteWorker: (id: string) => void;
   onAddTimeEntry: (entry: HouseTimeEntry) => FormSave;
+  onUpdateTimeExpenses?: (id: string, patch: HouseTimeExpenseEdit) => Promise<FormSaveResult>;
   onDeleteTimeEntry: (id: string) => void;
   onAddPayment: (payment: HousePayment) => void;
   onDeletePayment: (id: string) => void;
@@ -3485,6 +3495,7 @@ function HouseTrackingView({
   const { t, label, screen, screenText, dialogT } = useCRMDisplay();
 
   const business = useBusinessPermissions();
+  const canEditTimeExpenses = access ? access.fullAccess || access.modules.houseTracking?.level === "contribute" : business?.write !== false;
   const today = new Date().toISOString().slice(0, 10);
   const activeWorkers = useMemo(() => workers.filter(isHouseTrackingWorkerActive), [workers]);
   const archivedWorkers = useMemo(() => workers.filter((worker) => !isHouseTrackingWorkerActive(worker)), [workers]);
@@ -3501,9 +3512,14 @@ function HouseTrackingView({
     endTime: "13:00",
     breakMinutes: "0",
     hourlyRate: houseHourlyRateInput(initialActiveWorker),
+    expenseAmount: "",
+    expenseNote: "",
     note: ""
   });
   const [editingWorkerId, setEditingWorkerId] = useState<string | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const hourDraftId = useRef<string | null>(null);
+  const [expenseError, setExpenseError] = useState(false);
   const [rateError, setRateError] = useState<ScreenNotice>("");
   const hourConfirmation = useConfirmedForm(business?.markDirty);
   const [showAllHoursHistory, setShowAllHoursHistory] = useState(false);
@@ -3718,7 +3734,7 @@ function HouseTrackingView({
         });
 
       orderedDebts.forEach((entry) => {
-        const debt = Math.max(getHouseTimeAmount(entry), 0);
+        const debt = Math.max(getHouseTimeTotalAmount(entry), 0);
         const paidForThisDebt = Math.min(debt, Math.max(availablePaid, 0));
 
         if (selectedIds.has(entry.id)) {
@@ -3736,26 +3752,29 @@ function HouseTrackingView({
   const visiblePaymentEntries = showAllPaymentsHistory ? filteredPayments : filteredPayments.slice(0, 7);
 
   const totalHours = filteredEntries.reduce((sum, entry) => sum + getHouseTimeHours(entry), 0);
-  const totalDue = filteredEntries.reduce((sum, entry) => sum + getHouseTimeAmount(entry), 0);
+  const totalDue = filteredEntries.reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
   const totalPaid = getAutoAllocatedPaidForSelectedEntries(filteredEntries);
   const totalBalance = totalDue - totalPaid;
 
   const currentRate = parseHouseHourlyRate(hourDraft.hourlyRate);
+  const currentExpense = parseHouseExpenseAmount(hourDraft.expenseAmount);
   const previewEntry = {
     startTime: hourDraft.startTime,
     endTime: hourDraft.endTime,
     breakMinutes: Number(hourDraft.breakMinutes || 0),
-    hourlyRate: currentRate ?? 0
+    hourlyRate: currentRate ?? 0,
+    expenseAmount: currentExpense ?? 0
   };
   const previewHours = getHouseTimeHours(previewEntry);
   const previewAmount = getHouseTimeAmount(previewEntry);
+  const previewTotal = getHouseTimeTotalAmount(previewEntry);
 
   const balanceRows = workers
     .map((worker) => {
       const workerEntries = filteredEntries.filter((entry) => entry.workerId === worker.id);
 
       const hours = workerEntries.reduce((sum, entry) => sum + getHouseTimeHours(entry), 0);
-      const due = workerEntries.reduce((sum, entry) => sum + getHouseTimeAmount(entry), 0);
+      const due = workerEntries.reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
       const paid = getAutoAllocatedPaidForSelectedEntries(workerEntries);
       const balance = due - paid;
 
@@ -3841,6 +3860,7 @@ function HouseTrackingView({
 
   function submitTimeEntry(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (business?.write === false || hourConfirmation.saving) return;
 
     if (!isQuarterHourTime(hourDraft.startTime) || !isQuarterHourTime(hourDraft.endTime)) {
       return window.alert(dialogT("crm.house.b5727b642e"));
@@ -3854,9 +3874,11 @@ function HouseTrackingView({
     if (previewHours <= 0) return window.alert(dialogT("crm.house.5e7f7eb62a"));
     if (currentRate === null) { setRateError(screenNotice("crm.house.d09ba721d3")); return; }
     setRateError("");
+    if (currentExpense === null) { setExpenseError(true); return; }
+    setExpenseError(false);
 
     const entry: HouseTimeEntry = {
-      id: makeId("hours"),
+      id: hourDraftId.current ??= makeId("hours"),
       houseId: house.id,
       houseName: house.name,
       workerId: worker.id,
@@ -3866,11 +3888,14 @@ function HouseTrackingView({
       endTime: hourDraft.endTime,
       breakMinutes: Number(hourDraft.breakMinutes || 0),
       hourlyRate: currentRate,
+      expenseAmount: currentExpense,
+      expenseNote: hourDraft.expenseNote.trim(),
       note: hourDraft.note.trim(),
       createdAt: new Date().toISOString()
     };
     void hourConfirmation.submit(event.currentTarget, () => onAddTimeEntry(entry), newerDraft => {
-      if (!newerDraft) setHourDraft(current => ({ ...current, note: "", hourlyRate: houseHourlyRateInput(worker) }));
+      hourDraftId.current = null;
+      if (!newerDraft) setHourDraft(current => ({ ...current, note: "", expenseAmount: "", expenseNote: "", hourlyRate: houseHourlyRateInput(worker) }));
     });
   }
 
@@ -3904,11 +3929,11 @@ function HouseTrackingView({
   async function exportHouseCsv() {
     if(business){try{await business.check();}catch{return;}}
     const rows = [
-      ["Type", "Date", "Maison", "Intervenant", "Role", "Debut", "Fin", "Pause", "Heures", "Taux", "Du", "Paye", "Moyen", "Note"],
+      ["csv.type", "csv.date", "csv.house", "csv.worker", "csv.role", "csv.start", "csv.end", "csv.break", "csv.hours", "csv.rate", "hoursAmount", "expenseAmount", "totalDue", "csv.paid", "csv.method", "csv.note", "reason"].map(key => t(`crm.house.expenses.${key}`)),
       ...filteredEntries.map((entry) => {
         const worker = workers.find((item) => item.id === entry.workerId);
         return [
-          "Heures",
+          t("crm.house.expenses.csv.hours"),
           entry.date,
           entry.houseName,
           entry.workerName,
@@ -3918,16 +3943,19 @@ function HouseTrackingView({
           String(entry.breakMinutes),
           String(getHouseTimeHours(entry)),
           String(entry.hourlyRate),
-          String(getHouseTimeAmount(entry)),
+          getHouseTimeAmount(entry).toFixed(2),
+          getHouseTimeExpenseAmount(entry).toFixed(2),
+          getHouseTimeTotalAmount(entry).toFixed(2),
           "",
           "",
-          entry.note || ""
+          entry.note || "",
+          entry.expenseNote || ""
         ];
       }),
       ...filteredPayments.map((payment) => {
         const worker = workers.find((item) => item.id === payment.workerId);
         return [
-          "Paiement",
+          t("crm.house.expenses.csv.payment"),
           payment.date,
           payment.houseName,
           payment.workerName,
@@ -3938,14 +3966,17 @@ function HouseTrackingView({
           "",
           "",
           "",
-          String(payment.amount),
-          payment.method,
-          payment.note || ""
+          "",
+          "",
+          payment.amount.toFixed(2),
+          screen.enum(payment.method),
+          payment.note || "",
+          ""
         ];
       })
     ];
 
-    const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
+    const csv = rows.map((row) => row.map(monthlyChargesCsvCell).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -3968,8 +3999,8 @@ function HouseTrackingView({
 
         <div className="stats-grid house-summary-grid">
           <StatCard label={t("crm.house.2aa022f972")} value={formatHours(totalHours)} caption={t("crm.house.7b4c244221")} />
-          <StatCard label={t("crm.house.f86724b3a3")} value={screen.money(totalDue)} caption={t("crm.house.986f5333cf")} />
-          <StatCard label={t("crm.house.2542792ee0")} value={screen.money(totalPaid)} caption={t("crm.house.a986ecc855")} />
+          <StatCard label={t("crm.house.f86724b3a3")} value={screen.money(totalDue, 2)} caption={t("crm.house.986f5333cf")} />
+          <StatCard label={t("crm.house.2542792ee0")} value={screen.money(totalPaid, 2)} caption={t("crm.house.a986ecc855")} />
           <StatCard label={t("crm.house.caa3596424")} value={screen.balance(totalBalance)} caption={t("crm.house.efd45db922")} />
         </div>
 
@@ -4047,7 +4078,7 @@ function HouseTrackingView({
             </div>
             <span>{t("crm.house.d401c40989")}{" "}{selectedArchivedWorker.role}</span>
             <small>
-              {selectedArchivedWorkerHistory.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(selectedArchivedWorkerHistory.hours)} · {selectedArchivedWorkerHistory.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(selectedArchivedWorkerHistory.paid)}{" "}{t("crm.house.23cabccc65")}{" "}{screen.balance(selectedArchivedWorkerHistory.balance)}
+              {selectedArchivedWorkerHistory.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(selectedArchivedWorkerHistory.hours)} · {selectedArchivedWorkerHistory.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(selectedArchivedWorkerHistory.paid, 2)}{" "}{t("crm.house.23cabccc65")}{" "}{screen.balance(selectedArchivedWorkerHistory.balance)}
             </small>
           </div>
           <div className="house-archived-filter-actions">
@@ -4082,7 +4113,7 @@ function HouseTrackingView({
                 <article className="mini-row house-compact-row" key={row.worker.id} data-notification-target={`house-worker-${row.worker.id}`}>
                   <div>
                     <strong>{row.worker.contactName}</strong>
-                    <span>{formatHours(row.hours)} · {screen.money(row.due)}{" "}{t("crm.house.8adbe51aa7")}{" "}{screen.money(row.paid)}{" "}{t("crm.house.36e0bcfd26")}</span>
+                    <span>{formatHours(row.hours)} · {screen.money(row.due, 2)}{" "}{t("crm.house.8adbe51aa7")}{" "}{screen.money(row.paid, 2)}{" "}{t("crm.house.36e0bcfd26")}</span>
                   </div>
                   <strong className="house-balance-positive">{screen.balance(row.balance)}</strong>
                 </article>
@@ -4142,8 +4173,19 @@ function HouseTrackingView({
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.d8da2c49df")}<input value={hourDraft.note} onChange={(event) => setHourDraft((current) => ({ ...current, note: event.target.value }))} placeholder={t("crm.house.3189d156a1")} />
               </BusinessLabel>
+              <BusinessLabel>{t("crm.house.expenses.amount")}<input name="expenseAmount" type="text" inputMode="decimal" value={hourDraft.expenseAmount} aria-invalid={expenseError} onChange={(event) => setHourDraft((current) => ({ ...current, expenseAmount: event.target.value }))} />
+              </BusinessLabel>
+              <BusinessLabel>{t("crm.house.expenses.reason")}<input name="expenseNote" value={hourDraft.expenseNote} maxLength={4000} onChange={(event) => setHourDraft((current) => ({ ...current, expenseNote: event.target.value }))} />
+              </BusinessLabel>
+              <p className="muted-line full">{t("crm.house.expenses.optionalHint")}</p>
               <div className="full house-calculation-line">
-                {rateError ? <span role="alert">{screenText(rateError)}</span> : <ConfirmedFormMessage message={hourConfirmation.message} inline />} {t("crm.house.0c61feeeed")}{" "}<strong>{formatHours(previewHours)}</strong> — <strong>{currentRate === null ? t("crm.house.8fbded43f0") : screen.money(previewAmount)}</strong>
+                {rateError && <p role="alert">{screenText(rateError)}</p>}
+                {expenseError && <p role="alert">{t("crm.house.expenses.invalid")}</p>}
+                <ConfirmedFormMessage message={hourConfirmation.message} />
+                <p>{t("crm.house.0c61feeeed")} <strong>{formatHours(previewHours)}</strong></p>
+                <p>{t("crm.house.expenses.hoursAmount")}: <strong>{currentRate === null ? t("crm.house.8fbded43f0") : screen.money(previewAmount, 2)}</strong></p>
+                <p>{t("crm.house.expenses.expenseAmount")}: <strong>{currentExpense === null ? "—" : screen.money(currentExpense, 2)}</strong></p>
+                <p>{t("crm.house.expenses.totalDue")}: <strong>{currentRate === null || currentExpense === null ? "—" : screen.money(previewTotal, 2)}</strong></p>
               </div>
               <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.house.36b6df45c3")}</BusinessButton>
             </BusinessForm>
@@ -4154,14 +4196,22 @@ function HouseTrackingView({
             <h3>{t("crm.house.a950998f6e")}</h3>
             <div className="list-stack house-history-list">
               {filteredEntries.length === 0 ? <p className="muted-line">{t("crm.house.88613b70e0")}</p> : visibleHourEntries.map((entry) => (
-                <article className="mini-row house-compact-row" key={entry.id} id={`house-time-${entry.id}`}>
-                  <div>
-                    <strong>{entry.workerName}</strong>
-                    {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
-                    <span>{entry.date} · {entry.houseName} · {entry.startTime}{" "}{t("crm.house.b3fc9de526")}{" "}{entry.endTime} · {formatHours(getHouseTimeHours(entry))} · {screen.money(getHouseTimeAmount(entry))}</span>
-                  </div>
-                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.09ecd9edc3")) && onDeleteTimeEntry(entry.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
-                </article>
+                <div key={entry.id} className="house-time-history-item">
+                  <article className="mini-row house-compact-row house-time-history-row" id={`house-time-${entry.id}`}>
+                    <div>
+                      <strong>{entry.workerName}</strong>
+                      {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
+                      <span>{entry.date} · {entry.houseName} · {entry.startTime}{" "}{t("crm.house.b3fc9de526")}{" "}{entry.endTime} · {formatHours(getHouseTimeHours(entry))}</span>
+                      <p className="muted-line">{t("crm.house.expenses.hoursAmount")}: {screen.money(getHouseTimeAmount(entry), 2)} · {t("crm.house.expenses.expenseAmount")}: {screen.money(getHouseTimeExpenseAmount(entry), 2)} · <strong>{t("crm.house.expenses.totalDue")}: {screen.money(getHouseTimeTotalAmount(entry), 2)}</strong></p>
+                      {entry.expenseNote && <p className="muted-line" style={{ overflowWrap: "anywhere" }}>{t("crm.house.expenses.reason")}: {entry.expenseNote}</p>}
+                    </div>
+                    <div className="house-worker-actions">
+                      {onUpdateTimeExpenses && canEditTimeExpenses && <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingExpenseId(entry.id)}>{t("crm.house.expenses.edit")}</BusinessButton>}
+                      <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.09ecd9edc3")) && onDeleteTimeEntry(entry.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
+                    </div>
+                  </article>
+                  {editingExpenseId === entry.id && onUpdateTimeExpenses && canEditTimeExpenses && <HouseTimeExpenseEditor key={entry.id} entry={entry} onSave={onUpdateTimeExpenses} onCancel={() => setEditingExpenseId(null)} onConfirmed={() => setEditingExpenseId(null)} />}
+                </div>
               ))}
             </div>
             {filteredEntries.length > 7 && (
@@ -4216,7 +4266,7 @@ function HouseTrackingView({
                   <div>
                     <strong>{payment.workerName}</strong>
                     {isArchivedWorker(payment.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
-                    <span>{payment.date} · {payment.houseName} · {screen.money(payment.amount)} · {label(payment.method, "crm")}</span>
+                    <span>{payment.date} · {payment.houseName} · {screen.money(payment.amount, 2)} · {label(payment.method, "crm")}</span>
                   </div>
                   <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.5bcaf17712")) && onDeletePayment(payment.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
                 </article>
@@ -4292,7 +4342,7 @@ function HouseTrackingView({
                   <article className="mini-row house-compact-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                     <div>
                       <strong>{worker.contactName}</strong>
-                      <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate)) })}</span>
+                      <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
                       {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
                         <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)} data-crm-auto-scroll="true">{t("crm.house.39bb8b1625")}</button>
                       )}
@@ -4328,9 +4378,9 @@ function HouseTrackingView({
                     <article className="mini-row house-compact-row house-archived-worker-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                       <div>
                         <strong>{worker.contactName} <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span></strong>
-                        <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate)) })}</span>
-                        <span>{history.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(history.hours)} · {history.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(history.paid)}{" "}{t("crm.house.36e0bcfd26")}</span>
-                        <span>{t("crm.house.385da126a8")}{" "}{screen.money(history.due)}{" "}{t("crm.house.8580f17f02")}{" "}{screen.balance(history.balance)}</span>
+                        <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
+                        <span>{history.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(history.hours)} · {history.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(history.paid, 2)}{" "}{t("crm.house.36e0bcfd26")}</span>
+                        <span>{t("crm.house.385da126a8")}{" "}{screen.money(history.due, 2)}{" "}{t("crm.house.8580f17f02")}{" "}{screen.balance(history.balance)}</span>
                         {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
                           <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)} data-crm-auto-scroll="true">{t("crm.house.39bb8b1625")}</button>
                         )}
@@ -4377,8 +4427,8 @@ function HouseTrackingView({
                           <br /><span className="muted-line">{row.worker.role}</span>
                         </td>
                         <td data-label={t("crm.house.2aa022f972")}>{formatHours(row.hours)}</td>
-                        <td data-label={t("crm.house.986f5333cf")}>{screen.money(row.due)}</td>
-                        <td data-label={t("crm.house.2542792ee0")}>{screen.money(row.paid)}</td>
+                        <td data-label={t("crm.house.986f5333cf")}>{screen.money(row.due, 2)}</td>
+                        <td data-label={t("crm.house.2542792ee0")}>{screen.money(row.paid, 2)}</td>
                         <td data-label={t("crm.house.18833da39f")}><strong className={row.balance > 0 ? "house-balance-positive" : row.balance < 0 ? "house-balance-negative" : "house-balance-zero"}>{screen.balance(row.balance)}</strong></td>
                       </tr>
                     ))}
@@ -4430,7 +4480,7 @@ function HouseTrackingView({
                       <strong>{worker.contactName}</strong>
                       <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>
                     </span>
-                    <span>{worker.role} · {formatHours(history.hours)} · {screen.money(history.paid)}{" "}{t("crm.house.36e0bcfd26")}</span>
+                    <span>{worker.role} · {formatHours(history.hours)} · {screen.money(history.paid, 2)}{" "}{t("crm.house.36e0bcfd26")}</span>
                     <small>{history.timeEntries}{" "}{t("crm.house.c9bf8fc5fb")}{" "}{history.payments}{" "}{t("crm.house.63a6b30eb7")}{" "}{screen.balance(history.balance)}</small>
                   </BusinessButton>
                 );
@@ -6262,7 +6312,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
     houseWorkers.filter(isHouseTrackingWorkerActive).forEach((worker) => {
       const due = houseEntries
         .filter((entry) => entry.workerId === worker.id)
-        .reduce((sum, entry) => sum + getHouseTimeAmount(entry), 0);
+        .reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
       const paid = housePayments
         .filter((payment) => payment.workerId === worker.id)
         .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
@@ -6272,7 +6322,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
         items.push({
           id: `house-balance-${worker.id}`,
           title: t("crm.shell.d84793b512"),
-          detail: t("crm.shell.ac9bef87ec", { value1: displayValue(worker.contactName), value2: displayValue(screen.money(balance)) }),
+          detail: t("crm.shell.ac9bef87ec", { value1: displayValue(worker.contactName), value2: displayValue(screen.money(balance, 2)) }),
           tab: "houseTracking" as Tab,
           tone: "warning",
           targetId: `house-worker-${worker.id}`
@@ -7543,7 +7593,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     notify(screenNotice("crm.shell.e9e7a14924"));
   }
 
-  async function persistHouseRecord(kind: "worker" | "hours", id: string, patch: HouseWorkerEdit | HouseTimeEntry): Promise<FormSaveResult> {
+  async function persistHouseRecord(kind: "worker" | "hours" | "expenses", id: string, patch: HouseWorkerEdit | HouseTimeEntry | HouseTimeExpenseEdit): Promise<FormSaveResult> {
     const before = currentBusinessData.current;
     if (!sharedWorkspaceReady || workspaceBusy.current || workspaceSync.current.dirty(before)) {
       return { ok: false, message: "Attendez la synchronisation des modifications en cours, puis réessayez. Votre saisie est conservée." };
@@ -7553,13 +7603,15 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     workspaceBusy.current = true;
     try {
       const op = await beginHouseOperation();
-      const result = await op.run(() => op.client.rpc(kind === "worker" ? "crm_update_house_worker" : "crm_create_house_time_entry", {
+      const result = await op.run(() => op.client.rpc(kind === "worker" ? "crm_update_house_worker" : kind === "expenses" ? "crm_update_house_time_expenses" : "crm_create_house_time_entry", {
         p_id: id, p_patch: patch, p_revision: write.revision
       }));
       if (result.error) throw new Error(result.error.message);
       const merge = (value: CRMData): CRMData => kind === "worker" ? { ...value,
         houseTrackingWorkers: (value.houseTrackingWorkers ?? []).map(worker => worker.id === id ? { ...worker, ...result.data.worker } : worker)
-      } : { ...value, houseTimeEntries: [result.data.entry as HouseTimeEntry, ...(value.houseTimeEntries ?? [])] };
+      } : { ...value, houseTimeEntries: kind === "expenses"
+        ? (value.houseTimeEntries ?? []).map(entry => entry.id === id ? { ...entry, ...result.data.entry } : entry)
+        : [result.data.entry as HouseTimeEntry, ...(value.houseTimeEntries ?? [])] };
       const acknowledged = merge(before);
       workspaceSync.current.load(acknowledged, result.data.workspaceRevision);
       setAcceptedWorkspaceFingerprint(workspaceFingerprint(acknowledged));
@@ -7641,6 +7693,10 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
   function addHouseTimeEntry(entry: HouseTimeEntry) {
     return persistHouseRecord("hours", entry.id, entry);
+  }
+
+  function updateHouseTimeExpenses(id: string, patch: HouseTimeExpenseEdit) {
+    return persistHouseRecord("expenses", id, patch);
   }
 
   function deleteHouseTimeEntry(id: string) {
@@ -9065,6 +9121,7 @@ function createQuoteDraftFromLead(lead: Lead) {
             onReactivateWorker={reactivateHouseTrackingWorker}
             onPermanentlyDeleteWorker={permanentlyDeleteHouseTrackingWorkerSafely}
             onAddTimeEntry={addHouseTimeEntry}
+            onUpdateTimeExpenses={updateHouseTimeExpenses}
             onDeleteTimeEntry={deleteHouseTimeEntry}
             onAddPayment={addHousePayment}
             onDeletePayment={deleteHousePayment}
@@ -11342,7 +11399,7 @@ function Dashboard({
   houseTimeEntries.filter((entry) => activeHouseWorkerIds.has(entry.workerId)).forEach((entry) => {
     const key = entry.workerId || entry.workerName || entry.id;
     const current = houseDueByWorker.get(key) || { workerName: entry.workerName || "Intervenant", due: 0 };
-    current.due += getHouseTimeAmount(entry);
+    current.due += getHouseTimeTotalAmount(entry);
     houseDueByWorker.set(key, current);
   });
   housePayments.filter((payment) => activeHouseWorkerIds.has(payment.workerId)).forEach((payment) => {
@@ -11460,7 +11517,7 @@ function Dashboard({
     ...houseDueItems.slice(0, 2).map((item, index) => ({
       id: `house-due-${index}-${item.workerName}`,
       title: t("crm.dashboard.d84793b512"),
-      detail: t("crm.dashboard.7c639bc99b", { value1: displayValue(item.workerName), value2: displayValue(screen.money(item.due)) }),
+      detail: t("crm.dashboard.7c639bc99b", { value1: displayValue(item.workerName), value2: displayValue(screen.money(item.due, 2)) }),
       badge: t("crm.dashboard.f86724b3a3"),
       tone: "warning" as const,
       tab: "houseTracking" as Tab
@@ -11655,7 +11712,7 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
             else onDashboardAction("vendorInvoices" as Tab);
           }} />
           <DashboardQuickTile moduleId="planning" label={t("crm.dashboard.f2de9e072a")} value={String(todayPlanning.length)} caption={t("crm.dashboard.358029e806")} onClick={() => onDashboardAction("planning" as Tab)} />
-          <DashboardQuickTile moduleId="houseTracking" label={t("crm.dashboard.3453f57f66")} value={screen.money(houseAmountToPay)} caption={t("crm.dashboard.d332e9d924")} onClick={() => onDashboardAction("houseTracking" as Tab)} />
+          <DashboardQuickTile moduleId="houseTracking" label={t("crm.dashboard.3453f57f66")} value={screen.money(houseAmountToPay, 2)} caption={t("crm.dashboard.d332e9d924")} onClick={() => onDashboardAction("houseTracking" as Tab)} />
           <DashboardQuickTile moduleId="bookings" label={t("crm.dashboard.dbdbf99dae")} value={screen.money(clientAmountToReceive)} caption={t("crm.dashboard.4e1ae32840")} onClick={() => onDashboardAction("bookings" as Tab)} />
         </div>
       </div>
