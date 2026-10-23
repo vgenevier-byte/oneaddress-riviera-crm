@@ -277,6 +277,23 @@
 .publisher-root .publisher-availability .is-active { color: #286047 !important; background: #eaf3ed !important; font-weight: 700 !important; }
 .publisher-root .publisher-availability .is-unavailable { color: #8a4139 !important; background: #f7ebe8 !important; font-weight: 700 !important; }
 .publisher-root .publisher-copy-music { width: 100% !important; margin-top: 12px !important; }
+.publisher-root .publisher-music-context, .publisher-root .publisher-music-summary, .publisher-root .publisher-music-help { margin: 12px 0 !important; color: #596575 !important; font-size: 13px !important; line-height: 1.5 !important; overflow-wrap: anywhere !important; }
+.publisher-root .publisher-music-context strong { color: #10243b !important; }
+.publisher-root .publisher-music-evidence { padding: 0 12px 10px !important; font-size: 12px !important; line-height: 1.5 !important; overflow-wrap: anywhere !important; }
+.publisher-root .publisher-music-evidence p { margin: 6px 0 0 !important; color: #596575 !important; }
+.publisher-root .publisher-music-status { color: #81602f !important; }
+.publisher-root .publisher-music-status.is-confirmed { color: #286047 !important; }
+.publisher-root .publisher-music-status.is-unavailable { color: #8a4139 !important; }
+.publisher-root .publisher-music-search { display: flex !important; flex-wrap: wrap !important; gap: 6px !important; padding: 0 12px 12px !important; }
+.publisher-root .publisher-music-search .publisher-small-button { width: auto !important; max-width: 100% !important; margin: 0 !important; padding: 8px 10px !important; white-space: normal !important; text-decoration: none !important; }
+.publisher-root .publisher-availability button { padding: 8px !important; line-height: 1.4 !important; }
+.publisher-root .publisher-music-form { display: grid !important; gap: 12px !important; margin-top: 14px !important; padding-top: 12px !important; border-top: 1px solid #ded5c6 !important; }
+.publisher-root .publisher-music-form label { display: grid !important; gap: 6px !important; color: #10243b !important; font-size: 13px !important; line-height: 1.5 !important; }
+.publisher-root .publisher-music-form input:not([type="checkbox"]) { display: block !important; width: 100% !important; min-width: 0 !important; min-height: 44px !important; padding: 9px 10px !important; border: 1px solid #b9ad9a !important; border-radius: 8px !important; background: #fffdf8 !important; color: #10243b !important; font: inherit !important; }
+.publisher-root .publisher-music-form .publisher-music-acknowledgement { grid-template-columns: 22px 1fr !important; align-items: start !important; gap: 9px !important; }
+.publisher-root .publisher-music-acknowledgement input { width: 20px !important; height: 20px !important; margin: 2px 0 !important; accent-color: #a57d3f !important; }
+.publisher-root .publisher-music-form-actions { display: flex !important; flex-wrap: wrap !important; align-items: center !important; gap: 10px !important; }
+.publisher-root .publisher-music-form-actions button { white-space: normal !important; padding: 10px 14px !important; }
 
 .publisher-root .publisher-meta { display: grid !important; grid-template-columns: repeat(3, 1fr) !important; gap: 8px !important; margin: 18px 0 !important; }
 .publisher-root .publisher-meta div { min-width: 0 !important; padding: 12px !important; border-left: 2px solid #c69b59 !important; background: rgba(255,255,255,.45) !important; }

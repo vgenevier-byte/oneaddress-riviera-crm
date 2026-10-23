@@ -9,7 +9,9 @@ await test('committed Publisher media survive a subsequent hydration failure', a
  const postId = 'a1000000-0000-4000-8000-000000000001';
  const oldUrl = 'https://fixture.private.blob.vercel-storage.com/publisher/2026-09-28/old.jpg';
  const newUrl = 'https://fixture.private.blob.vercel-storage.com/publisher/2026-09-28/new.jpg';
- const music = [1, 2, 3].map(id => ({ id, title: `Fixture track ${id}`, artist: `Fixture artist ${id}`, availability_status: 'available', revision: 1, times_used: 0 }));
+ const music = [1, 2, 3].map(id => ({ id, title: `Fixture track ${id}`, artist: `Fixture artist ${id}`, version: '', revision: 1, times_used: 0,
+  verification_history: [{ title: `Fixture track ${id}`, artist: `Fixture artist ${id}`, version: '', status: 'confirmed', method: 'manual_instagram', checked_at: '2026-09-28T10:00:00Z', account: 'one-address-riviera', context: 'feed' }],
+ }));
  const plan = { scene_summary: 'Sunlight crosses a distant coastal headland with calm open water.', visual_signature: 'Soft coastal morning and open horizon', image_prompt: 'A quiet Mediterranean coastline in soft morning sunlight, viewed across clear open water with natural editorial realism, no people, logos or text.', format: 'Feed 4:5' };
  const post = { id: postId, revision: 2, post_date: '2026-09-28', image_url: oldUrl, image_pathname: 'publisher/2026-09-28/old.jpg', primary_music_id: 1, alternative_music_ids: [2, 3], status: 'draft', generation_status: 'ready', format: 'Feed 4:5', hashtags: [], creative_universe: 'Paysages', creative_moment: 'Matinale', creative_style: 'Évasion' };
  let committed = false, failSave = false, ambiguousSave = false, referenceUnavailable = false, invalidations = 0;
@@ -18,6 +20,11 @@ await test('committed Publisher media survive a subsequent hydration failure', a
  process.env.PUBLISHER_DATABASE_URL = 'postgresql://fiction@127.0.0.1:55532/publisher_unit';
  t.after(() => { if (previousDatabase === undefined) delete process.env.PUBLISHER_DATABASE_URL; else process.env.PUBLISHER_DATABASE_URL = previousDatabase; });
  t.mock.module(new URL('../../lib/publisher/engine/database.js', import.meta.url), { exports: {
+  query: async (text, values) => {
+   assert.ok(text.includes('FROM publisher_music m'), 'Only the music catalogue uses the raw SQL boundary');
+   if (values.length && committed) throw new Error('Injected hydration outage after committed UPDATE');
+   return music;
+  },
   sql: () => async (strings, ...values) => {
    const text = strings.join('?').replace(/\s+/g, ' ').trim();
    if (text.startsWith('SELECT revision, created_by')) return [];

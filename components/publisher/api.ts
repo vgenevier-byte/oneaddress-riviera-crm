@@ -1,7 +1,7 @@
 "use client";
 import { useMemo } from 'react';
 import { useScopedOperations, type ScopedOperation } from '@/lib/access/operations';
-import type { CreationMode, CreativeDirection, GenerationProgressState, MusicStatus, PublisherMusic, PublisherPost } from './types';
+import type { CreationMode, CreativeDirection, GenerationProgressState, MusicConfirmation, MusicStatus, PublisherMusic, PublisherPost } from './types';
 
 export type GenerationState =
   | { state: 'empty' }
@@ -63,7 +63,10 @@ export function usePublisherApi() {
       history: () => request<{ posts: PublisherPost[] }>('history'),
       regenerateText: (post: PublisherPost, requestId: string) => mutate('regenerate-text', { id: post.id, revision: post.revision, requestId }),
       regenerateImage: (post: PublisherPost, requestId: string) => mutate('regenerate-image', { id: post.id, revision: post.revision, requestId }),
-      setMusicStatus: (post: PublisherPost, id: number, status: MusicStatus, requestId: string) => mutate<{ music: PublisherMusic; post: PublisherPost }>('music-status', { postId: post.id, revision: post.revision, musicRevision: post.music.find(item => item.id === id)?.revision, id, status, requestId }),
+      setMusicStatus: (post: PublisherPost, id: number, status: MusicStatus, requestId: string) => mutate<{ music: PublisherMusic; post: PublisherPost }>('music-status', { postId: post.id, revision: post.revision, musicRevision: post.music.find(item => item.id === id)?.revision, id, status, requestId, ...(status === 'available' ? { method: 'manual_instagram', context: post.music_context?.context || (post.format === 'Reel' ? 'reel' : 'feed') } : {}) }),
+      replaceMusic: (post: PublisherPost, musicId: number | null, requestId: string) => mutate<{ post: PublisherPost; replacement: PublisherMusic | null; music_message: 'replaced' | 'none' }>('music-replace', { id: post.id, revision: post.revision, ...(musicId ? { musicId } : {}), requestId }),
+      selectMusic: (post: PublisherPost, musicId: number, requestId: string) => mutate('music-select', { id: post.id, revision: post.revision, musicId, requestId }),
+      confirmMusic: (post: PublisherPost, music: MusicConfirmation, requestId: string) => mutate<{ post: PublisherPost; music: PublisherMusic }>('music-confirm', { id: post.id, revision: post.revision, title: music.title.trim(), artist: music.artist.trim(), version: music.version.trim(), ...(music.instagramAudioUrl.trim() ? { instagramAudioUrl: music.instagramAudioUrl.trim() } : {}), method: 'manual_instagram', context: post.music_context?.context || (post.format === 'Reel' ? 'reel' : 'feed'), requestId }),
       publish: (post: PublisherPost, musicId: number, requestId: string) => mutate('publish', { id: post.id, revision: post.revision, musicId, requestId }),
       copy: async (postId: string, value: string) => {
         const operation = await begin();

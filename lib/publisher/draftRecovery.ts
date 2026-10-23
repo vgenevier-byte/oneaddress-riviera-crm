@@ -1,4 +1,4 @@
-import type { CreationMode, CreativeDirection, PublisherPost } from '@/components/publisher/types';
+import type { CreationMode, CreativeDirection, MusicConfirmation, PublisherPost } from '@/components/publisher/types';
 
 export type PublisherDraft = {
   userId: string;
@@ -6,7 +6,8 @@ export type PublisherDraft = {
   post: PublisherPost | null;
   mode: CreationMode;
   direction: { [K in 'universe' | 'moment' | 'style']: CreativeDirection[K] | '' } & Pick<CreativeDirection, 'carType' | 'carBrand' | 'carModel'>;
-  selectedMusic?: number;
+  selectedMusic?: number | null;
+  musicConfirmation?: MusicConfirmation;
   requests?: Record<string, string>;
 };
 let held: PublisherDraft | null = null;

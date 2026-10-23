@@ -9,7 +9,9 @@ import test from 'node:test';
 const hashtags = ['#Riviera', '#CoastalMood', '#Mediterranean', '#PrivateEscape'];
 const hook = 'The coast settles into a softer rhythm.';
 const booking = 'Reserve your next escape to the French Riviera with One Address Riviera.';
-const music = [1, 2, 3].map(id => ({ id, title: `Fixture song ${id}`, artist: 'Fixture artist', availability_status: 'available', revision: 1, times_used: 0 }));
+const music = [1, 2, 3].map(id => ({ id, title: `Fixture song ${id}`, artist: 'Fixture artist', version: '', revision: 1, times_used: 0,
+  verification_history: [{ title: `Fixture song ${id}`, artist: 'Fixture artist', version: '', status: 'confirmed', method: 'manual_instagram', checked_at: '2026-10-23T10:00:00Z', account: 'one-address-riviera', context: 'feed' }],
+}));
 const plan = {
   scene_summary: 'A quiet Mediterranean scene in natural editorial light.',
   visual_signature: 'Natural Mediterranean light and a calm open horizon.',
@@ -65,6 +67,7 @@ await test('booking invitations reach saved captions in daily, guided and regene
   }) } });
   t.mock.module(new URL('../../lib/publisher/engine/database.js', import.meta.url), { exports: {
     query: async (text, values) => {
+      if (text.includes('FROM publisher_music m')) return music;
       if (text.startsWith('SELECT * FROM publisher_operations')) return operations.has(values[0]) ? [operations.get(values[0])] : [];
       if (text.startsWith('UPDATE publisher_operations SET state=')) {
         Object.assign(operations.get(values[0]), { state: values[1], result: JSON.parse(values[2]) });
@@ -101,7 +104,7 @@ await test('booking invitations reach saved captions in daily, guided and regene
         if (text.includes('caption =')) writes.push({ text, values: structuredClone(values) });
         for (const field of [
           'theme', 'moment', 'creative_universe', 'creative_moment', 'creative_style', 'scene_summary', 'visual_signature',
-          'caption', 'hashtags', 'primary_music_id', 'alternative_music_ids', 'location', 'format',
+          'caption', 'hashtags', 'primary_music_id', 'selected_music_id', 'alternative_music_ids', 'location', 'format',
           'image_url', 'image_pathname', 'image_prompt', 'car_context', 'generation_run_id',
         ]) {
           const match = text.match(new RegExp(`\\b${field}\\s*=\\s*\\$(\\d+)`));

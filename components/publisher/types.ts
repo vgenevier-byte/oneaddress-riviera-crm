@@ -46,7 +46,27 @@ export interface PublisherMusic {
   revision: number;
   title: string;
   artist: string;
+  version?: string | null;
+  instagram_audio_id?: string | null;
+  instagram_audio_url?: string | null;
+  source?: 'legacy_catalogue' | 'manual_instagram';
+  verification?: {
+    status: 'confirmed' | 'not_found' | 'unknown';
+    method: 'manual_instagram';
+    checked_at: string;
+    account: string;
+    account_label: string;
+    context: 'feed' | 'reel';
+  } | null;
   availability_status: MusicStatus;
+}
+
+export interface MusicConfirmation {
+  title: string;
+  artist: string;
+  version: string;
+  instagramAudioUrl: string;
+  acknowledged: boolean;
 }
 
 export interface PublisherPost {
@@ -65,8 +85,11 @@ export interface PublisherPost {
   caption: string;
   hashtags: string[];
   music: PublisherMusic[];
-  primary_music_id: number;
+  primary_music_id: number | null;
+  selected_music_id?: number | null;
   music_used_id: number | null;
+  music_context?: { account: string; account_label: string; context: 'feed' | 'reel' };
+  music_state?: 'ready' | 'insufficient' | 'none';
   location: string;
   format: string;
   image_src: string;

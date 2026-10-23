@@ -29,7 +29,9 @@ import type {
   CreativeStyle,
   CreativeUniverse,
   GenerationProgressState,
+  MusicConfirmation,
   MusicStatus,
+  PublisherMusic,
   PublisherPost,
   PublisherCarContext,
 } from './types';
@@ -105,6 +107,80 @@ const initialGenerationProgress: GenerationProgressState = {
 
 const activeGenerationKey = 'oar-publisher-active-generation-v1';
 
+const emptyMusicConfirmation: MusicConfirmation = { title: '', artist: '', version: '', instagramAudioUrl: '', acknowledged: false };
+function musicCopy(t: PublisherTranslate) {
+  return {
+    heading: t("publisher.music.heading"),
+    mood: t("publisher.music.mood"),
+    context: t("publisher.music.context"),
+    feed: t("publisher.music.feed"),
+    reel: t("publisher.music.reel"),
+    confirmed: t("publisher.music.confirmed"),
+    unknown: t("publisher.music.unknown"),
+    unavailable: t("publisher.music.unavailable"),
+    version: t("publisher.music.version"),
+    unspecified: t("publisher.music.unspecified"),
+    manual: t("publisher.music.manual"),
+    checked: t("publisher.music.checked"),
+    reportedAt: t("publisher.music.reportedAt"),
+    source: t("publisher.music.source"),
+    legacy: t("publisher.music.legacy"),
+    added: t("publisher.music.added"),
+    legacyReport: t("publisher.music.legacyReport"),
+    none: t("publisher.music.none"),
+    insufficient: t("publisher.music.insufficient"),
+    emptySelection: t("publisher.music.emptySelection"),
+    archived: t("publisher.music.archived"),
+    count: t("publisher.music.count"),
+    found: t("publisher.music.found"),
+    missing: t("publisher.music.missing"),
+    open: t("publisher.music.open"),
+    copyTitle: t("publisher.music.copyTitle"),
+    copyArtist: t("publisher.music.copyArtist"),
+    copied: t("publisher.music.copied"),
+    replace: t("publisher.music.replace"),
+    replaceHelp: t("publisher.music.replaceHelp"),
+    replaced: t("publisher.music.replaced"),
+    noReplacement: t("publisher.music.noReplacement"),
+    confirmedNotice: t("publisher.music.confirmedNotice"),
+    reported: t("publisher.music.reported"),
+    add: t("publisher.music.add"),
+    title: t("publisher.music.title"),
+    artist: t("publisher.music.artist"),
+    versionField: t("publisher.music.versionField"),
+    audioUrl: t("publisher.music.audioUrl"),
+    formHelp: t("publisher.music.formHelp"),
+    acknowledge: t("publisher.music.acknowledge"),
+    save: t("publisher.music.save"),
+    cancel: t("publisher.music.cancel"),
+    permissions: t("publisher.music.permissions"),
+  };
+}
+
+function musicIsConfirmed(music: PublisherMusic, post: PublisherPost) {
+  const scope = post.music_context || { account: 'one-address-riviera', context: post.format === 'Reel' ? 'reel' : 'feed' };
+  return music.availability_status === 'available' && music.verification?.status === 'confirmed'
+    && music.verification.account === scope.account && music.verification.context === scope.context;
+}
+
+function musicSelection(post: PublisherPost, preferred?: number | null): number | null {
+  if (post.status === 'published') return post.music_used_id ?? post.primary_music_id;
+  const eligible = post.music.filter(music => musicIsConfirmed(music, post));
+  if (preferred === null) return null;
+  if (preferred !== undefined && eligible.some(music => music.id === preferred)) return preferred;
+  const persisted = post.selected_music_id === undefined ? post.primary_music_id : post.selected_music_id;
+  return eligible.find(music => music.id === persisted)?.id ?? null;
+}
+
+function instagramAudioLink(value?: string | null) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && ['instagram.com', 'www.instagram.com'].includes(url.hostname)
+      && !url.username && !url.password && !url.port && /^\/reels\/audio\/\d+\/?$/.test(url.pathname) ? url.href : null;
+  } catch { return null; }
+}
+
 
 export default function PublisherPage({ userId, grant, accessRevision, onUnsavedChange }: {
   userId: string; grant: ModuleGrant; accessRevision: number; onUnsavedChange?: (dirty: boolean) => void;
@@ -144,7 +220,7 @@ export default function PublisherPage({ userId, grant, accessRevision, onUnsaved
 
   useEffect(() => {
     const previous = readPublisherDraft(userId, accessRevision);
-    capturePublisherDraft({ userId, accessRevision, post, mode: selectionMode, direction, selectedMusic: previous?.post?.id === post?.id ? previous?.selectedMusic : undefined, requests: previous?.post?.id === post?.id ? previous?.requests : undefined });
+    capturePublisherDraft({ userId, accessRevision, post, mode: selectionMode, direction, selectedMusic: previous?.post?.id === post?.id ? previous?.selectedMusic : undefined, musicConfirmation: previous?.post?.id === post?.id ? previous?.musicConfirmation : undefined, requests: previous?.post?.id === post?.id ? previous?.requests : undefined });
     onUnsavedChange?.(musicDirty || Boolean(direction.universe || direction.moment || direction.style));
   }, [userId, accessRevision, post, selectionMode, direction, musicDirty, onUnsavedChange]);
 
@@ -413,35 +489,44 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
   onNewCreation: () => void;
   onMusicDirty: (dirty: boolean) => void;
 }) {
-  const { t, formatDate: screenDate } = useI18n();
+  const { t, language, locale, formatDate: screenDate } = useI18n();
 
   const [busy, setBusy] = useState<'text' | 'image' | 'publish' | 'music' | 'export' | ''>('');
   const [copied, setCopied] = useState('');
   const [selectedMusic, setSelectedMusic] = useState(() => {
     const saved = readPublisherDraft(userId, accessRevision);
-    return saved?.post?.id === post.id && saved.selectedMusic ? saved.selectedMusic : post.music_used_id || post.primary_music_id;
+    return musicSelection(post, saved?.post?.id === post.id ? saved.selectedMusic : undefined);
+  });
+  const musicText = musicCopy(t);
+  const [musicNotice, setMusicNotice] = useState<'replaced' | 'none' | 'confirmed' | 'reported' | ''>('');
+  const [confirmingMusic, setConfirmingMusic] = useState(false);
+  const [musicConfirmation, setMusicConfirmation] = useState<MusicConfirmation>(() => {
+    const saved = readPublisherDraft(userId, accessRevision);
+    return saved?.post?.id === post.id && saved.musicConfirmation ? saved.musicConfirmation : emptyMusicConfirmation;
   });
   const [conflict, setConflict] = useState(false);
   const [remote, setRemote] = useState<PublisherPost | null>(null);
   const mutations = useRef(new Map<string, string>(Object.entries(readPublisherDraft(userId, accessRevision)?.requests || {})));
   const mutationLock = useRef(false);
-  const previousMusic = useRef({ id: post.id, used: post.music_used_id, primary: post.primary_music_id });
+  const previousMusic = useRef({ id: post.id, used: post.music_used_id, primary: post.primary_music_id, selected: post.selected_music_id });
   const published = post.status === 'published';
   const copyBlock = `${post.caption}\n\n${post.hashtags.join(' ')}`;
+  const musicContext = post.music_context || { account: 'one-address-riviera', account_label: 'One Address Riviera', context: post.format === 'Reel' ? 'reel' : 'feed' };
+  const confirmedCount = post.music.filter(music => musicIsConfirmed(music, post)).length;
 
   useEffect(() => {
     const previous = previousMusic.current;
-    if (previous.id !== post.id || previous.used !== post.music_used_id || previous.primary !== post.primary_music_id) {
-      setSelectedMusic(post.music_used_id || post.primary_music_id);
+    if (previous.id !== post.id || previous.used !== post.music_used_id || previous.primary !== post.primary_music_id || previous.selected !== post.selected_music_id) {
+      setSelectedMusic(musicSelection(post));
     }
-    previousMusic.current = { id: post.id, used: post.music_used_id, primary: post.primary_music_id };
-  }, [post.id, post.music_used_id, post.primary_music_id]);
+    previousMusic.current = { id: post.id, used: post.music_used_id, primary: post.primary_music_id, selected: post.selected_music_id };
+  }, [post]);
 
   useEffect(() => {
     const saved = readPublisherDraft(userId, accessRevision);
-    if (saved?.post?.id === post.id) capturePublisherDraft({ ...saved, selectedMusic });
-    onMusicDirty(canWrite && selectedMusic !== (post.music_used_id || post.primary_music_id));
-  }, [selectedMusic, userId, accessRevision, post.id, post.music_used_id, post.primary_music_id, onMusicDirty, canWrite]);
+    if (saved?.post?.id === post.id) capturePublisherDraft({ ...saved, selectedMusic, musicConfirmation });
+    onMusicDirty(canWrite && !published && (selectedMusic !== musicSelection(post) || Boolean(musicConfirmation.title || musicConfirmation.artist || musicConfirmation.version || musicConfirmation.instagramAudioUrl)));
+  }, [selectedMusic, musicConfirmation, userId, accessRevision, post, onMusicDirty, canWrite, published]);
 
   function mutationId(action: string) {
     const key = `${post.id}:${post.revision}:${action}`;
@@ -493,21 +578,60 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
   }
 
   async function updateMusicStatus(id: number, status: MusicStatus) {
-    if (!canWrite || mutationLock.current) return;
-    mutationLock.current = true; setBusy('music');
+    if (!canWrite || published || mutationLock.current) return;
+    mutationLock.current = true; setBusy('music'); onError(''); setMusicNotice('');
     try {
       const { post: next } = await api.setMusicStatus(post, id, status, mutationId(`music:${id}:${status}`));
       onChange(next); setConflict(false);
       if (id === selectedMusic && status === 'unavailable') {
-        const replacement = next.music.find(item => item.id !== id && item.availability_status !== 'unavailable');
-        if (replacement) setSelectedMusic(replacement.id);
+        setSelectedMusic(musicSelection(next));
       }
+      setMusicNotice('reported');
+    } catch (requestError) { failed(requestError); }
+    finally { mutationLock.current = false; setBusy(''); }
+  }
+
+  async function selectMusic(id: number) {
+    if (!canWrite || published || mutationLock.current || !post.music.some(music => music.id === id && musicIsConfirmed(music, post))) return;
+    setSelectedMusic(id);
+    mutationLock.current = true; setBusy('music'); onError(''); setMusicNotice('');
+    try {
+      const { post: next } = await api.selectMusic(post, id, mutationId(`music-select:${id}`));
+      onChange(next); setConflict(false);
+    } catch (requestError) { failed(requestError); }
+    finally { mutationLock.current = false; setBusy(''); }
+  }
+
+  async function replaceMusic() {
+    if (!canWrite || published || mutationLock.current) return;
+    mutationLock.current = true; setBusy('music'); onError(''); setMusicNotice('');
+    try {
+      const result = await api.replaceMusic(post, selectedMusic, mutationId(`music-replace:${selectedMusic ?? 'empty'}`));
+      onChange(result.post); setConflict(false);
+      if (result.replacement) setSelectedMusic(result.replacement.id);
+      setMusicNotice(result.music_message === 'replaced' ? 'replaced' : 'none');
+    } catch (requestError) { failed(requestError); }
+    finally { mutationLock.current = false; setBusy(''); }
+  }
+
+  function prepareMusicConfirmation(music?: PublisherMusic) {
+    if (music) setMusicConfirmation({ title: music.title, artist: music.artist, version: music.version || '', instagramAudioUrl: instagramAudioLink(music.instagram_audio_url) || '', acknowledged: false });
+    setConfirmingMusic(true); setMusicNotice('');
+  }
+
+  async function confirmMusic() {
+    if (!canWrite || published || mutationLock.current || !musicConfirmation.acknowledged || !musicConfirmation.title.trim() || !musicConfirmation.artist.trim()) return;
+    mutationLock.current = true; setBusy('music'); onError(''); setMusicNotice('');
+    try {
+      const result = await api.confirmMusic(post, musicConfirmation, mutationId(`music-confirm:${JSON.stringify(musicConfirmation)}`));
+      onChange(result.post); setSelectedMusic(result.music.id); setConflict(false);
+      setMusicConfirmation(emptyMusicConfirmation); setConfirmingMusic(false); setMusicNotice('confirmed');
     } catch (requestError) { failed(requestError); }
     finally { mutationLock.current = false; setBusy(''); }
   }
 
   async function publish() {
-    if (!canPublish || mutationLock.current) return;
+    if (!canPublish || published || selectedMusic === null || !post.music.some(music => music.id === selectedMusic && musicIsConfirmed(music, post)) || mutationLock.current) return;
     mutationLock.current = true; setBusy('publish'); onError('');
     try {
       const result = await api.publish(post, selectedMusic, mutationId(`publish:${selectedMusic}`));
@@ -525,7 +649,7 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
 
   return (
     <article className="publisher-post" data-publisher-post-id={post.id}>
-      {conflict && <section className="publisher-alert" aria-label={t("publisher.conflit_de_revision_530d0f")}><strong>{t("publisher.verifiez_la_version_partagee_avant_de_reessa_1cd336")}</strong><p>{t("publisher.votre_selection_musicale_et_la_revision_d_or_6a4e38")}</p><button className="publisher-small-button" onClick={() => void compare()}>{t("publisher.comparer_la_version_partagee_839ad1")}</button>{remote && <div><p>{t("publisher.revision_partagee_4fbcbd")}{" "}{remote.revision} · {remote.caption}</p><button className="publisher-small-button" onClick={() => { mutations.current.clear(); const saved = readPublisherDraft(userId, accessRevision); if (saved) capturePublisherDraft({ ...saved, requests: {} }); onChange(remote); setRemote(null); setConflict(false); onError(''); }}>{t("publisher.recharger_cette_version_et_abandonner_le_bro_a8fe40")}</button></div>}</section>}
+      {conflict && <section className="publisher-alert" aria-label={t("publisher.conflit_de_revision_530d0f")}><strong>{t("publisher.verifiez_la_version_partagee_avant_de_reessa_1cd336")}</strong><p>{t("publisher.votre_selection_musicale_et_la_revision_d_or_6a4e38")}</p><button className="publisher-small-button" onClick={() => void compare()}>{t("publisher.comparer_la_version_partagee_839ad1")}</button>{remote && <div><p>{t("publisher.revision_partagee_4fbcbd")}{" "}{remote.revision} · {remote.caption}</p><button className="publisher-small-button" onClick={() => { mutations.current.clear(); const saved = readPublisherDraft(userId, accessRevision); if (saved) capturePublisherDraft({ ...saved, requests: {} }); onChange(remote); setSelectedMusic(musicSelection(remote)); setMusicConfirmation(emptyMusicConfirmation); setRemote(null); setConflict(false); onError(''); }}>{t("publisher.recharger_cette_version_et_abandonner_le_bro_a8fe40")}</button></div>}</section>}
       <div className="publisher-date-row">
         <div>
           <span className="publisher-kicker">{post.creation_mode === 'guided' ? t("publisher.creation_guidee_f63ade") : t("publisher.publication_du_jour_136cfa")}</span>
@@ -557,33 +681,64 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
       <button className="publisher-secondary-button" disabled={!canGenerate || published || !!busy} onClick={() => void regenerate('image')}><RefreshCw size={18} />{" "}{t("publisher.regenerer_le_visuel_003ee0")}</button>
       {canGenerate && !published && !post.car_context && post.creative_universe === 'Voitures' && <p className="publisher-car-context">{t('publisher.car.legacyImageHint')}</p>}
       {!canExport && <p className="publisher-permission-note">{t("publisher.l_export_et_les_commandes_de_copie_sont_desa_77be00")}</p>}
-      <section className="publisher-card">
+      <section className="publisher-card publisher-music-card" lang={language} aria-label={musicText.heading}>
         <div className="publisher-card-heading">
-          <div><span className="publisher-kicker">{t("publisher.ambiance_baf046")}</span><h3>{t("publisher.choix_musical_1f10a2")}</h3></div>
-          <Music2 size={21} />
+          <div><span className="publisher-kicker">{musicText.mood}</span><h3>{musicText.heading}</h3></div>
+          <Music2 size={21} aria-hidden="true" />
         </div>
+        <p className="publisher-music-context"><strong>{musicText.context}</strong><br />{musicContext.account_label} · {musicContext.context === 'reel' ? musicText.reel : musicText.feed}</p>
+        {published ? <p className="publisher-permission-note">{musicText.archived}</p> : <>
+          <p className="publisher-music-summary" role="status">{confirmedCount}/3 · {musicText.count}</p>
+          {confirmedCount === 0 ? <p className="publisher-permission-note">{musicText.none}</p> : confirmedCount < 3 && <p className="publisher-music-help">{musicText.insufficient}</p>}
+          {selectedMusic === null && <p className="publisher-music-help">{musicText.emptySelection}</p>}
+        </>}
         <div className="publisher-music-list">
-          {post.music.map((music, index) => (
-            <div className={`publisher-music ${selectedMusic === music.id ? 'is-selected' : ''}`} key={music.id}>
-              <button className="publisher-music-main" disabled={!canWrite || !!busy} aria-pressed={selectedMusic === music.id} onClick={() => setSelectedMusic(music.id)}>
-                <span className="publisher-music-number">0{index + 1}</span>
-                <span><strong>{music.title}</strong><small>{music.artist}</small></span>
+          {post.music.map((music, index) => {
+            const confirmed = musicIsConfirmed(music, post);
+            const unavailable = music.availability_status === 'unavailable';
+            const audioLink = instagramAudioLink(music.instagram_audio_url);
+            const verification = music.verification;
+            return <div className={`publisher-music ${selectedMusic === music.id ? 'is-selected' : ''}`} key={music.id}>
+              <button className="publisher-music-main" disabled={!canWrite || published || !!busy || !confirmed} aria-pressed={selectedMusic === music.id} onClick={() => void selectMusic(music.id)}>
+                <span className="publisher-music-number">{String(index + 1).padStart(2, '0')}</span>
+                <span><strong>{music.title}</strong><small>{music.artist}</small><small>{music.version ? `${musicText.version} : ${music.version}` : musicText.unspecified}</small></span>
                 <span className="publisher-radio" aria-hidden="true" />
               </button>
-              <div className="publisher-availability" aria-label={t("publisher.musicAvailability",{title:music.title})}>
-                <button disabled={!canWrite || !!busy} className={music.availability_status === 'available' ? 'is-active' : ''} onClick={() => void updateMusicStatus(music.id, 'available')}>{t("publisher.disponible_264396")}</button>
-                <button disabled={!canWrite || !!busy} className={music.availability_status === 'unavailable' ? 'is-unavailable' : ''} onClick={() => void updateMusicStatus(music.id, 'unavailable')}>{t("publisher.introuvable_de000c")}</button>
+              <div className="publisher-music-evidence">
+                <strong className={`publisher-music-status ${confirmed ? 'is-confirmed' : unavailable ? 'is-unavailable' : ''}`}>{confirmed ? musicText.confirmed : unavailable ? musicText.unavailable : musicText.unknown}</strong>
+                {verification && <p>{verification.account_label} · {verification.context === 'reel' ? musicText.reel : musicText.feed}<br />{verification.status === 'not_found' ? musicText.reportedAt : musicText.checked} {new Date(verification.checked_at).toLocaleString(locale)}<br />{musicText.manual}</p>}
+                {unavailable && !verification && <p>{musicText.legacyReport}</p>}
+                <p>{musicText.source} : {music.source === 'manual_instagram' ? musicText.added : musicText.legacy}</p>
               </div>
-            </div>
-          ))}
+              <div className="publisher-music-search">
+                {audioLink ? <a className="publisher-small-button" href={audioLink} target="_blank" rel="noreferrer"><ArrowUpRight size={16} />{musicText.open}</a> : <>
+                  <button className="publisher-small-button publisher-copy-music" disabled={!canExport || !!busy} onClick={() => void copy(music.title, `title:${music.id}`)}>{copied === `title:${music.id}` ? <Check size={16} /> : <Clipboard size={16} />}{copied === `title:${music.id}` ? musicText.copied : musicText.copyTitle}</button>
+                  <button className="publisher-small-button publisher-copy-music" disabled={!canExport || !!busy} onClick={() => void copy(music.artist, `artist:${music.id}`)}>{copied === `artist:${music.id}` ? <Check size={16} /> : <Clipboard size={16} />}{copied === `artist:${music.id}` ? musicText.copied : musicText.copyArtist}</button>
+                </>}
+              </div>
+              {!published && <div className="publisher-availability" aria-label={`${musicText.context} : ${music.title}`}>
+                <button disabled={!canWrite || !!busy} onClick={() => prepareMusicConfirmation(music)}>{musicText.found}</button>
+                <button disabled={!canWrite || !!busy || (unavailable && Boolean(verification))} className={unavailable ? 'is-unavailable' : ''} onClick={() => void updateMusicStatus(music.id, 'unavailable')}>{musicText.missing}</button>
+              </div>}
+            </div>;
+          })}
         </div>
-        <button className="publisher-small-button publisher-copy-music" disabled={!canExport || !!busy} onClick={() => {
-          const music = post.music.find(item => item.id === selectedMusic);
-          if (music) void copy(`${music.title} — ${music.artist}`, 'music');
-        }}>
-          {copied === 'music' ? <Check size={16} /> : <Clipboard size={16} />}
-          {copied === 'music' ? t("publisher.musique_copiee_af8d3a") : t("publisher.copier_la_musique_choisie_96f46c")}
-        </button>
+        {!published && <>
+          <button className="publisher-secondary-button" disabled={!canWrite || !!busy} onClick={() => void replaceMusic()}>{busy === 'music' ? <Loader2 className="publisher-spin" size={18} /> : <RefreshCw size={18} />}{musicText.replace}</button>
+          <p className="publisher-music-help">{musicText.replaceHelp}</p>
+          {musicNotice && <p className="publisher-permission-note" role="status">{musicNotice === 'none' ? musicText.noReplacement : musicNotice === 'confirmed' ? musicText.confirmedNotice : musicText[musicNotice]}</p>}
+          <button className="publisher-small-button" disabled={!canWrite || !!busy} onClick={() => prepareMusicConfirmation()}>{musicText.add}</button>
+          {!canWrite && <p className="publisher-music-help">{musicText.permissions}</p>}
+          {confirmingMusic && <form className="publisher-music-form" onSubmit={event => { event.preventDefault(); void confirmMusic(); }}>
+            <p className="publisher-music-help">{musicText.formHelp}</p>
+            <label>{musicText.title}<input required maxLength={200} disabled={!canWrite || !!busy} value={musicConfirmation.title} onChange={event => setMusicConfirmation({ ...musicConfirmation, title: event.target.value, acknowledged: false })} /></label>
+            <label>{musicText.artist}<input required maxLength={200} disabled={!canWrite || !!busy} value={musicConfirmation.artist} onChange={event => setMusicConfirmation({ ...musicConfirmation, artist: event.target.value, acknowledged: false })} /></label>
+            <label>{musicText.versionField}<input maxLength={200} disabled={!canWrite || !!busy} value={musicConfirmation.version} onChange={event => setMusicConfirmation({ ...musicConfirmation, version: event.target.value, acknowledged: false })} /></label>
+            <label>{musicText.audioUrl}<input type="url" maxLength={1000} placeholder="https://www.instagram.com/reels/audio/…/" disabled={!canWrite || !!busy} value={musicConfirmation.instagramAudioUrl} onChange={event => setMusicConfirmation({ ...musicConfirmation, instagramAudioUrl: event.target.value, acknowledged: false })} /></label>
+            <label className="publisher-music-acknowledgement"><input type="checkbox" required disabled={!canWrite || !!busy} checked={musicConfirmation.acknowledged} onChange={event => setMusicConfirmation({ ...musicConfirmation, acknowledged: event.target.checked })} /><span>{musicText.acknowledge}<br /><strong>{musicContext.account_label} · {musicContext.context === 'reel' ? musicText.reel : musicText.feed}</strong></span></label>
+            <div className="publisher-music-form-actions"><button className="publisher-primary-button" type="submit" disabled={!canWrite || !!busy || !musicConfirmation.acknowledged || !musicConfirmation.title.trim() || !musicConfirmation.artist.trim()}>{musicText.save}</button><button className="publisher-small-button" type="button" disabled={!!busy} onClick={() => setConfirmingMusic(false)}>{musicText.cancel}</button></div>
+          </form>}
+        </>}
       </section>
 
       <section className="publisher-card">

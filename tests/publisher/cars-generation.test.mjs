@@ -43,7 +43,9 @@ function assertCarProviderPrompts(calls, reference) {
 await test('car generation freezes one server reference at the provider boundary and keeps it across regenerations', async t => {
   const { publisherContext } = await import('../../lib/publisher/engine/context.js');
   const postId = 'c1000000-0000-4000-8000-000000000001';
-  const music = [1, 2, 3].map(id => ({ id, title: `Fixture song ${id}`, artist: 'Fixture artist', availability_status: 'available', revision: 1, times_used: 0 }));
+  const music = [1, 2, 3].map(id => ({ id, title: `Fixture song ${id}`, artist: 'Fixture artist', version: '', revision: 1, times_used: 0,
+    verification_history: ['feed', 'reel'].map(context => ({ title: `Fixture song ${id}`, artist: 'Fixture artist', version: '', status: 'confirmed', method: 'manual_instagram', checked_at: '2026-10-21T10:00:00Z', account: 'one-address-riviera', context })),
+  }));
   const calls = [], deleted = [], journal = new Map();
   let stored = { id: postId, revision: 1, post_date: '2026-10-21', status: 'draft', generation_status: 'generating', creative_universe: 'Voitures', creative_moment: 'Nuit', creative_style: 'Dynamique', format: 'Feed 4:5' };
   let failSave = false, recentContent = [], selectedFormat = 'Feed 4:5', planningVariant = null, regeneratedVisualVariant = null;
@@ -51,6 +53,10 @@ await test('car generation freezes one server reference at the provider boundary
   process.env.PUBLISHER_DATABASE_URL = 'postgresql://fiction@127.0.0.1:55532/publisher_cars_unit';
   t.after(() => { if (oldDatabase === undefined) delete process.env.PUBLISHER_DATABASE_URL; else process.env.PUBLISHER_DATABASE_URL = oldDatabase; });
   t.mock.module(new URL('../../lib/publisher/engine/database.js', import.meta.url), { exports: {
+    query: async text => {
+      assert.ok(text.includes('FROM publisher_music m'), 'Only the music catalogue uses the raw SQL boundary');
+      return music;
+    },
     sql: () => async (strings, ...values) => {
       const text = strings.reduce((value, part, index) => value + (index ? `$${index}` : '') + part, '').replace(/\s+/g, ' ').trim();
       if (text.startsWith('SELECT revision, created_by')) return [];
@@ -68,7 +74,7 @@ await test('car generation freezes one server reference at the provider boundary
         const writingImage = text.includes('image_url =');
         if (writingImage && failSave) throw new Error('Injected car save failure');
         const next = { ...stored };
-        for (const field of ['theme', 'moment', 'creative_universe', 'creative_moment', 'creative_style', 'scene_summary', 'visual_signature', 'caption', 'hashtags', 'primary_music_id', 'alternative_music_ids', 'location', 'format', 'image_url', 'image_pathname', 'image_prompt', 'car_context']) {
+        for (const field of ['theme', 'moment', 'creative_universe', 'creative_moment', 'creative_style', 'scene_summary', 'visual_signature', 'caption', 'hashtags', 'primary_music_id', 'selected_music_id', 'alternative_music_ids', 'location', 'format', 'image_url', 'image_pathname', 'image_prompt', 'car_context']) {
           const match = text.match(new RegExp(`\\b${field}\\s*=\\s*\\$(\\d+)`));
           if (match) next[field] = field === 'car_context' ? JSON.parse(values[Number(match[1]) - 1]) : values[Number(match[1]) - 1];
         }

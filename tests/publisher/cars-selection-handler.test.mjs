@@ -53,7 +53,7 @@ await test('car selections are validated before admission and retain legacy oper
     claimRegeneration: unreachable, getPostById: unreachable, getPostByRequestId: unreachable,
     getTodayPost: unreachable, hydratePostWithMusic: async value => value,
     listHistory: unreachable, markPublished: unreachable, normalizeGenerationProgress: value => value,
-    setMusicStatus: unreachable,
+    setMusicStatus: unreachable, replacePostMusic: unreachable, confirmPostMusic: unreachable, selectPostMusic: unreachable,
   } });
   const paid = async () => { providerCalls += 1; throw new Error('A paid transport must not run'); };
   t.mock.module(new URL('../../lib/publisher/engine/generation.js', import.meta.url), { exports: {
