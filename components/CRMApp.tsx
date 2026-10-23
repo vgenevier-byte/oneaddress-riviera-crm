@@ -101,6 +101,7 @@ import { normalizeAddressValue, readAddressForm } from "@/lib/address";
 import ContactDocuments, { ContactDocumentLibrary } from "./ContactDocuments";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
 import { getContactLabel, getContactPersonName, getContactSecondaryLabel, getContactIdentityValidationError, validateContactIdentity, type ContactIdentityValidation } from "@/lib/contactIdentity";
+import type { ContactCreateIntent, ContactCreateReturn } from "@/lib/contacts/createIntent";
 import SearchableBusinessContactPicker from "./SearchableBusinessContactPicker";
 import vendorFinanceStyles from "./VendorFinanceDialogs.module.css";
 import { VendorInvoiceDuplicateDialog } from "./VendorFinanceDialogs";
@@ -5590,7 +5591,7 @@ function DashboardQuickTile({
 
 export {createQuickEntryRecords, promptQuickEntryText};
 
-export default function CRMApp({ access, initialTab = "dashboard", initialContactId, sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; initialContactId?: string; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => boolean | void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+export default function CRMApp({ access, initialTab = "dashboard", initialContactId, externalNavigation, contactCreateIntent, onContactCreateReturn, sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; initialContactId?: string; externalNavigation?: { tab: Tab; revision: number }; contactCreateIntent?: ContactCreateIntent; onContactCreateReturn?: ContactCreateReturn; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => boolean | void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
   const { t, label, locale, screen, screenText, dialogText, dialogT } = useCRMDisplay();
 
   const beginHouseOperation = useScopedOperations("houseTracking");
@@ -5619,8 +5620,25 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
   });
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
+  const externalTab = externalNavigation?.tab;
+  const externalRevision = externalNavigation?.revision;
+  useEffect(() => {
+    if (!externalTab) return;
+    const timer = window.setTimeout(() => setActiveTabState(externalTab), 0);
+    return () => window.clearTimeout(timer);
+  }, [externalTab, externalRevision]);
+  useEffect(() => {
+    if (!contactCreateIntent || access.modules.contacts?.level !== "contribute") return;
+    const timer = window.setTimeout(() => setActiveTabState("contacts"), 0);
+    return () => window.clearTimeout(timer);
+  }, [contactCreateIntent, access.modules.contacts?.level]);
   const [navigationRevision, setNavigationRevision] = useState(0);
   const [focusContactId, setFocusContactId] = useState<string | undefined>(initialContactId);
+  useEffect(() => {
+    if (!initialContactId) return;
+    const timer = window.setTimeout(() => setFocusContactId(initialContactId), 0);
+    return () => window.clearTimeout(timer);
+  }, [initialContactId]);
   const [, setMobileMoreOpen] = useState(false);
 
 
@@ -5799,6 +5817,15 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
 
 
   function setActiveTab(tab: Tab) {
+    if (contactCreateIntent && tab !== activeTab) {
+      if (onExternalNavigate(tab) === false) return false;
+      setFormDirty(false);
+      setFocusContactId(undefined);
+      setQuery("");
+      setActiveTabState(tab);
+      setNavigationRevision(value => value + 1);
+      return true;
+    }
     if ((hasUnsavedChanges || formDirty) && tab !== activeTab && !window.confirm(dialogT("crm.shell.63f11792a5"))) return false;
     setFormDirty(false);
     setFocusContactId(undefined);
@@ -9002,7 +9029,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "contacts" && (
-          <ContactsView onDraftStateChange={setFormDirty} access={access} focusContactId={focusContactId} actor={activeActor} contacts={data.contacts} query={query} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
+          <ContactsView createIntent={contactCreateIntent} onCreateReturn={onContactCreateReturn} onDraftStateChange={setFormDirty} access={access} focusContactId={focusContactId} focusRevision={externalRevision} actor={activeActor} contacts={data.contacts} query={query} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
 
@@ -11769,12 +11796,12 @@ function StatCard({ label, value, caption }: { label: string; value: string; cap
 
 /** Every identity input stays mounted when the draft nature or UI language changes. */
 function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue, onIssue, prefix }: {
-  contact?: Contact;
+  contact?: Partial<Contact>;
   entityType: string;
   onEntityTypeChange: (value: string) => void;
   issue: ContactIdentityValidation | null;
   onIssue: (issue: ContactIdentityValidation | null) => void;
-  prefix: "contact-create" | "contact-edit";
+  prefix: string;
 }) {
   const { t } = useI18n();
   const company = entityType === "company";
@@ -11787,10 +11814,10 @@ function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue,
   return <div className="contact-identity-fields" onChange={() => onIssue(null)}>
     <BusinessLabel className="full">{t("crm.contacts.entityType.label")}
       <select name="entityType" value={entityType} onChange={event => onEntityTypeChange(event.target.value)}
-        required={!contact || contact.entityType !== undefined}
+        required={!contact?.id || contact.entityType !== undefined}
         aria-invalid={issue?.field === "entityType" || undefined} aria-describedby={issue?.field === "entityType" ? errorId("entityType") : undefined}
         onInvalid={invalid("entityType", "contact_entity_type_invalid")}>
-        {contact && <option value="">{t("crm.contacts.entityType.unqualified")}</option>}
+        {contact?.id && <option value="">{t("crm.contacts.entityType.unqualified")}</option>}
         <option value="person">{t("crm.contacts.entityType.person")}</option>
         <option value="company">{t("crm.contacts.entityType.company")}</option>
       </select>{error("entityType")}
@@ -11813,23 +11840,10 @@ function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue,
   </div>;
 }
 
-function ContactsView({
-  access,
-  focusContactId,
-  actor,
-  contacts,
-  query = "",
-  leads,
-  tasks,
-  onAdd,
-  onUpdate,
-  onDelete,
-  onCreateLead,
-  onCreateTask,
-  onDraftStateChange
-}: {
+type ContactsViewProps = {
   access?: AccessSnapshot;
   focusContactId?: string;
+  focusRevision?: number;
   actor: string;
   contacts: Contact[];
   query?: string;
@@ -11841,8 +11855,49 @@ function ContactsView({
   onCreateLead: (contactName: string) => void;
   onCreateTask: (contactName: string, contactId?: string) => void;
   onDraftStateChange?: (dirty: boolean) => void;
-}) {
-  const { t, label, screen, dialogT } = useCRMDisplay();
+  createIntent?: ContactCreateIntent;
+  onCreateReturn?: ContactCreateReturn;
+};
+
+/** Keep the ordinary uncontrolled form and its address editor intact during a project trip. */
+function ContactsView(props: ContactsViewProps) {
+  const { createIntent, onDraftStateChange } = props;
+  const ordinaryDirty = useRef(false);
+  const intentDirty = useRef(false);
+  const markOrdinary = (dirty: boolean) => { ordinaryDirty.current = dirty; props.onDraftStateChange?.(dirty || intentDirty.current); };
+  const markIntent = (dirty: boolean) => { intentDirty.current = dirty; props.onDraftStateChange?.(dirty || ordinaryDirty.current); };
+  useEffect(() => {
+    intentDirty.current = Boolean(createIntent);
+    onDraftStateChange?.(ordinaryDirty.current || intentDirty.current);
+  }, [createIntent, onDraftStateChange]);
+  return <>
+    <div hidden={Boolean(props.createIntent)} data-ordinary-contacts onChangeCapture={event => { if ((event.target as HTMLElement).closest("form")) markOrdinary(true); }}>
+      <ContactsViewBody {...props} onDraftStateChange={markOrdinary} createIntent={undefined} onCreateReturn={undefined} />
+    </div>
+    {props.createIntent && <div onChangeCapture={event => { if ((event.target as HTMLElement).closest("form")) markIntent(true); }}><ContactsViewBody {...props} onDraftStateChange={markIntent} key={props.createIntent.id} focusContactId={undefined} /></div>}
+  </>;
+}
+
+function ContactsViewBody({
+  access,
+  focusContactId,
+  focusRevision,
+  actor,
+  contacts,
+  query = "",
+  leads,
+  tasks,
+  onAdd,
+  onUpdate,
+  onDelete,
+  onCreateLead,
+  onCreateTask,
+  onDraftStateChange,
+  createIntent,
+  onCreateReturn
+}: ContactsViewProps) {
+  const { t, label, screen, dialogT, language } = useCRMDisplay();
+  const journeyText = (fr: string, en: string) => language === "en" ? en : fr;
 
   const business = useBusinessPermissions();
   function retainContactDraft() { business?.markDirty?.(); onDraftStateChange?.(true); }
@@ -11854,14 +11909,46 @@ function ContactsView({
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("Toutes");
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(() => contacts.find(contact => contact.id === focusContactId) ?? null);
+  const openedContactFocus = useRef<{ id: string; revision?: number } | undefined>(undefined);
+  useEffect(() => {
+    const opened = openedContactFocus.current;
+    if (!focusContactId || opened?.id === focusContactId && (focusRevision === undefined || opened.revision === focusRevision)) return;
+    const contact = contacts.find(item => item.id === focusContactId);
+    if (!contact) return;
+    const timer = window.setTimeout(() => { openedContactFocus.current = { id: focusContactId, revision: focusRevision }; setSelectedContact(contact); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [focusContactId, focusRevision, contacts]);
   const [newContactKind, setNewContactKind] = useState<ContactKind>("Client");
   const [editingContactKind, setEditingContactKind] = useState<ContactKind>("Client");
-  const [newContactEntityType, setNewContactEntityType] = useState("person");
+  const [newContactEntityType, setNewContactEntityType] = useState<string>(createIntent?.entityType ?? "person");
   const [editingContactEntityType, setEditingContactEntityType] = useState("");
   const [creationIdentityError, setCreationIdentityError] = useState<ContactIdentityValidation | null>(null);
   const [editingIdentityError, setEditingIdentityError] = useState<ContactIdentityValidation | null>(null);
   const creationForm = useRef<HTMLFormElement>(null);
   const editingForm = useRef<HTMLFormElement>(null);
+  const returning = useRef(false);
+  const journeyPending = useRef(false);
+  const duplicateFingerprint = useRef("");
+  const [pendingCreatedId, setPendingCreatedId] = useState<string>();
+  const [journeyError, setJourneyError] = useState(false);
+  const [duplicateChoices, setDuplicateChoices] = useState<Contact[]>([]);
+  const canCreateForProject = !access || access.modules.contacts?.level === "contribute";
+  useEffect(() => {
+    if (!createIntent) return;
+    const timer = window.setTimeout(() => {
+      const form = creationForm.current;
+      form?.scrollIntoView({ block: "start", behavior: "instant" });
+      form?.querySelector<HTMLElement>(`[name="${createIntent.entityType === "company" ? "companyName" : "name"}"]`)?.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [createIntent]);
+  useEffect(() => {
+    if (!createIntent || !pendingCreatedId || !canCreateForProject || returning.current) return;
+    const saved = contacts.find(contact => contact.id === pendingCreatedId);
+    if (!saved || (saved.entityType || "person") !== createIntent.entityType) return;
+    returning.current = true;
+    onCreateReturn?.(createIntent.id, saved);
+  }, [contacts, createIntent, pendingCreatedId, canCreateForProject, onCreateReturn]);
   useEffect(() => {
     if (creationIdentityError && !creation.saving) creationForm.current?.querySelector<HTMLElement>(`[name="${creationIdentityError.field}"]`)?.focus();
   }, [creationIdentityError, creation.saving]);
@@ -12140,38 +12227,76 @@ function ContactsView({
           )}
         </section>
 
-        <section className="card form-card contacts-form-card oar-contacts-form-card">
+        <section className="card form-card contacts-form-card oar-contacts-form-card" data-contact-create-intent={createIntent?.id}>
           <p className="eyebrow" data-semantic-text={"Nouveau"}>{t("crm.contacts.c3634f2ede")}</p>
           <h3>{creationRecordId ? t("crm.contacts.869538c383") : t("crm.contacts.a57c9b5174")}</h3>
+          {createIntent && <div className="stack" data-project-contact-journey>
+            <p role="status">{journeyText("Le brouillon du projet est conservé. Enregistrez cette fiche pour revenir au projet et la sélectionner ; le projet restera à enregistrer.", "Your project draft is retained. Save this record to return to the project and select it; the project will still need saving.")}</p>
+            {createIntent.identityHint && <p>{journeyText("Identité connue dans le projet, à vérifier sans la décomposer automatiquement : ", "Known project identity; verify it without automatically splitting the name: ")}{createIntent.identityHint}</p>}
+            <BusinessButton type="button" className="secondary-button" disabled={creation.saving || Boolean(pendingCreatedId)} onClick={() => {
+              if (journeyPending.current || returning.current) return;
+              returning.current = true;
+              onDraftStateChange?.(false);
+              onCreateReturn?.(createIntent.id);
+            }}>{journeyText("Annuler et revenir au projet", "Cancel and return to project")}</BusinessButton>
+          </div>}
 
-          <BusinessForm ref={creationForm} className="form-grid contact-create-form" data-saved-record-id={creationRecordId || undefined} pending={creation.saving} onChangeCapture={creation.changed}
+          <BusinessForm ref={creationForm} className="form-grid contact-create-form" data-saved-record-id={creationRecordId || undefined} pending={creation.saving || Boolean(pendingCreatedId)} onChangeCapture={creation.changed}
             onReset={event => { delete event.currentTarget.dataset.contactDraftId; delete event.currentTarget.dataset.savedRecordId; setCreationRecordId(null); setNewContactEntityType("person"); setCreationIdentityError(null); }}
             onSubmit={event => {
               event.preventDefault(); onDraftStateChange?.(true);
+              if (journeyPending.current || returning.current || pendingCreatedId) return;
               const form = event.currentTarget; const values = new FormData(form);
               const issue = validateContactIdentity({ entityType: values.get("entityType"), name: values.get("name"), companyName: values.get("companyName") });
               setCreationIdentityError(issue);
               if (issue) { form.querySelector<HTMLElement>(`[name="${issue.field}"]`)?.focus(); return; }
+              if (createIntent) {
+                const incompatible = !canCreateForProject || values.get("entityType") !== createIntent.entityType;
+                setJourneyError(incompatible);
+                if (incompatible) { form.querySelector<HTMLElement>('[name="entityType"]')?.focus(); return; }
+                const identity = [values.get("name"), values.get("companyName"), values.get("email")].map(value => normalizeDuplicateKey(String(value ?? "")));
+                const fingerprint = JSON.stringify(identity);
+                const matches = contacts.filter(contact => (contact.entityType || "person") === createIntent.entityType && contact.id !== form.dataset.contactDraftId && contact.id !== creationRecordId && (
+                  Boolean(identity[2] && normalizeDuplicateKey(contact.email) === identity[2]) ||
+                  Boolean(createIntent.entityType === "company" ? identity[1] && normalizeDuplicateKey(contact.companyName) === identity[1] : identity[0] && normalizeDuplicateKey(contact.name) === identity[0])
+                ));
+                setDuplicateChoices(matches);
+                if (matches.length && duplicateFingerprint.current !== fingerprint) { duplicateFingerprint.current = fingerprint; return; }
+              }
+              journeyPending.current = true;
               void creation.submit(form, async () => {
                 const result = await onAdd(event);
                 if (result && !result.ok) setCreationIdentityError(getContactIdentityValidationError(result.message));
+                if (createIntent && (!result || result.ok && !result.recordId)) return { ok: false, message: "Enregistrement non confirmé. Votre saisie est conservée ; vérifiez les données avant de réessayer." };
                 return result;
               }, (newerDraft, result) => {
                 onDraftStateChange?.(newerDraft);
                 if (newerDraft) { setCreationRecordId(result?.recordId ?? null); return; }
+                if (createIntent && result?.recordId) { setPendingCreatedId(result.recordId); return; }
                 form.reset(); setCreationRecordId(null); setNewContactKind("Client");
-              });
+              }).finally(() => { journeyPending.current = false; });
             }}>
             <ConfirmedFormMessage message={getContactIdentityValidationError(creation.message) ? "" : creation.message} />
-            <ContactIdentityFields entityType={newContactEntityType} onEntityTypeChange={setNewContactEntityType} issue={creationIdentityError} onIssue={setCreationIdentityError} prefix="contact-create" />
+            {journeyError && <p role="alert">{journeyText("Vérifiez vos droits Contacts et conservez la nature Entreprise pour une agence, Personne pour un interlocuteur.", "Check your Contacts permissions and keep Company for an agency or Person for an individual contact.")}</p>}
+            {createIntent && duplicateChoices.length > 0 && <section className="stack full" data-project-contact-duplicates>
+              <p role="status">{journeyText("Doublon possible détecté. Vous pouvez sélectionner une fiche existante ou confirmer la création d’une nouvelle fiche.", "Possible duplicate detected. Select an existing record or confirm creation of a new one.")}</p>
+              {duplicateChoices.map(contact => <BusinessButton key={contact.id} permission="write" type="button" className="secondary-button" onClick={() => {
+                const current = contacts.find(item => item.id === contact.id && (item.entityType || "person") === createIntent.entityType);
+                if (!current || !canCreateForProject || journeyPending.current || returning.current) return;
+                returning.current = true;
+                onDraftStateChange?.(false);
+                onCreateReturn?.(createIntent.id, current);
+              }}>{journeyText("Sélectionner la fiche existante : ", "Select existing record: ")}{getContactLabel(contact)}{contact.email ? ` · ${contact.email}` : ""}</BusinessButton>)}
+            </section>}
+            <ContactIdentityFields contact={createIntent?.prefill} entityType={newContactEntityType} onEntityTypeChange={setNewContactEntityType} issue={creationIdentityError} onIssue={setCreationIdentityError} prefix={createIntent ? `contact-create-${createIntent.id}` : "contact-create"} />
             <BusinessLabel>{t("crm.contacts.baaddf70fb")}<select name="kind" value={newContactKind} onChange={(event) => setNewContactKind(event.target.value as ContactKind)}>
                 {contactKinds.map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
               </select>
             </BusinessLabel>
-            <BusinessLabel>{t("crm.contacts.969ccbd3cf")}<input name="email" type="email" placeholder={t("crm.contacts.2a539d6520")} /></BusinessLabel>
-            <BusinessLabel>{t("crm.contacts.cc4c424b57")}<input name="phone" placeholder="+33..." /></BusinessLabel>
-            <ContactPostalAddressField />
-            <BusinessLabel>{t("crm.contacts.4d7e0f0579")}<input name="city" placeholder={t("crm.contacts.897ebccda8")} /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.969ccbd3cf")}<input name="email" type="email" defaultValue={createIntent?.prefill.email} placeholder={t("crm.contacts.2a539d6520")} /></BusinessLabel>
+            <BusinessLabel>{t("crm.contacts.cc4c424b57")}<input name="phone" defaultValue={createIntent?.prefill.phone} placeholder="+33..." /></BusinessLabel>
+            <ContactPostalAddressField value={createIntent?.prefill.postalAddress} metadata={createIntent?.prefill.postalAddressDetails} />
+            <BusinessLabel>{t("crm.contacts.4d7e0f0579")}<input name="city" defaultValue={createIntent?.prefill.city} placeholder={t("crm.contacts.897ebccda8")} /></BusinessLabel>
             <BusinessLabel>{t("crm.contacts.0e570ca6fa")}<input name="source" placeholder={t("crm.contacts.0ce7823851")} /></BusinessLabel>
 
             {newContactKind === "Membre de l’organisation" && (
@@ -12244,7 +12369,7 @@ function ContactsView({
             <BusinessLabel className="full">{t("crm.contacts.8a7525b149")}<textarea name="notes" placeholder={t("crm.contacts.7e672331b2")} />
             </BusinessLabel>
 
-            <BusinessButton permission="write" className="primary-button contact-form-submit" type="submit">{creationRecordId ? t("crm.contacts.45951f6ac1") : t("crm.contacts.00f9c53345")}</BusinessButton>
+            <BusinessButton permission="write" className="primary-button contact-form-submit" type="submit">{createIntent ? duplicateChoices.length ? journeyText("Créer une nouvelle fiche et revenir au projet", "Create new record and return to project") : journeyText("Enregistrer et revenir au projet", "Save and return to project") : creationRecordId ? t("crm.contacts.45951f6ac1") : t("crm.contacts.00f9c53345")}</BusinessButton>
           </BusinessForm>
         </section>
       </div>

@@ -6,33 +6,33 @@ import { AddressField } from "@/components/address/AddressField";
 import { AddressMapLink } from "@/components/address/AddressMapLink";
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
 import { createFonciereRepository } from "@/lib/fonciere/repository";
-import { applyProjectContact, contactCompanyMatches, contactReplacementFields, isAgencyOption, projectContactLabel, type ContactCreateInput, type ContactRole, type ProjectContact } from "@/lib/fonciere/contacts";
+import { applyProjectContact, contactCompanyMatches, contactReplacementFields, isAgencyOption, projectContactLabel, type ContactRole, type ProjectContact } from "@/lib/fonciere/contacts";
+import { projectContactCreateIntent, type ProjectContactReturn } from "@/lib/fonciere/contactCreation";
+import type { ContactCreateIntent } from "@/lib/contacts/createIntent";
 import type { FonciereData } from "@/lib/fonciere/model";
 import type { Contact } from "@/lib/types";
 import { useFonciereLocale } from "@/lib/fonciere/locale";
 import styles from "./ProjectContacts.module.css";
 
-type Props = { data: FonciereData; onChange: (data: FonciereData) => void; canReadContacts: boolean; canWriteContacts: boolean; disabled?: boolean; accessSignal?: AbortSignal; onOpenContact?: (id: string) => void; onPendingChange?: (pending: boolean) => void };
+type Props = { data: FonciereData; onChange: (data: FonciereData) => void; canReadContacts: boolean; canWriteContacts: boolean; disabled?: boolean; accessSignal?: AbortSignal; onOpenContact?: (id: string) => void; onPendingChange?: (pending: boolean) => void; onCreateContact?: (intent: ContactCreateIntent) => boolean; contactReturn?: ProjectContactReturn; onContactReturnHandled?: () => void };
 type SearchState = { query: string; rows: ProjectContact[]; loading: boolean; error: string };
 const asPickerContact = (row: ProjectContact): Contact => ({ ...row, kind: "Client", budget: 0, source: "", notes: "", createdAt: "" });
 const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entityType: row.entityType, name: row.name, firstName: row.firstName || "", companyName: row.companyName || "", email: row.email, phone: row.phone, city: row.city, postalAddress: row.postalAddress, postalAddressDetails: row.postalAddressDetails });
 const blankSearch = (query = ""): SearchState => ({ query, rows: [], loading: false, error: "" });
 
-export default function ProjectContacts({ data, onChange, canReadContacts, canWriteContacts, disabled = false, accessSignal, onOpenContact, onPendingChange }: Props) {
+export default function ProjectContacts({ data, onChange, canReadContacts, canWriteContacts, disabled = false, accessSignal, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
   const [lang] = useFonciereLocale(), begin = useScopedOperations("izord");
   const t = (fr: string, en: string) => lang === "fr" ? fr : en;
   const [agencySearch, setAgencySearch] = useState(() => blankSearch(data.agencyContactId ? "" : data.agencyName));
   const [agentSearch, setAgentSearch] = useState(() => blankSearch(data.agentContactId ? "" : data.agentName));
   const [linked, setLinked] = useState<Record<string, ProjectContact>>({});
   const [linkError, setLinkError] = useState("");
-  const [createRole, setCreateRole] = useState<ContactRole | null>(null), [draft, setDraft] = useState<ContactCreateInput | null>(null);
-  const [creating, setCreating] = useState(false), [creationError, setCreationError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const pendingIntent = useRef<string | null>(null);
   const [filterAgency, setFilterAgency] = useState(false), [opened, setOpened] = useState<ProjectContact | null>(null);
-  const alive = useRef(true), createController = useRef<AbortController | null>(null);
   const latest = useRef({ data, onChange, disabled, canReadContacts, accessSignal });
   useLayoutEffect(() => { latest.current = { data, onChange, disabled, canReadContacts, accessSignal }; }, [data, onChange, disabled, canReadContacts, accessSignal]);
-  useEffect(() => { alive.current = true; return () => { alive.current = false; createController.current?.abort(); }; }, []);
-  useEffect(() => { onPendingChange?.(Boolean(createRole)); return () => onPendingChange?.(false); }, [createRole, onPendingChange]);
+  useEffect(() => { onPendingChange?.(creating); return () => onPendingChange?.(false); }, [creating, onPendingChange]);
   useEffect(() => {
     // A newly accepted import proposes matching CRM contacts, without selecting
     // any record or replacing a search that the user has already typed.
@@ -83,25 +83,30 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
     return true;
   }
   function prepareCreate(role: ContactRole) {
-    const names = data.agentName.trim().split(/\s+/);
-    setCreateRole(role); setCreationError(""); setDraft({ entityType: role === "agency" ? "company" : "person", name: role === "agent" ? names.pop() || "" : "", firstName: role === "agent" ? names.join(" ") : "", companyName: data.agencyName, email: role === "agent" ? data.agentEmail : data.agencyEmail, phone: role === "agent" ? data.agentPhone : data.agencyPhone, city: role === "agency" ? data.agencyAddressDetails?.city || "" : "", postalAddress: role === "agency" ? data.agencyAddress : "", postalAddressDetails: role === "agency" ? data.agencyAddressDetails : undefined });
+    if (!onCreateContact || creating || pendingIntent.current || disabled || !canWriteContacts || !canReadContacts) return;
+    const intent = projectContactCreateIntent(data, role, linked[data.agentContactId]);
+    pendingIntent.current = intent.id;
+    if (onCreateContact(intent)) setCreating(true);
+    else pendingIntent.current = null;
   }
-  async function create() {
-    if (!draft || !createRole || !canWriteContacts || creating || disabled) return;
-    const role = createRole, local = new AbortController(); createController.current = local; setCreating(true); setCreationError("");
-    try {
-      const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]);
-      const row = await op.run(() => createFonciereRepository(op.client).createContact(draft, { signal })); signal.throwIfAborted();
-      setLinked(previous => ({ ...previous, [row.id]: row }));
-      // Creating a record does not itself overwrite corrected project values.
-      setDraft(null); setCreateRole(null);
-      if (!select(role, row)) {
-        const setter = role === "agency" ? setAgencySearch : setAgentSearch;
-        setter({ query: row.companyName || [row.firstName, row.name].filter(Boolean).join(" "), rows: [row], loading: false, error: "" });
+  useEffect(() => {
+    if (!contactReturn || contactReturn.intentId !== pendingIntent.current) return;
+    const timer = window.setTimeout(() => {
+      pendingIntent.current = null;
+      setCreating(false);
+      if (contactReturn.contact) {
+        const row = asProjectContact(contactReturn.contact);
+        if (!select(contactReturn.role, row)) {
+          const setter = contactReturn.role === "agency" ? setAgencySearch : setAgentSearch;
+          setter({ query: row.companyName || [row.firstName, row.name].filter(Boolean).join(" "), rows: [row], loading: false, error: "" });
+        }
       }
-    } catch (error) { if (alive.current && !local.signal.aborted && !isCancelled(error)) setCreationError(error instanceof Error ? error.message : t("Création non confirmée. Votre saisie est conservée.", "Creation not confirmed. Your input is retained.")); }
-    finally { if (alive.current && !local.signal.aborted) setCreating(false); }
-  }
+      onContactReturnHandled?.();
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // select reads the latest project draft; never replace it with a captured snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactReturn, onContactReturnHandled]);
   function openContact(id: string) { if (onOpenContact) onOpenContact(id); else if (linked[id]) setOpened(linked[id]); }
   function renderPicker(role: ContactRole) {
     const search = role === "agency" ? agencySearch : agentSearch, setter = role === "agency" ? setAgencySearch : setAgentSearch;
@@ -112,7 +117,7 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
       {search.loading && <p role="status">{t("Recherche des contacts autorisés…", "Searching authorized contacts…")}</p>}
       {search.error && <p className={styles.error} role="alert">{search.error}</p>}
       {role === "agency" && !id && data.agencyName && <p className={styles.note}>{t("Nom d’entreprise conservé dans le projet. Un nom seul ne crée pas de relation CRM.", "Company name retained in the project. A name alone does not create a CRM link.")}</p>}
-      {canWriteContacts && !disabled && <button type="button" className={styles.textButton} onClick={() => prepareCreate(role)}>{role === "agency" ? t("Créer une fiche entreprise", "Create a company contact") : t("Créer un contact", "Create a contact")}</button>}
+      {canWriteContacts && onCreateContact && !disabled && <button type="button" disabled={creating} className={styles.textButton} onClick={() => prepareCreate(role)}>{role === "agency" ? t("Créer une fiche entreprise", "Create a company contact") : t("Créer un contact", "Create a contact")}</button>}
     </div>;
   }
   const fields = [['agencyName', 'Nom de l’agence / entreprise', 'Agency / company name'], ['agencyAddress', 'Adresse de l’agence', 'Agency address'], ['agencyPhone', 'Téléphone de l’agence', 'Agency phone'], ['agencyEmail', 'Email de l’agence', 'Agency email'], ['agentName', 'Prénom et nom de l’agent', 'Agent first and last name'], ['agentPhone', 'Téléphone personnel de l’agent', 'Agent direct phone'], ['agentEmail', 'Email personnel de l’agent', 'Agent direct email']] as const;
@@ -132,7 +137,7 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
       if (key === "agencyAddress") return <div key={key}><AddressField multiline id="fonciere-agencyAddress" name="agencyAddress" value={data.agencyAddress} metadata={data.agencyAddressDetails} label={t(fr, en)} lang={lang} disabled={disabled || creating} maxLength={12000} onChange={next => onChange({ ...data, agencyAddress: next, agencyAddressDetails: undefined })} onMetadataChange={next => { if (next) onChange({ ...data, agencyAddress: next.formattedAddress, agencyAddressDetails: next }); }} /><AddressMapLink address={data.agencyAddress} metadata={data.agencyAddressDetails} lang={lang} />{sourceValue !== undefined && <small className={localCorrection ? styles.local : styles.note}>{localCorrection ? t("Correction locale au projet", "Project-local correction") : t("Repris du contact CRM", "Copied from CRM contact")}</small>}</div>;
       return <label key={key}><span>{t(fr, en)}</span><input id={`fonciere-${key}`} type={key.toLowerCase().includes("email") ? "email" : key.toLowerCase().includes("phone") ? "tel" : "text"} value={data[key]} maxLength={12000} disabled={disabled || creating} onChange={event => onChange({ ...data, [key]: event.target.value })} />{sourceValue !== undefined && <small className={localCorrection ? styles.local : styles.note}>{localCorrection ? t("Correction locale au projet", "Project-local correction") : t("Repris du contact CRM", "Copied from CRM contact")}</small>}</label>;
     })}</div>
-    {draft && createRole && <section className={styles.creation} aria-label={t("Création de contact CRM", "Create CRM contact")}><h4>{createRole === "agency" ? t("Nouvelle entreprise CRM", "New CRM company") : t("Nouveau contact CRM", "New CRM contact")}</h4><p>{t("Vérifiez le préremplissage. Les identités et coordonnées existantes sont contrôlées avant création ; les droits Contacts s’appliquent côté serveur.", "Review these prefilled details. Existing identities and contact details are checked before creation; Contacts permissions apply on the server.")}</p><div className={styles.fields}>{(['name', 'firstName', 'companyName', 'email', 'phone', 'city', 'postalAddress'] as const).map(key => key === 'postalAddress' ? <AddressField multiline key={key} name="fonciereContactPostalAddress" value={draft.postalAddress} metadata={draft.postalAddressDetails} label={t("Adresse du contact", "Contact address")} city={draft.city} lang={lang} disabled={creating} maxLength={500} onChange={next => setDraft({ ...draft, postalAddress: next, postalAddressDetails: undefined })} onMetadataChange={next => { if (next) setDraft({ ...draft, postalAddress: next.formattedAddress, city: next.line1 ? next.city : draft.city, postalAddressDetails: next }); }} /> : <label key={key}><span>{{ name: t("Nom", "Last name"), firstName: t("Prénom", "First name"), companyName: t("Entreprise / agence", "Company / agency"), email: "Email", phone: t("Téléphone", "Phone"), city: t("Ville du contact", "Contact city"), postalAddress: t("Adresse du contact", "Contact address") }[key]}</span><input type={key === "email" ? "email" : key === "phone" ? "tel" : "text"} value={draft[key]} maxLength={500} disabled={creating} onChange={event => setDraft({ ...draft, [key]: event.target.value, ...(key === 'city' ? { postalAddressDetails: undefined } : {}) })} /></label>)}</div>{creationError && <p className={styles.error} role="alert">{creationError}</p>}<div className={styles.actions}><button type="button" onClick={() => { setDraft(null); setCreateRole(null); }} disabled={creating}>{t("Annuler", "Cancel")}</button><button type="button" onClick={() => void create()} disabled={disabled || !canWriteContacts || creating || (createRole === "agency" ? !draft.companyName.trim() : !draft.name.trim())}>{creating ? t("Création…", "Creating…") : t("Créer et sélectionner", "Create and select")}</button></div></section>}
+
     {canReadContacts && opened && <section className={styles.creation} aria-label={t("Fiche CRM", "CRM contact")}><h4>{projectContactLabel(opened)}</h4><p>{[opened.email, opened.phone, opened.postalAddress].filter(Boolean).join(" · ")}</p><AddressMapLink address={opened.postalAddress} metadata={opened.postalAddressDetails} lang={lang} /><button type="button" onClick={() => setOpened(null)}>{t("Fermer", "Close")}</button></section>}
   </div>;
 }
