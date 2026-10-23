@@ -1,4 +1,5 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -53,7 +54,7 @@ export default function TasksWorkspace(props: TasksWorkspaceProps) {
 
 /** Account/permission changes remount this entire private state, including drafts. */
 function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty, onDraftConsumed, query, onQueryChange, draft, links, scope }: TasksWorkspaceProps & { scope: string }) {
-  const {t, label: uiLabel, formatDate: uiDate, locale} = useI18n();
+  const {t, label: uiLabel, formatDate: uiDate, locale, language} = useI18n();
 
   const contactLabel = (contact: TaskContactOption) => [contact.firstName, contact.name, contact.company].some(value => value?.trim()) ? taskContactLabel(contact) : t("modules.contacts.unnamed");
   const formatTaskTimestamp = (value?: string | null) => value && Number.isFinite(Date.parse(value)) ? uiDate(value, {dateStyle: "short", timeStyle: "short"}) : t("modules.contactDocuments.notProvided");
@@ -250,6 +251,9 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const recipientDetails = new Map([...directory.remembered, ...(currentEditor?.base?.assignees ?? []), ...recipients].map(person => [person.userId, person]));
   const requiredManagerId = currentEditor?.base?.createdBy === null ? currentEditor.base.managerId : null;
   const leadOptions = links?.leads ?? [], contactOptions = links?.contacts ?? [];
+  const editorLeadOptions = currentEditor?.draft.leadId && !leadOptions.some(option => option.id === currentEditor.draft.leadId)
+    ? [...leadOptions, { id: currentEditor.draft.leadId, label: t("modules.tasksWorkspace.linkRetainedDetailsUnavailable") }]
+    : leadOptions;
   const detailContact = detail?.contactId ? contactOptions.find(option => option.id === detail.contactId) : undefined;
 
   function addRecipient(id: string) {
@@ -330,7 +334,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
             {directory.status === "loading" && <p role="status">{t("modules.tasksWorkspace.loadingEligiblePeopleYourInputAndSelectionsAreRetained")}</p>}
             {directory.status === "error" && <p role="alert">{t("modules.tasksWorkspace.directoryUnavailableYourInputAndSelectionsAreRetainedRetryToRefreshEligible")}</p>}
             <p className="taskws-help" aria-live="polite">{t("modules.tasks.assigneeCount", {count: selectedRecipients.length})}</p>
-            <select name="recipientToAdd" aria-label={t("modules.tasksWorkspace.selectAnAssignee")} className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">{t("modules.tasksWorkspace.selectAnAssignee")}</option>{availableRecipients.map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? t("modules.tasksWorkspace.me") : ""} · {person.access === "read" ? t("modules.moduleWorkspace.read") : t("modules.moduleWorkspace.contribute")}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
+            <select name="recipientToAdd" aria-label={t("modules.tasksWorkspace.selectAnAssignee")} className="taskws-add-recipient" value="" disabled={directory.status === "loading" || !availableRecipients.length} onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }} onChange={event => { const id = event.currentTarget.value; event.currentTarget.value = ""; addRecipient(id); }}><option value="">{t("modules.tasksWorkspace.selectAnAssignee")}</option>{sortSelectOptions(availableRecipients, person => `${person.label}${person.userId === userId ? t("modules.tasksWorkspace.me") : ""} · ${person.access === "read" ? t("modules.moduleWorkspace.read") : t("modules.moduleWorkspace.contribute")}${person.email ? ` · ${person.email}` : ""}${person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}`, language).map(person => <option key={person.userId} value={person.userId}>{person.label}{person.userId === userId ? t("modules.tasksWorkspace.me") : ""} · {person.access === "read" ? t("modules.moduleWorkspace.read") : t("modules.moduleWorkspace.contribute")}{person.email ? ` · ${person.email}` : ""}{person.detail && person.detail !== person.email ? ` · ${person.detail}` : ""}</option>)}</select>
             {selectedRecipients.length > 0 && <ul className="taskws-recipients" aria-label={t("modules.tasksWorkspace.selectedAssignees")}>{selectedRecipients.map(id => {
               const person = recipientDetails.get(id), label = person?.label ?? t("modules.tasksWorkspace.assigneeUnavailable");
               const retained = !recipients.some(candidate => candidate.userId === id), required = id === requiredManagerId;
@@ -340,7 +344,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
             {!selectedRecipients.length && <p className="taskws-help">{t("modules.tasksWorkspace.noAssigneeSelectedAPersonalTaskVisibleOnlyToItsCreator")}</p>}
             <button type="button" disabled={directory.status === "loading"} onClick={() => void loadDirectory()}>{directory.status === "error" ? t("modules.tasksWorkspace.retryLoadingAssignees") : t("modules.tasksWorkspace.refreshEligiblePeople")}</button>
           </fieldset>
-          {(leadOptions.length > 0 || currentEditor.draft.leadId) && <label className="taskws-full">{t("modules.tasksWorkspace.linkedEnquiry_98abe0")}<select name="leadId" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("leadId", event.target.value)}><option value="">{t("modules.tasksWorkspace.noLinkedEnquiry")}</option>{currentEditor.draft.leadId && !leadOptions.some(option => option.id === currentEditor.draft.leadId) && <option value={currentEditor.draft.leadId}>{t("modules.tasksWorkspace.linkRetainedDetailsUnavailable")}</option>}{leadOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
+          {(leadOptions.length > 0 || currentEditor.draft.leadId) && <label className="taskws-full">{t("modules.tasksWorkspace.linkedEnquiry_98abe0")}<select name="leadId" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("leadId", event.target.value)}><option value="">{t("modules.tasksWorkspace.noLinkedEnquiry")}</option>{sortSelectOptions(editorLeadOptions, option => option.label, language).map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</select></label>}
           <TaskContactPicker key={currentEditor.id} options={contactOptions} contactId={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={id => changeDraft("contactId", id)} />
           <div className="taskws-full taskws-buttons"><button type="button" disabled={editorBusy} onClick={() => { setEditor(null); callbacks.current.onDirty?.(false); }}>{t("modules.tasksWorkspace.cancel")}</button><button className="taskws-primary" type="submit" disabled={editorBusy || conflict || !editorCapabilities.progress}>{editorBusy ? t("modules.tasksWorkspace.awaitingConfirmation") : currentEditor.base ? t("modules.tasksWorkspace.save") : t("modules.tasksWorkspace.createTask")}</button></div>
         </form>

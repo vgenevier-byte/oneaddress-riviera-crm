@@ -20,6 +20,7 @@ import type { ProjectContactReturn } from "@/lib/fonciere/contactCreation";
 import { AddressMapLink } from "@/components/address/AddressMapLink";
 import { propertyAddressDetails, propertyAddressText } from "@/lib/fonciere/address";
 import GuidedProjectField, { type GuidedFieldSpec } from "./GuidedProjectField";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { GUIDED_FIELD_DEFINITIONS, currentGuidedValue, guidedReadableFields, isGuidedFieldApplicable, readGuidedField, reconfirmGuidedField, suggestedFonciereName, type GuidedKey } from "@/lib/fonciere/guided";
 
 type FieldKey = FonciereField | GuidedKey;
@@ -295,11 +296,11 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   }
   function suggestionsFor(key: FieldKey): string[] {
     if (!["propertyAddress", "city", "postalCode"].includes(key)) return [];
-    return [...new Set(projects.flatMap(project => {
+    return sortSelectOptions([...new Set(projects.flatMap(project => {
       const saved = (project.payload as { data?: Partial<FonciereData> } | undefined)?.data;
       const value = saved?.[key as FonciereField];
       return typeof value === "string" && value.trim() ? [value] : [];
-    }))].sort((a, b) => a.localeCompare(b, lang)).slice(0, 100);
+    }))], value => value, lang).slice(0, 100);
   }
 
   return <div className={styles.workspace} lang={lang} data-fonciere-projects>

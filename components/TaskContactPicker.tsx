@@ -4,6 +4,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useEffect, useId, useState, type KeyboardEvent } from "react";
 import { matchesTaskContact, taskContactLabel, type TaskContactOption } from "@/lib/tasks/contactOptions";
 import { getContactSecondaryLabel } from "@/lib/contactIdentity";
+import { sortSelectOptions } from "@/lib/selectOptions";
 
 type Props = {
   options: TaskContactOption[];
@@ -19,7 +20,7 @@ function contactInformation(contact: TaskContactOption) {
 
 /** The text is a local search only. A link changes only after an explicit choice or removal. */
 export default function TaskContactPicker({ options, contactId, onChange, disabled = false }: Props) {
-  const {t} = useI18n();
+  const {t, language} = useI18n();
 
   const contactLabel = (contact: TaskContactOption) => [contact.firstName, contact.name, contact.company].some(value => value?.trim()) ? taskContactLabel(contact) : t("modules.contacts.unnamed");
   const inputId = useId();
@@ -28,7 +29,7 @@ export default function TaskContactPicker({ options, contactId, onChange, disabl
   const [open, setOpen] = useState(false);
   const [activeId, setActiveId] = useState("");
   const selected = options.find(contact => contact.id === contactId);
-  const matches = options.filter(contact => matchesTaskContact(contact, query));
+  const matches = sortSelectOptions(options.filter(contact => matchesTaskContact(contact, query)), contactLabel, language);
   const listVisible = !disabled && open && Boolean(query.trim());
   const activeIndex = matches.findIndex(contact => contact.id === activeId);
 

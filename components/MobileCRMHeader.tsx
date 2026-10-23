@@ -1,4 +1,5 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -31,7 +32,7 @@ export default function MobileCRMHeader({
   onActorChange,
   onQueryChange
 }: Props) {
-  const { t, label } = useI18n();
+  const { t, label, language } = useI18n();
   const [searchOpen, setSearchOpen] = useState(false);
   const [previousTab, setPreviousTab] = useState(activeTab);
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -136,7 +137,7 @@ export default function MobileCRMHeader({
                 <span>{t("navigation.actionsBy")}</span>
                 <select value={activeActor} onChange={(event) => onActorChange(event.target.value)}>
                   <option value="">{t("navigation.unspecified")}</option>
-                  {actors.map((actor) => <option key={actor}>{actor}</option>)}
+                  {sortSelectOptions(actors, actor => actor, language).map((actor) => <option key={actor}>{actor}</option>)}
                 </select>
               </label>
               {actions.map((action) => (

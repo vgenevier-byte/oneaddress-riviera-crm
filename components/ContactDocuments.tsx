@@ -1,4 +1,5 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -20,7 +21,7 @@ const writable = (access:AccessSnapshot) => access.fullAccess || (access.modules
 
 /** Shared renderer keeps the same private proxy and retirement rules in both surfaces. */
 export function ContactDocumentCards({access,documents,onChanged,onReplace}:{access:AccessSnapshot;documents:ContactDocument[];onChanged:()=>Promise<void>|void;onReplace?:(doc:ContactDocument,file:File)=>void}) {
-  const {t, formatDate: uiDate, locale} = useI18n();
+  const {t, formatDate: uiDate, locale, language} = useI18n();
 
   const begin=useScopedOperations("documents");
   const [message,setMessage]=useState(""),[working,setWorking]=useState(""),[preview,setPreview]=useState<{doc:ContactDocument;url:string}|null>(null);
@@ -81,12 +82,12 @@ export function ContactDocumentCards({access,documents,onChanged,onReplace}:{acc
     </article>)}
     {message&&<p role="status">{moduleMessage(message, t)}</p>}
     {preview&&<div className="document-preview-overlay" role="dialog" aria-modal="true" aria-labelledby="contact-document-preview-title" ref={previewDialog}><div className="document-preview-modal"><div className="section-heading"><h3 id="contact-document-preview-title">{preview.doc.title}</h3><button type="button" className="secondary-button" onClick={closePreview}>{t("modules.contactDocuments.closePreview")}</button></div><iframe src={preview.url+"#toolbar=0"} title={preview.doc.title} sandbox="allow-same-origin" referrerPolicy="no-referrer" className="document-preview-frame"/>{canDownload(access)&&<button type="button" onClick={()=>void download(preview.doc)}>{t("modules.contactDocuments.download")}</button>}</div></div>}
-    {sharing&&<div className="confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="contact-document-sharing-title" ref={shareDialog}><div className="confirm-dialog"><h3 id="contact-document-sharing-title">{t("modules.contactDocuments.permissions_c80b62")} {sharing.title}</h3><p>{t("modules.contactDocuments.eachPermissionAppliesOnlyToThisFileContactsAndDocumentsAccessIs")}</p><label>{t("modules.contactDocuments.authorisedColleague")}<select value={recipient} onChange={event=>setRecipient(event.target.value)}><option value="">{t("modules.contactDocuments.chooseAPerson")}</option>{recipients.map(user=><option key={user.id} value={user.id}>{user.email}</option>)}</select></label><button type="button" disabled={!recipient||Boolean(working)} onClick={()=>void share()}>{t("modules.contactDocuments.grantAccessToThisFile")}</button>{sharing.shared_with?.map(user=><p key={user.user_id}>{user.email||user.user_id} <button type="button" disabled={Boolean(working)} onClick={()=>void share(user.user_id)}>{t("modules.contactDocuments.revokeAccess")}</button></p>)}<button type="button" className="secondary-button" onClick={()=>setSharing(null)}>{t("modules.tasksWorkspace.close")}</button></div></div>}
+    {sharing&&<div className="confirm-backdrop" role="dialog" aria-modal="true" aria-labelledby="contact-document-sharing-title" ref={shareDialog}><div className="confirm-dialog"><h3 id="contact-document-sharing-title">{t("modules.contactDocuments.permissions_c80b62")} {sharing.title}</h3><p>{t("modules.contactDocuments.eachPermissionAppliesOnlyToThisFileContactsAndDocumentsAccessIs")}</p><label>{t("modules.contactDocuments.authorisedColleague")}<select value={recipient} onChange={event=>setRecipient(event.target.value)}><option value="">{t("modules.contactDocuments.chooseAPerson")}</option>{sortSelectOptions(recipients,user=>user.email,language).map(user=><option key={user.id} value={user.id}>{user.email}</option>)}</select></label><button type="button" disabled={!recipient||Boolean(working)} onClick={()=>void share()}>{t("modules.contactDocuments.grantAccessToThisFile")}</button>{sharing.shared_with?.map(user=><p key={user.user_id}>{user.email||user.user_id} <button type="button" disabled={Boolean(working)} onClick={()=>void share(user.user_id)}>{t("modules.contactDocuments.revokeAccess")}</button></p>)}<button type="button" className="secondary-button" onClick={()=>setSharing(null)}>{t("modules.tasksWorkspace.close")}</button></div></div>}
   </div>;
 }
 
 export default function ContactDocuments({contactId,access}:{contactId:string;access:AccessSnapshot}) {
-  const {t, label: uiLabel} = useI18n();
+  const {t, label: uiLabel, language} = useI18n();
 
   const begin=useScopedOperations("documents"),[projection,setProjection]=useState<ContactDocumentProjection|null>(null),[queue,setQueue]=useState<Queued[]>([]),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
   const revision=useRef<string|null>(null),runController=useRef<AbortController|null>(null),inFlight=useRef(false),alive=useRef(true),queueRef=useRef<Queued[]>([]),reads=useRef(new ContactDocumentReadSequence());
@@ -141,7 +142,7 @@ export default function ContactDocuments({contactId,access}:{contactId:string;ac
       <h4>{t("modules.contactDocuments.addDocuments")}</h4><p>{t("modules.contactDocuments.pdfJPEGAndPNGMaximum25MBPerFileMultipleFilesOf")}</p>
       <label>{t("modules.contactDocuments.chooseMultipleFiles")}<input type="file" multiple accept={CONTACT_DOCUMENT_ACCEPT} disabled={busy||!projection} onChange={event=>{select(event.target.files);event.target.value="";}}/></label>
       {queue.map(item=><fieldset key={item.operationId} disabled={busy||item.locked} className={styles.draft}><legend>{item.file.name}{item.previous?t("modules.contactDocuments.newVersion"):""}</legend>
-        <label>{t("modules.contactDocuments.type")}<select aria-label={t("modules.documents.typeTitle", {title: item.file.name})} value={item.type} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,type:event.target.value as ContactDocumentType}:row))}>{CONTACT_DOCUMENT_TYPES.map(type=><option key={type} value={type}>{uiLabel(type, "modules")}</option>)}</select></label>
+        <label>{t("modules.contactDocuments.type")}<select aria-label={t("modules.documents.typeTitle", {title: item.file.name})} value={item.type} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,type:event.target.value as ContactDocumentType}:row))}>{sortSelectOptions(CONTACT_DOCUMENT_TYPES,type=>uiLabel(type, "modules"),language,{last:type=>type==="Autre"}).map(type=><option key={type} value={type}>{uiLabel(type, "modules")}</option>)}</select></label>
         <label>{t("modules.contactDocuments.title")}<input aria-label={t("modules.documents.nameTitle", {title: item.file.name})} required maxLength={200} value={item.title} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,title:event.target.value}:row))}/></label>
         <label>{t("modules.contactDocuments.optionalExpiryDate")}<input type="date" value={item.expiry} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,expiry:event.target.value}:row))}/></label>
         <p role="status">{item.message||validateContactDocumentFile(item.file) ? moduleMessage(item.message||validateContactDocumentFile(item.file), t) : t("modules.contactDocuments.readyToUpload")}</p>

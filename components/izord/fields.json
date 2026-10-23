@@ -34,7 +34,8 @@
         "value": "compare",
         "label": "Comparer les deux options"
       }
-    ]
+    ],
+    "optionOrder": "alphabetical"
   },
   {
     "key": "rentalPeriod",
@@ -113,7 +114,8 @@
         "value": "other",
         "label": "Foncière / sans engagement · devis requis"
       }
-    ]
+    ],
+    "optionOrder": "alphabetical"
   },
   {
     "key": "notaryRate",
@@ -140,7 +142,8 @@
         "value": "fai",
         "label": "FAI / prix acquéreur — honoraires à déduire"
       }
-    ]
+    ],
+    "optionOrder": "alphabetical"
   },
   {
     "key": "saleRate",
@@ -234,7 +237,8 @@
         "value": "Partielle",
         "label": "Partielle"
       }
-    ]
+    ],
+    "optionOrder": "business"
   },
   {
     "key": "land",
@@ -356,6 +360,7 @@
         "value": "Écarter",
         "label": "Écarter"
       }
-    ]
+    ],
+    "optionOrder": "business"
   }
 ]

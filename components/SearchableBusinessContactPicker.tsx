@@ -4,6 +4,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { Contact } from "@/lib/types";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import {
   getVendorBusinessName,
   getVendorContactPersonName,
@@ -51,7 +52,7 @@ export default function SearchableBusinessContactPicker({
   value, onSelect, onQueryChange, queryValue, selectedRecord, searchMode = "vendor",
   loading = false, disabled = false, onOpenContact, resultLabel, labels
 }: Props) {
-  const {t} = useI18n();
+  const {t, language} = useI18n();
 
   const inputId = useId();
   const listboxId = `${inputId}-listbox`;
@@ -74,7 +75,7 @@ export default function SearchableBusinessContactPicker({
     Boolean(fallbackContactName && !hasDefaultContact)
   );
   const [isOpen, setIsOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(-1);
+  const [activeContactId, setActiveContactId] = useState("");
 
   const controlled = value !== undefined;
   const effectiveId = controlled ? value : selectedContactId;
@@ -91,12 +92,15 @@ export default function SearchableBusinessContactPicker({
   if (previousQueryValue !== queryValue) {
     setPreviousQueryValue(queryValue);
     setIsOpen(Boolean(queryValue && normalizedQuery.length >= 2));
-    setActiveIndex(-1);
+    setActiveContactId("");
   }
   const results = useMemo(
-    () => searchMode === "all" ? contacts.slice(0, 50) : searchVendorContacts(contacts, normalizedQuery, 10),
-    [contacts, normalizedQuery, searchMode]
+    () => searchMode === "all"
+      ? sortSelectOptions(contacts, resultLabel || getVendorBusinessName, language).slice(0, 50)
+      : searchVendorContacts(contacts, normalizedQuery, 10),
+    [contacts, language, normalizedQuery, resultLabel, searchMode]
   );
+  const activeIndex = results.findIndex(contact => contact.id === activeContactId);
   if (
     previousDefaults.defaultContactId !== defaultContactId ||
     previousDefaults.fallbackContactName !== fallbackContactName ||
@@ -108,10 +112,8 @@ export default function SearchableBusinessContactPicker({
     setPreserveFallback(Boolean(fallbackContactName && !hasDefaultContact));
     setQuery("");
     setIsOpen(false);
-    setActiveIndex(-1);
+    setActiveContactId("");
   }
-
-  if (activeIndex >= results.length) setActiveIndex(-1);
 
   useEffect(() => {
     const form = containerRef.current?.closest("form");
@@ -123,7 +125,7 @@ export default function SearchableBusinessContactPicker({
       setPreserveFallback(Boolean(fallbackContactName && !hasDefaultContact));
       setQuery("");
       setIsOpen(false);
-      setActiveIndex(-1);
+      setActiveContactId("");
     }
 
     form.addEventListener("reset", resetPicker);
@@ -156,7 +158,7 @@ export default function SearchableBusinessContactPicker({
     setQuery("");
     onQueryChange?.("");
     setIsOpen(false);
-    setActiveIndex(-1);
+    setActiveContactId("");
     focusSearch();
   }
 
@@ -167,7 +169,7 @@ export default function SearchableBusinessContactPicker({
     setPreserveFallback(false);
     setQuery("");
     setIsOpen(false);
-    setActiveIndex(-1);
+    setActiveContactId("");
   }
 
   function selectContact(contact: Contact) {
@@ -177,23 +179,21 @@ export default function SearchableBusinessContactPicker({
     setPreserveFallback(false);
     setQuery("");
     setIsOpen(false);
-    setActiveIndex(-1);
+    setActiveContactId("");
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown" && results.length > 0) {
       event.preventDefault();
       setIsOpen(true);
-      setActiveIndex((index) => (index < 0 ? 0 : (index + 1) % results.length));
+      setActiveContactId(results[activeIndex < 0 ? 0 : (activeIndex + 1) % results.length].id);
       return;
     }
 
     if (event.key === "ArrowUp" && results.length > 0) {
       event.preventDefault();
       setIsOpen(true);
-      setActiveIndex((index) =>
-        index < 0 ? results.length - 1 : (index - 1 + results.length) % results.length
-      );
+      setActiveContactId(results[activeIndex < 0 ? results.length - 1 : (activeIndex - 1 + results.length) % results.length].id);
       return;
     }
 
@@ -281,7 +281,7 @@ export default function SearchableBusinessContactPicker({
               setQuery(nextQuery);
               onQueryChange?.(nextQuery);
               setIsOpen(normalizeVendorContactSearch(nextQuery).length >= 2);
-              setActiveIndex(-1);
+              setActiveContactId("");
             }}
             onFocus={() => setIsOpen(normalizedQuery.length >= 2)}
             onKeyDown={handleKeyDown}
@@ -312,7 +312,7 @@ export default function SearchableBusinessContactPicker({
                       aria-selected={index === activeIndex}
                       disabled={disabled}
                       className={`business-contact-picker-result${index === activeIndex ? " is-active" : ""}`}
-                      onMouseEnter={() => setActiveIndex(index)}
+                      onMouseEnter={() => setActiveContactId(contact.id)}
                       onClick={() => selectContact(contact)}
                     >
                       <strong>{resultLabel ? resultLabel(contact) : businessName}</strong>

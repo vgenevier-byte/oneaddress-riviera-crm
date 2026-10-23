@@ -1,5 +1,7 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { useEffect, useState } from "react";
+import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import type { TaskRecipient } from "@/lib/tasks/types";
 
@@ -11,6 +13,7 @@ type Legacy = { source: string; taskId: string; revision: string; reason: string
  * Neither administrative rights nor a contact category grant task visibility.
  */
 export default function TaskIdentityAdministration({ onDirty }: { onDirty: (dirty: boolean) => void }) {
+  const { language } = useI18n();
   const begin = useScopedOperations("admin");
   const [directory, setDirectory] = useState<Directory>();
   const [selected, setSelected] = useState("");
@@ -122,10 +125,10 @@ export default function TaskIdentityAdministration({ onDirty }: { onDirty: (dirt
     <label>Compte actif avec accès Tâches<select value={selected} disabled={busy} onChange={e => {
       const a = directory?.accounts.find(a => a.userId === e.target.value); setSelected(e.target.value);
       setLabel(a?.label || ""); setContact(a?.contactId || ""); setOwner(a?.verifiedOwner || false); dirty();
-    }}><option value="">Choisir un compte</option>{directory?.accounts.map(a => <option key={a.userId} value={a.userId}>{a.email}{a.label ? ` · ${a.label}` : " · liaison à confirmer"}</option>)}</select></label>
+    }}><option value="">Choisir un compte</option>{sortSelectOptions(directory?.accounts ?? [], a => `${a.email}${a.label ? ` · ${a.label}` : " · liaison à confirmer"}`, language).map(a => <option key={a.userId} value={a.userId}>{a.email}{a.label ? ` · ${a.label}` : " · liaison à confirmer"}</option>)}</select></label>
     <label>Libellé nominatif confirmé<input maxLength={120} value={label} onChange={e => { setLabel(e.target.value); dirty(); }} /></label>
     <label><input type="checkbox" checked={owner} onChange={e => { setOwner(e.target.checked); dirty(); }} />Propriétaire interne vérifié</label>
-    {!owner && <label>Fiche Membre de l’organisation<select value={contact} onChange={e => { setContact(e.target.value); dirty(); }}><option value="">Choisir une fiche</option>{directory?.contacts.map(c => <option key={c.contactId} value={c.contactId}>{c.label}</option>)}</select></label>}
+    {!owner && <label>Fiche Membre de l’organisation<select value={contact} onChange={e => { setContact(e.target.value); dirty(); }}><option value="">Choisir une fiche</option>{sortSelectOptions(directory?.contacts ?? [], c => c.label, language).map(c => <option key={c.contactId} value={c.contactId}>{c.label}</option>)}</select></label>}
     <label><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />J’ai vérifié personnellement cette identité et cette liaison.</label>
     <button disabled={busy || !confirmed || !selected || !label.trim() || (!owner && !contact)} onClick={() => void confirmIdentity()}>Confirmer la liaison</button>
     <hr /><button disabled={busy} onClick={() => void loadLegacy()}>Ouvrir la reprise historique privée</button>
@@ -133,7 +136,7 @@ export default function TaskIdentityAdministration({ onDirty }: { onDirty: (dirt
     {legacy?.map(row => <p key={row.source + row.taskId} data-task-legacy-id={row.taskId}>{String(row.original.title || row.taskId)} · auteur historique non confirmé{row.recovered ? ` · ${row.managerId ? `Gestionnaire : ${row.managerLabel || "Identité confirmée"}${row.managerActive ? "" : " · accès inactif"}` : "Gestion non désignée"}` : ""} <button disabled={busy} onClick={() => { setRecovery(row); setParticipants([]); setManager(""); recoveryDirty(); }}>{row.recovered ? "Corriger la gestion" : "Préparer la reprise"}</button></p>)}
     {recovery && <div data-task-legacy-form data-task-management-editor><h3>{String(recovery.original.title || "Tâche historique")}</h3><p>Le gestionnaire est distinct de l’auteur ancien, qui reste inconnu. L’ID, la date historique et les données originales sont conservés.</p>
       {!recovery.recovered && <fieldset><legend>Participants explicitement approuvés</legend>{eligible.map(a => <label className="unified-check" key={a.userId}><input type="checkbox" checked={participants.includes(a.userId)} onChange={e => { setParticipants(p => e.target.checked ? [...p, a.userId] : p.filter(id => id !== a.userId)); if (!e.target.checked && manager === a.userId) setManager(""); recoveryDirty(); }} />{a.label} · {a.access === "read" ? "Lecture" : "Contribution"}{a.email || a.detail ? ` · ${a.email || a.detail}` : ""}</label>)}</fieldset>}
-      <label>Gestionnaire explicitement désigné<select name="managerId" value={manager} onChange={e => { setManager(e.target.value); recoveryDirty(); }}><option value="">Choisir un gestionnaire</option>{eligible.filter(a => recovery.recovered || participants.includes(a.userId)).map(a => <option key={a.userId} value={a.userId}>{a.label} · {a.access === "read" ? "Lecture" : "Contribution"}{a.email || a.detail ? ` · ${a.email || a.detail}` : ""}</option>)}</select></label>
+      <label>Gestionnaire explicitement désigné<select name="managerId" value={manager} onChange={e => { setManager(e.target.value); recoveryDirty(); }}><option value="">Choisir un gestionnaire</option>{sortSelectOptions(eligible.filter(a => recovery.recovered || participants.includes(a.userId)), a => `${a.label} · ${a.access === "read" ? "Lecture" : "Contribution"}${a.email || a.detail ? ` · ${a.email || a.detail}` : ""}`, language).map(a => <option key={a.userId} value={a.userId}>{a.label} · {a.access === "read" ? "Lecture" : "Contribution"}{a.email || a.detail ? ` · ${a.email || a.detail}` : ""}</option>)}</select></label>
       <p>Le gestionnaire doit être un participant. Contribution permet de gérer les champs ; Suppression reste une permission distincte. Aucun remplacement automatique n’est prévu en cas de perte d’accès.</p>
       {recovery.recovered && <p>Le gestionnaire choisi deviendra aussi participant s’il ne l’est pas encore. L’ancien gestionnaire reste responsable jusqu’à un retrait explicite.</p>}
       <label><input type="checkbox" checked={recoveryConfirmed} onChange={e => setRecoveryConfirmed(e.target.checked)} />{recovery.recovered ? "Je confirme ce gestionnaire et son accès explicite comme participant à cette tâche." : "Je confirme les participants et le gestionnaire de cette tâche historique."}</label>

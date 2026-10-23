@@ -1,4 +1,5 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -323,7 +324,7 @@ const categories = ["Toutes", ...Array.from(new Set(templates.map((template) => 
 const channels = ["Tous", "WhatsApp", "Email"] as const;
 
 export default function QuickRepliesView() {
-  const {t, label: uiLabel} = useI18n();
+  const {t, label: uiLabel, language} = useI18n();
   const liveT = useRef(t);
   useLayoutEffect(() => { liveT.current = t; }, [t]);
 
@@ -384,7 +385,7 @@ export default function QuickRepliesView() {
         <div className="form-grid">
           <label>{t("modules.quickRepliesView.situation")}
             <select value={situation} onChange={(event) => setSituation(event.target.value)}>
-              {situations.map((item) => (
+              {sortSelectOptions(situations, item => uiLabel(item, "modules"), language, { first: item => item === "Toutes" }).map((item) => (
                 <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
             </select>
@@ -392,7 +393,7 @@ export default function QuickRepliesView() {
 
           <label>{t("modules.quickRepliesView.category")}
             <select value={category} onChange={(event) => setCategory(event.target.value)}>
-              {categories.map((item) => (
+              {sortSelectOptions(categories, item => uiLabel(item, "modules"), language, { first: item => item === "Toutes" }).map((item) => (
                 <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
             </select>
@@ -400,7 +401,7 @@ export default function QuickRepliesView() {
 
           <label>{t("modules.quickRepliesView.channel")}
             <select value={channel} onChange={(event) => setChannel(event.target.value as typeof channel)}>
-              {channels.map((item) => (
+              {sortSelectOptions(channels, item => uiLabel(item, "modules"), language, { first: item => item === "Tous" }).map((item) => (
                 <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
             </select>

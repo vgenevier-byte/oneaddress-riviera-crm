@@ -1,4 +1,5 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { specialistMessage } from "@/lib/i18n/catalogs/specialist";
 import { useEffect, useRef, useState } from 'react';
@@ -284,7 +285,7 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
   onDirectionChange: (direction: DirectionSelection) => void;
   onCreate: (direction: CreativeDirection) => void;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [selectionReset, setSelectionReset] = useState<'brandAndModel' | 'brand' | 'model' | ''>('');
   const carType = direction.carType ?? 'auto';
   const carBrand = direction.carBrand ?? 'auto';
@@ -315,20 +316,20 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
         <label htmlFor="publisher-car-type">{t('publisher.car.typeLabel')}</label>
         <select id="publisher-car-type" value={carType} aria-describedby="publisher-car-type-hint"
           onChange={event => changeCarSelection({ carType: event.target.value as CarType })}>
-          {carTypes.map(type => <option key={type} value={type}>{t(`publisher.car.type.${type}`)}</option>)}
+          {sortSelectOptions(carTypes, type => t(`publisher.car.type.${type}`), language, { first: type => type === 'auto' }).map(type => <option key={type} value={type}>{t(`publisher.car.type.${type}`)}</option>)}
         </select>
         <p id="publisher-car-type-hint">{t('publisher.car.selectionHint')}</p>
         <label htmlFor="publisher-car-brand">{t('publisher.car.brandLabel')}</label>
         <select id="publisher-car-brand" value={carBrand}
           onChange={event => changeCarSelection({ carBrand: event.target.value as CarBrandId })}>
           <option value="auto">{t('publisher.car.anyBrand')}</option>
-          {brands.map(brand => <option key={brand.id} value={brand.id}>{brand.label}</option>)}
+          {sortSelectOptions(brands, brand => brand.label, language).map(brand => <option key={brand.id} value={brand.id}>{brand.label}</option>)}
         </select>
         <label htmlFor="publisher-car-model">{t('publisher.car.modelLabel')}</label>
         <select id="publisher-car-model" value={carModel} disabled={carBrand === 'auto'} aria-describedby={`publisher-car-model-hint${selectedModel ? ' publisher-car-selected-model' : ''}`}
           onChange={event => changeCarSelection({ carModel: event.target.value })}>
           <option value="auto">{t('publisher.car.anyModel')}</option>
-          {models.map(model => <option key={model.id} value={model.id}>{t(`publisher.car.model.${model.id}`)}</option>)}
+          {sortSelectOptions(models, model => t(`publisher.car.model.${model.id}`), language).map(model => <option key={model.id} value={model.id}>{t(`publisher.car.model.${model.id}`)}</option>)}
         </select>
         {selectedModel && <p id="publisher-car-selected-model">{t(`publisher.car.model.${selectedModel.id}`)}</p>}
         <p id="publisher-car-model-hint">{t(carBrand === 'auto' ? 'publisher.car.modelDisabledHint' : 'publisher.car.modelHint')}</p>

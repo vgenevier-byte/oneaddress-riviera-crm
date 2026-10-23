@@ -1,4 +1,5 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -295,7 +296,7 @@ export function AddressField({ name, value = "", metadata, metadataName = `${nam
     {reuseAddresses.length > 0 && <div className={styles.reuse}>
       <label>{copy.reuse}<select aria-label={copy.reuse} disabled={disabled} value={reuseIndex} onChange={event => setReuseIndex(event.target.value)}>
         <option value="">{copy.reusePlaceholder}</option>
-        {reuseAddresses.map((source, index) => <option key={`${source.label}-${index}`} value={index}>{source.label}</option>)}
+        {sortSelectOptions(reuseAddresses.map((source, index) => ({ source, index })), item => item.source.label, lang || language).map(({ source, index }) => <option key={`${source.label}-${index}`} value={index}>{source.label}</option>)}
       </select></label>
       <button type="button" className="secondary-button" disabled={disabled || reuseIndex === ""} onClick={reuse}>{copy.use}</button>
     </div>}

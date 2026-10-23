@@ -1,5 +1,6 @@
 "use client";
 
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { Variables } from "@/lib/i18n/types";
 import { translate } from "@/lib/i18n/engine";
@@ -2002,7 +2003,7 @@ function QuotesView({
   onChange: (quotes: QuoteRequest[]) => FormSave;
   onQuoteChange?: (quote: QuoteRequest) => void;
 }) {
-  const { t, label, screen, dialogT } = useCRMDisplay();
+  const { t, label, screen, dialogT, language } = useCRMDisplay();
 
   const business = useBusinessPermissions();
   const confirmation = useConfirmedForm(business?.markDirty);
@@ -2313,7 +2314,7 @@ function QuotesView({
               autoComplete="off"
             />
             <datalist id="quote-client-options">
-              {contacts.filter((contact) => !isSupplierContact(contact)).map((contact) => (
+              {sortSelectOptions(contacts.filter((contact) => !isSupplierContact(contact)), contact => getContactLabel(contact, "Client sans nom"), language).map((contact) => (
                 <option
                   key={contact.id}
                   value={getContactLabel(contact, "Client sans nom")}
@@ -2419,7 +2420,7 @@ function SuppliersView({
   onUpdate: (supplier: Supplier) => void;
   onDelete: (id: string) => void;
 }) {
-  const { t, label, screen, dialogT } = useCRMDisplay();
+  const { t, label, screen, dialogT, language } = useCRMDisplay();
 
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -2539,7 +2540,7 @@ function SuppliersView({
           </label>
 
           <label>{t("crm.suppliers.68a5341fc6")}<select name="category" defaultValue={editingSupplier?.category ?? "Autre"}>
-              {categories.filter((category) => category !== "Tous").map((category) => (
+              {sortSelectOptions(Array.from(new Set([...categories.filter(category => category !== "Tous"), ...suppliers.map(supplier => supplier.category)])), screen.category, language, { last: category => category === "Autre" }).map((category) => (
                 <option key={category} value={category}>{screen.category(category)}</option>
               ))}
             </select>
@@ -2612,7 +2613,7 @@ function BookingsView({
   activeActor: string;
   onChange: (quotes: QuoteRequest[]) => void;
 }) {
-  const { t, label, screen, dialogT } = useCRMDisplay();
+  const { t, label, screen, dialogT, language } = useCRMDisplay();
 
   const business = useBusinessPermissions();
   const confirmedQuotes = quotes.filter((quote) => getQuoteStatus(quote.status) === "Accepted");
@@ -2803,7 +2804,7 @@ function BookingsView({
 
                     <BusinessLabel>{t("crm.bookings.a4f049df6c")}<select name="assignedContactId" defaultValue={quote.assignedContactId || ""}>
                         <option value="">{t("crm.bookings.a95639476f")}</option>
-                        {providerContacts.map((contact) => (
+                        {sortSelectOptions(providerContacts, contact => `${getContactLabel(contact)} · ${screen.category(getContactSupplierCategory(contact))}${getContactSupplierZone(contact) ? t("crm.bookings.f6b53f9c8a", { value1: displayValue(getContactSupplierZone(contact)) }) : ""}`, language).map((contact) => (
                           <option key={contact.id} value={contact.id}>
                             {getContactLabel(contact)} · {screen.category(getContactSupplierCategory(contact))}{getContactSupplierZone(contact) ? t("crm.bookings.f6b53f9c8a", { value1: displayValue(getContactSupplierZone(contact)) }) : ""}
                           </option>
@@ -3687,9 +3688,7 @@ function HouseTrackingView({
     return contacts.find((contact) => getHouseTrackingContactSearchValues(contact).some((value) => value.includes(normalizedInput)));
   }
 
-  const sortedHouseContacts = contacts
-    .slice()
-    .sort((a, b) => getHouseContactDisplayName(a).localeCompare(getHouseContactDisplayName(b), "fr", { sensitivity: "base" }));
+  const sortedHouseContacts = sortSelectOptions(contacts, getHouseContactSearchLabel, language);
 
   const filteredEntries = timeEntries.filter((entry) => {
     const matchesDate = isDateInSelectedRange(entry.date);
@@ -4036,7 +4035,7 @@ function HouseTrackingView({
 
           <BusinessLabel>{t("crm.house.686e3f21c3")}<select value={houseFilter} onChange={(event) => setHouseFilter(event.target.value)}>
               <option value="Tous">{t("crm.house.0fd6f75852")}</option>
-              {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
+              {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
             </select>
           </BusinessLabel>
 
@@ -4163,7 +4162,7 @@ function HouseTrackingView({
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.686e3f21c3")}<select value={hourDraft.houseId} onChange={(event) => setHourDraft((current) => ({ ...current, houseId: event.target.value }))}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
+                  {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
                 </select>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.d282bc2490")}<select value={hourDraft.workerId} onChange={(event) => {
@@ -4171,7 +4170,7 @@ function HouseTrackingView({
                   setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: houseHourlyRateInput(worker) }));
                 }}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
+                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
                 </select>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.3c48aa2bdf")}<select value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))}>
@@ -4248,22 +4247,24 @@ function HouseTrackingView({
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.686e3f21c3")}<select name="houseId" defaultValue={houses[0]?.id || ""}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
+                  {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
                 </select>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.d282bc2490")}<select name="workerId" defaultValue={initialActiveWorker?.id || ""}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {activeWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
+                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
                 </select>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.947cc07e2b")}<input name="amount" type="text" inputMode="decimal" min="0" step="1" placeholder={t("crm.house.3b23fa9915")} />
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.28eca2c0e2")}<select name="method" defaultValue="Virement">
-                  <option value="Virement">{t("crm.house.e58f0ffa0e")}</option>
-                  <option value="Espèces">{t("crm.house.351f789647")}</option>
-                  <option value="CB">{t("crm.house.bf7b0ead27")}</option>
-                  <option value="Chèque">{t("crm.house.723a0b78dd")}</option>
-                  <option value="Autre">{t("crm.house.eb72e1683b")}</option>
+                  {sortSelectOptions([
+                    { value: "Virement", text: t("crm.house.e58f0ffa0e") },
+                    { value: "Espèces", text: t("crm.house.351f789647") },
+                    { value: "CB", text: t("crm.house.bf7b0ead27") },
+                    { value: "Chèque", text: t("crm.house.723a0b78dd") },
+                    { value: "Autre", text: t("crm.house.eb72e1683b") },
+                  ], option => option.text, language, { last: option => option.value === "Autre" }).map(option => <option key={option.value} value={option.value}>{option.text}</option>)}
                 </select>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.d8da2c49df")}<input name="note" placeholder={t("crm.house.13a71e2ca2")} />
@@ -9714,7 +9715,7 @@ function PlanningView({
   onPatchPlanningEntry: (id: string, patch: Partial<PlanningEntry>) => void;
   onPatchLeadReservationDates: (id: string, startDate: string, endDate: string) => void;
 }) {
-  const { t, label, locale, screen, dialogT } = useCRMDisplay();
+  const { t, label, locale, screen, dialogT, language } = useCRMDisplay();
 
   const business = useBusinessPermissions();
   const [categoryFilter, setCategoryFilter] = useState("Tous");
@@ -9881,8 +9882,7 @@ function PlanningView({
           value: displayName,
           label: meta ? `${displayName} · ${meta}` : displayName
         };
-      })
-      .sort((a, b) => a.value.localeCompare(b.value, "fr"));
+      });
   }, [contacts, label, screen]);
 
   const confirmedBookings = useMemo(() => {
@@ -10540,7 +10540,7 @@ function PlanningView({
               setCategoryFilter(event.target.value);
               setAssetFilter("Tous");
             }}>
-              {categories.map((category) => (
+              {sortSelectOptions(categories, screen.category, language, { first: value => value === "Tous" }).map((category) => (
                 <option key={category} value={category}>{screen.category(category)}</option>
               ))}
             </select>
@@ -10548,7 +10548,7 @@ function PlanningView({
 
           <BusinessLabel>{t("crm.planning.ed605ab50c")}<select value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}>
               <option value="Tous">{t("crm.planning.204aa09406")}</option>
-              {assetFilterOptions.map((asset) => (
+              {sortSelectOptions(assetFilterOptions, asset => asset.label, language).map((asset) => (
                 <option key={asset.key} value={asset.key}>{asset.label}</option>
               ))}
             </select>
@@ -10695,14 +10695,14 @@ function PlanningView({
           </BusinessLabel>
 
           <BusinessLabel>{t("crm.planning.baaddf70fb")}<select name="type" defaultValue={editingPlanningEntry?.type ?? (quickPlanningDate ? "Autre" : "Intervention prestataire")}>
-              {planningEntryTypes.map((type) => (
+              {sortSelectOptions(planningEntryTypes, value => label(value, "crm"), language, { last: value => value === "Autre" }).map((type) => (
                 <option key={type} value={type}>{label(type, "crm")}</option>
               ))}
             </select>
           </BusinessLabel>
 
           <BusinessLabel>{t("crm.planning.21cc305095")}<select name="planningCategory" defaultValue={editingPlanningCategory}>
-              {planningCategoryOptions.map((category) => (
+              {sortSelectOptions(planningCategoryOptions, screen.category, language).map((category) => (
                 <option key={category} value={category}>{screen.category(category)}</option>
               ))}
             </select>
@@ -10723,7 +10723,7 @@ function PlanningView({
               autoComplete="off"
             />
             <datalist id="planning-contact-options">
-              {planningContactOptions.map((contact) => (
+              {sortSelectOptions(planningContactOptions, contact => contact.label, language).map((contact) => (
                 <option key={contact.id} value={contact.value}>{contact.label}</option>
               ))}
             </datalist>
@@ -10731,7 +10731,7 @@ function PlanningView({
 
           <BusinessLabel>{t("crm.planning.833fcb6f22")}<select name="assetKey" defaultValue={editingPlanningAssetKey}>
               <option value="">{t("crm.planning.1ceb66fe96")}</option>
-              {visibleAssetOptions.map((asset) => (
+              {sortSelectOptions(visibleAssetOptions, asset => asset.label, language).map((asset) => (
                 <option key={asset.key} value={asset.key}>{asset.label}</option>
               ))}
             </select>
@@ -11803,7 +11803,7 @@ function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue,
   onIssue: (issue: ContactIdentityValidation | null) => void;
   prefix: string;
 }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const company = entityType === "company";
   const errorId = (field: ContactIdentityValidation["field"]) => `${prefix}-${field}-error`;
   const error = (field: ContactIdentityValidation["field"]) => issue?.field === field
@@ -11818,8 +11818,7 @@ function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue,
         aria-invalid={issue?.field === "entityType" || undefined} aria-describedby={issue?.field === "entityType" ? errorId("entityType") : undefined}
         onInvalid={invalid("entityType", "contact_entity_type_invalid")}>
         {contact?.id && <option value="">{t("crm.contacts.entityType.unqualified")}</option>}
-        <option value="person">{t("crm.contacts.entityType.person")}</option>
-        <option value="company">{t("crm.contacts.entityType.company")}</option>
+        {sortSelectOptions(["person", "company"], value => t(`crm.contacts.entityType.${value}`), language).map(value => <option key={value} value={value}>{t(`crm.contacts.entityType.${value}`)}</option>)}
       </select>{error("entityType")}
     </BusinessLabel>
     <BusinessLabel className="full">{t(company ? "crm.contacts.identity.companyNameRequired" : "crm.contacts.identity.companyAffiliationOptional")}
@@ -11829,7 +11828,7 @@ function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue,
     </BusinessLabel>
     <p className="contact-person-heading full" hidden={!company}>{t("crm.contacts.identity.contactPersonOptional")}</p>
     <BusinessLabel>{t("crm.contacts.901ce24cca")}<select name="civility" defaultValue={contact?.civility ?? ""}>
-      <option value="">—</option><option value="M">{t("crm.contacts.08f271887c")}</option><option value="MME">{t("crm.contacts.97c3250ed4")}</option>
+      <option value="">—</option>{sortSelectOptions([{ value: "M", text: t("crm.contacts.08f271887c") }, { value: "MME", text: t("crm.contacts.97c3250ed4") }], option => option.text, language).map(option => <option key={option.value} value={option.value}>{option.text}</option>)}
     </select></BusinessLabel>
     <BusinessLabel>{t("crm.contacts.e325bf8f90")}<input name="firstName" defaultValue={contact?.firstName ?? ""} /></BusinessLabel>
     <BusinessLabel className="full">{t(entityType === "person" ? "crm.contacts.identity.lastNameRequired" : "crm.contacts.identity.lastNameOptional")}
@@ -11960,12 +11959,15 @@ function ContactsViewBody({
   const filterOptions = ["Tous", "Clients", "Prestataires", "Propriétaires", "Membres de l’organisation"];
   const nonSupplierRelationshipStatuses = contactRelationshipStatuses.filter((status) => status !== "Prestataire");
   const supplierProfessionOptions = useMemo(() => {
-    const legacyAssetCategories = new Set(["Villa", "Voiture", "Bateau"]);
     const savedProfessions = contacts
-      .map((contact) => String(contact.supplierCategory || "").trim())
-      .filter((profession) => Boolean(profession) && !legacyAssetCategories.has(profession));
-    return Array.from(new Set([...supplierCategories, ...savedProfessions, ...(supplierCategoryFilter === "Toutes" ? [] : [supplierCategoryFilter])]));
-  }, [contacts, supplierCategoryFilter]);
+      .map((contact) => String(contact.supplierCategory || ""))
+      .filter((profession) => Boolean(profession));
+    // Historical/custom labels are verbatim values, including legacy asset categories.
+    return sortSelectOptions(
+      Array.from(new Set([...supplierCategories, ...savedProfessions, ...(supplierCategoryFilter === "Toutes" ? [] : [supplierCategoryFilter])])),
+      screen.category, language, { last: category => category === "Autre" },
+    );
+  }, [contacts, supplierCategoryFilter, screen.category, language]);
 
   function getContactDisplayName(contact: Contact) {
     return getContactLabel(contact);
@@ -12290,7 +12292,7 @@ function ContactsViewBody({
             </section>}
             <ContactIdentityFields contact={createIntent?.prefill} entityType={newContactEntityType} onEntityTypeChange={setNewContactEntityType} issue={creationIdentityError} onIssue={setCreationIdentityError} prefix={createIntent ? `contact-create-${createIntent.id}` : "contact-create"} />
             <BusinessLabel>{t("crm.contacts.baaddf70fb")}<select name="kind" value={newContactKind} onChange={(event) => setNewContactKind(event.target.value as ContactKind)}>
-                {contactKinds.map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
+                {sortSelectOptions(contactKinds, kind => label(kind, "crm"), language).map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
               </select>
             </BusinessLabel>
             <BusinessLabel>{t("crm.contacts.969ccbd3cf")}<input name="email" type="email" defaultValue={createIntent?.prefill.email} placeholder={t("crm.contacts.2a539d6520")} /></BusinessLabel>
@@ -12320,7 +12322,7 @@ function ContactsViewBody({
                   </select>
                 </BusinessLabel>
                 <BusinessLabel>{t("crm.contacts.5f6baab4db")}<select name="preferredLanguage" defaultValue="Français">
-                    {contactLanguages.map((language) => <option key={language} value={language}>{label(language, "crm")}</option>)}
+                    {sortSelectOptions(contactLanguages, value => label(value, "crm"), language, { last: value => value === "Autre" }).map(value => <option key={value} value={value}>{label(value, "crm")}</option>)}
                   </select>
                 </BusinessLabel>
                 <BusinessLabel className="full">{t("crm.contacts.2032603871")}<textarea name="preferences" placeholder={t("crm.contacts.57ecbc19c3")} />
@@ -12466,7 +12468,7 @@ function ContactsViewBody({
               <ContactIdentityFields contact={editingContact} entityType={editingContactEntityType} onEntityTypeChange={setEditingContactEntityType} issue={editingIdentityError} onIssue={setEditingIdentityError} prefix="contact-edit" />
 
               <BusinessLabel>{t("crm.contacts.baaddf70fb")}<select name="kind" value={editingContactKind} onChange={(event) => setEditingContactKind(event.target.value as ContactKind)}>
-                  {contactKinds.map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
+                  {sortSelectOptions(contactKinds, kind => label(kind, "crm"), language).map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
                 </select>
               </BusinessLabel>
               <BusinessLabel>{t("crm.contacts.969ccbd3cf")}<input name="email" type="email" defaultValue={editingContact.email} /></BusinessLabel>
@@ -12496,7 +12498,7 @@ function ContactsViewBody({
                     </select>
                   </BusinessLabel>
                   <BusinessLabel>{t("crm.contacts.5f6baab4db")}<select name="preferredLanguage" defaultValue={getContactPreferredLanguage(editingContact)}>
-                      {contactLanguages.map((language) => <option key={language} value={language}>{label(language, "crm")}</option>)}
+                      {sortSelectOptions(contactLanguages, value => label(value, "crm"), language, { last: value => value === "Autre" }).map(value => <option key={value} value={value}>{label(value, "crm")}</option>)}
                     </select>
                   </BusinessLabel>
                   <BusinessLabel className="full">{t("crm.contacts.2032603871")}<textarea name="preferences" defaultValue={editingContact.preferences ?? ""} />
@@ -12588,7 +12590,7 @@ function LeadsView({
   quotes?: QuoteRequest[];
   onCreateTask: (lead: Lead) => void;
 }) {
-  const { t, label, screen, dialogT } = useCRMDisplay();
+  const { t, label, screen, dialogT, language } = useCRMDisplay();
 
   const business = useBusinessPermissions();
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -12735,10 +12737,7 @@ const visibleLeads = leads.filter((lead) => {
             <legend>{t("crm.leads.d75d2476f0")}</legend>
 
             <BusinessLabel>{t("crm.leads.68a5341fc6")}<select name="category" defaultValue="Villa">
-                <option value="Villa">{t("crm.leads.afad4c579e")}</option>
-                <option value="Voiture">{t("crm.leads.035004be54")}</option>
-                <option value="Bateau">{t("crm.leads.d69c7210bc")}</option>
-                <option value="Conciergerie">{t("crm.leads.6a4ce3246c")}</option>
+                {sortSelectOptions(["Villa", "Voiture", "Bateau", "Conciergerie"], value => label(value, "crm"), language).map(value => <option key={value} value={value}>{label(value, "crm")}</option>)}
               </select>
             </BusinessLabel>
 
@@ -12749,7 +12748,7 @@ const visibleLeads = leads.filter((lead) => {
                 placeholder={t("crm.leads.84c00400a6")}
               />
               <datalist id="lead-contact-options">
-                {contacts.map((contact) => {
+                {sortSelectOptions(contacts, contact => getContactSecondaryLabel(contact) ? t("crm.leads.7c639bc99b", { value1: displayValue(getContactLabel(contact)), value2: displayValue(getContactSecondaryLabel(contact)) }) : getContactLabel(contact), language).map((contact) => {
                   const label = getContactLabel(contact);
                   return <option key={contact.id} value={label}>{getContactSecondaryLabel(contact) ? t("crm.leads.7c639bc99b", { value1: displayValue(label), value2: displayValue(getContactSecondaryLabel(contact)) }) : label}</option>;
                 })}
@@ -12758,7 +12757,7 @@ const visibleLeads = leads.filter((lead) => {
 
             <BusinessLabel>{t("crm.leads.0ad9d4fa0c")}<select name="assetKey" defaultValue="">
                 <option value="">{t("crm.leads.1ceb66fe96")}</option>
-                {assetOptions.map((asset) => (
+                {sortSelectOptions(assetOptions, asset => asset.label, language).map((asset) => (
                   <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`}>
                     {asset.label}
                   </option>
@@ -12833,10 +12832,7 @@ const visibleLeads = leads.filter((lead) => {
               onChange={(event) => setLeadCategoryFilter(event.target.value as "Toutes" | Lead["category"])}
             >
               <option value="Toutes">{t("crm.leads.42623b97b4")}</option>
-              <option value="Villa">{t("crm.leads.afad4c579e")}</option>
-              <option value="Voiture">{t("crm.leads.035004be54")}</option>
-              <option value="Bateau">{t("crm.leads.d69c7210bc")}</option>
-              <option value="Conciergerie">{t("crm.leads.6a4ce3246c")}</option>
+              {sortSelectOptions(["Villa", "Voiture", "Bateau", "Conciergerie"], value => label(value, "crm"), language).map(value => <option key={value} value={value}>{label(value, "crm")}</option>)}
             </select>
           </BusinessLabel>
 
@@ -13057,25 +13053,16 @@ const visibleLeads = leads.filter((lead) => {
 
             <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
               <BusinessLabel>{t("crm.leads.68a5341fc6")}<select name="category" defaultValue={editingLead.category}>
-                  <option value="Villa">{t("crm.leads.afad4c579e")}</option>
-                  <option value="Voiture">{t("crm.leads.035004be54")}</option>
-                  <option value="Bateau">{t("crm.leads.d69c7210bc")}</option>
-                  <option value="Conciergerie">{t("crm.leads.6a4ce3246c")}</option>
+                  {sortSelectOptions(["Villa", "Voiture", "Bateau", "Conciergerie"], value => label(value, "crm"), language).map(value => <option key={value} value={value}>{label(value, "crm")}</option>)}
                 </select>
               </BusinessLabel>
 
               <BusinessLabel>{t("crm.leads.2b5c3d2672")}<select name="contactName" defaultValue={editingLead.contactName} required>
                   <option value="">{t("crm.leads.09a3bda6ca")}</option>
-                  {preserveEditingContact && (
-                    <option value={editingContactName}>
-                      {t("crm.leads.historicalContact", { name: editingContactName })}
-                    </option>
-                  )}
-                  {contacts.map((contact) => (
-                    <option key={contact.id} value={getContactLabel(contact)}>
-                      {getContactLabel(contact)}
-                    </option>
-                  ))}
+                  {sortSelectOptions([
+                    ...(preserveEditingContact ? [{ id: "historical-contact", value: editingContactName, text: t("crm.leads.historicalContact", { name: editingContactName }) }] : []),
+                    ...contacts.map(contact => ({ id: contact.id, value: getContactLabel(contact), text: getContactLabel(contact) })),
+                  ], option => option.text, language).map(option => <option key={option.id} value={option.value}>{option.text}</option>)}
                 </select>
               </BusinessLabel>
 
@@ -13084,7 +13071,7 @@ const visibleLeads = leads.filter((lead) => {
                   defaultValue={editingLead.assetType && editingLead.assetId ? `${editingLead.assetType}:${editingLead.assetId}` : ""}
                 >
                   <option value="">{t("crm.leads.1ceb66fe96")}</option>
-                  {assetOptions.map((asset) => (
+                  {sortSelectOptions(assetOptions, asset => asset.label, language).map((asset) => (
                     <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`}>
                       {asset.label}
                     </option>

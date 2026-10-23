@@ -1,4 +1,5 @@
 "use client";
+import { sortSelectOptions } from "@/lib/selectOptions";
 import { getContactLabel } from "@/lib/contactIdentity";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -126,7 +127,7 @@ export function VendorBankAccounts({ contact, actor, onUpdate }: { contact: Cont
   </section>;
 }
 export function VendorInvoicePayment({ invoice, contact, onUpdate, onOpenContact }: { invoice: VendorInvoice; contact?: Contact; onUpdate: (invoice: VendorInvoice) => void; onOpenContact: () => void }) {
-  const {t, label: uiLabel, formatMoney} = useI18n();
+  const {t, label: uiLabel, formatMoney, language} = useI18n();
 
   const [preparing, setPreparing] = useState(false);
   const [selected, setSelected] = useState("");
@@ -146,7 +147,7 @@ export function VendorInvoicePayment({ invoice, contact, onUpdate, onOpenContact
     {defaultAccount && <RibDocument account={defaultAccount} />}
     {preparing && <BankingDialog title={t("modules.vendorBanking.preparePayment")} onClose={() => setPreparing(false)}><div className="banking-form">
       <p className="banking-amount">{formatMoney(getVendorInvoiceRemaining(invoice))}</p>
-      <label>{t("modules.vendorBanking.verifiedAccount")}<select value={selected} onChange={e => setSelected(e.target.value)}><option value="">{t("modules.vendorBanking.chooseAnAccount")}</option>{verified.map(a => <option key={a.id} value={a.id} disabled={Boolean(invoice.paidAmount > 0 && invoice.paymentBankAccountId && invoice.paymentBankAccountId !== a.id)}>{a.label || a.accountHolder} · {maskIban(a.iban)}{a.isPrimary ? t("modules.vendorBanking.primary") : ""}</option>)}</select></label>
+      <label>{t("modules.vendorBanking.verifiedAccount")}<select value={selected} onChange={e => setSelected(e.target.value)}><option value="">{t("modules.vendorBanking.chooseAnAccount")}</option>{sortSelectOptions(verified, a => `${a.label || a.accountHolder} · ${maskIban(a.iban)}${a.isPrimary ? t("modules.vendorBanking.primary") : ""}`, language).map(a => <option key={a.id} value={a.id} disabled={Boolean(invoice.paidAmount > 0 && invoice.paymentBankAccountId && invoice.paymentBankAccountId !== a.id)}>{a.label || a.accountHolder} · {maskIban(a.iban)}{a.isPrimary ? t("modules.vendorBanking.primary") : ""}</option>)}</select></label>
       {account && <><p>{t("modules.vendorBanking.payee")} <strong>{account.accountHolder}</strong></p><p className="banking-iban">{formatIban(account.iban)}</p><p>{t("modules.vendorBanking.bic")} {account.bic}</p><p>{t("modules.vendorBanking.reference")} {reference}</p><p>{t("modules.vendorBanking.suggestedSubjectFACTURE")} {reference} - {invoice.contactName}</p>
         <div className="banking-actions"><CopyButton label={t("modules.vendorBanking.copyAmount")} value={formatEuroInput(getVendorInvoiceRemaining(invoice))} /><CopyButton label={t("modules.vendorBanking.copyIBAN")} value={normalizeIban(account.iban)} /><CopyButton label={t("modules.vendorBanking.copyBIC")} value={account.bic} /><CopyButton label={t("modules.vendorBanking.copyReference")} value={reference} /></div><RibDocument account={account} />
         <button type="button" className="primary-button" onClick={() => { try { onUpdate(selectInvoiceBankAccount(invoice, contact!, account.id)); setPreparing(false); } catch (e) { setError(e instanceof Error ? e.message : "Sélection impossible."); } }}>{t("modules.vendorBanking.keepThisAccountForTheInvoice")}</button></>}
