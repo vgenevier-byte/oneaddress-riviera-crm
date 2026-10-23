@@ -4,6 +4,42 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+const contradictoryCarBranding = /aucun texte, logo|sans marque visible|No[^.\n]*(?:visible logo|readable brand)|discreet framing around badges/i;
+
+function assertFactoryBadges(prompt, reference) {
+  for (const key of ['referenceId', 'manufacturer', 'model', 'generation', 'variant']) {
+    assert.ok(prompt.includes(reference[key]), `Locked ${key} reaches images.generate()`);
+  }
+  for (const phrase of [
+    'original factory manufacturer emblems, monograms, badges and lettering',
+    'physical markings on the vehicle, distinct from text or logos added over the image',
+    'original front and rear markings at their actual factory locations whenever those areas are visible',
+    'A front view shows the front markings; a rear view shows the rear markings',
+    'never force both faces into one image, add a second vehicle or create a montage',
+    'shape, size, position, colour, finish and orientation',
+    'photographic perspective, lighting, reflections and sharpness',
+    'Preserve factory manufacturer lettering', 'never replace it with a generic emblem',
+    'No invented, deformed, mirrored, duplicated or borrowed badges',
+    'Do not deliberately hide badges or frame them out',
+    'natural legibility at the shooting distance; never artificially enlarge logos',
+    'No added text, advertising copy, superimposed logos, watermark, signature, readable number plate or recognisable face',
+    'One principal production vehicle only',
+  ]) assert.ok(prompt.includes(phrase), phrase);
+  assert.doesNotMatch(prompt, contradictoryCarBranding);
+}
+
+function assertCarProviderPrompts(calls, reference) {
+  assertFactoryBadges(calls.find(call => call.name === 'image').request.prompt, reference);
+  for (const call of calls.filter(call => call.input)) {
+    const prompt = JSON.stringify(call.request.input);
+    assert.doesNotMatch(prompt, contradictoryCarBranding, `${call.name} must not prohibit physical factory branding`);
+    assert.match(prompt, /marquages physiques constructeur d’origine/);
+    if (['publisher_creative_plan', 'publisher_image_prompt'].includes(call.name)) {
+      assertFactoryBadges(call.input.regles_automobiles, reference);
+    }
+  }
+}
+
 await test('car generation freezes one server reference at the provider boundary and keeps it across regenerations', async t => {
   const { publisherContext } = await import('../../lib/publisher/engine/context.js');
   const postId = 'c1000000-0000-4000-8000-000000000001';
@@ -51,9 +87,12 @@ await test('car generation freezes one server reference at the provider boundary
         const name = request.text.format.name;
         const input = JSON.parse(request.input.find(item => item.role === 'user').content);
         calls.push({ name, input, request });
-        assert.ok(journal.has(publisherContext.getStore().requestId), 'Canonical identity must be journaled before any provider call');
-        const visual = { image_prompt: 'A fictional Client Fake Six Wheel Phantom SUV with six doors and a fixed roof in an impossible CGI city.', visual_signature: 'A Client Fake Six Wheel Phantom SUV with six doors in an impossible CGI city' };
-        if (name === 'publisher_creative_plan') return { output_parsed: { ...visual, scene_summary: 'A fictional Client Fake Six Wheel Phantom SUV with six doors in an impossible CGI city.', ...planningVariant, format: selectedFormat } };
+        const isCar = Boolean(input.reference_automobile_immuable || input.car_context);
+        if (isCar) assert.ok(journal.has(publisherContext.getStore().requestId), 'Canonical identity must be journaled before any provider call');
+        const visual = isCar
+          ? { image_prompt: 'A fictional Client Fake Six Wheel Phantom SUV with six doors and a fixed roof in an impossible CGI city. No visible logo, readable brand.', visual_signature: 'A Client Fake Six Wheel Phantom SUV with six doors in an impossible CGI city' }
+          : { image_prompt: 'A quiet Mediterranean scene in natural editorial light, without text, logos or people.', visual_signature: 'Natural Mediterranean light and a calm open horizon.' };
+        if (name === 'publisher_creative_plan') return { output_parsed: { ...visual, scene_summary: isCar ? 'A fictional Client Fake Six Wheel Phantom SUV with six doors in an impossible CGI city.' : 'A quiet Mediterranean scene in natural editorial light.', ...planningVariant, format: selectedFormat } };
         if (name === 'publisher_image_prompt') return { output_parsed: { ...visual, ...regeneratedVisualVariant } };
         const editorial = { caption: 'The coast settles into a quieter rhythm. Evening brings a new perspective.', hashtags: ['#Riviera', '#CoastalRoad', '#EveningLight', '#Mediterranean'] };
         return { output_parsed: name === 'publisher_editorial_package' ? { ...editorial, music, location: 'French Riviera' } : editorial };
@@ -80,6 +119,7 @@ await test('car generation freezes one server reference at the provider boundary
   assert.deepEqual(serializePublisherPost(stored).car_context, fixed);
   assert.deepEqual(created.music.map(song => song.id), [1, 2, 3]);
   const imageRequest = calls.find(call => call.name === 'image').request;
+  assertCarProviderPrompts(calls, fixed);
   assert.ok(imageRequest.prompt.includes(fixed.manufacturer));
   assert.ok(imageRequest.prompt.includes(fixed.model));
   assert.ok(imageRequest.prompt.includes(fixed.variant));
@@ -105,6 +145,7 @@ await test('car generation freezes one server reference at the provider boundary
   const regenerated = await run('e1000000-0000-4000-8000-000000000002', () => regenerateImage('f1000000-0000-4000-8000-000000000002', { ...stored }));
   assert.deepEqual(regenerated.car_context, fixed);
   assert.equal(calls.length, 2, 'Existing prompt + image regeneration call count');
+  assertCarProviderPrompts(calls, fixed);
   assert.doesNotMatch(calls.find(call => call.name === 'image').request.prompt, /Client Fake|Six Wheel Phantom|six doors|CGI city|fixed roof/);
   assert.doesNotMatch(stored.visual_signature, /Client Fake|Six Wheel Phantom|six doors|CGI city/);
   assert.notEqual(stored.image_url, firstImage);
@@ -146,6 +187,7 @@ await test('car generation freezes one server reference at the provider boundary
 
   failSave = false; calls.length = 0;
   const oldRegenerated = await run('e1000000-0000-4000-8000-000000000005', () => regenerateImage('f1000000-0000-4000-8000-000000000005', { ...stored }));
+  assertCarProviderPrompts(calls, oldRegenerated.car_context);
   assert.equal(oldRegenerated.car_context.requestedType, 'auto');
   assert.notEqual(stored.image_url, imageBeforeText);
   assert.deepEqual(stored.car_context, oldRegenerated.car_context);
@@ -363,4 +405,43 @@ await test('car generation freezes one server reference at the provider boundary
   assert.equal(Object.hasOwn(legacyImageTextInput, 'caption'), false);
   assert.equal(Object.hasOwn(legacyImageTextInput, 'hashtags'), false);
   assert.deepEqual(legacyImageResult.car_context, legacyImageTextInput.car_context);
+  assertCarProviderPrompts(calls, legacyImageResult.car_context);
+
+  // The default automatic selection must use the same physical-badge rules as
+  // the explicit brand/model route, without changing the three-call workflow.
+  recentContent = []; planningVariant = null; selectedFormat = 'Feed 4:5';
+  calls.length = 0;
+  const automatic = await run('automatic-badges', () => generateClaimedPost('automatic-badges-run', '2026-10-21', { universe: 'cars', moment: 'day', style: 'elegant' }));
+  assert.equal(calls.length, 3);
+  for (const field of ['requestedType', 'requestedBrand', 'requestedModel']) assert.equal(automatic.car_context[field], 'auto');
+  assertCarProviderPrompts(calls, automatic.car_context);
+  assert.deepEqual(journal.get('automatic-badges'), automatic.car_context);
+
+  // Every other universe keeps its original unbranded system/final prompt for
+  // creation and image regeneration. This observes the actual image boundary.
+  for (const universe of ['landscapes', 'real_estate', 'boats']) {
+    calls.length = 0;
+    const createdOther = await run(`non-car-${universe}`, () => generateClaimedPost(`non-car-${universe}-run`, '2026-10-21', { universe, moment: 'day', style: 'elegant' }));
+    assert.equal(calls.length, 3);
+    assert.equal(Object.hasOwn(createdOther, 'car_context'), false);
+    const assertUnbrandedCalls = () => {
+      const image = calls.find(call => call.name === 'image').request;
+      assert.match(image.prompt, /aucun texte, logo, filigrane, marque visible ou visage reconnaissable/);
+      assert.match(image.prompt, /Direction visuelle: A quiet Mediterranean scene/);
+      assert.doesNotMatch(image.prompt, /SERVER-LOCKED AUTOMOTIVE REFERENCE|factory manufacturer emblems|marquages physiques constructeur/);
+      assert.equal(image.n, 1);
+      assert.equal(image.quality, 'medium');
+      assert.equal(image.size, '1024x1280');
+      for (const call of calls.filter(call => call.input)) {
+        assert.match(call.request.input.find(item => item.role === 'system').content, /aucun texte, logo, filigrane, marque visible ou visage reconnaissable/);
+        assert.equal(Object.hasOwn(call.input, 'reference_automobile_immuable'), false);
+        assert.equal(Object.hasOwn(call.input, 'regles_automobiles'), false);
+      }
+    };
+    assertUnbrandedCalls();
+    calls.length = 0;
+    await run(`non-car-regeneration-${universe}`, () => regenerateImage(`non-car-regeneration-${universe}-run`, { ...stored }));
+    assert.equal(calls.length, 2);
+    assertUnbrandedCalls();
+  }
 });

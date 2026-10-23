@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { handlePublisher } from '../../lib/publisher/engine/handler.js';
 import { localSimulation } from '../../lib/publisher/engine/env.js';
+import { CREATIVE_UNIVERSES } from '../../lib/publisher/engine/constants.js';
 
 test('legacy shared cookie and benchmark never authorize integrated routes, even in preview', async t => {
   const secret = 'fictitious-local-legacy-secret';
@@ -28,12 +29,20 @@ test('unknown and former authentication actions are closed before any service ca
   assert.equal((await handlePublisher(new Request('http://localhost:3173/api/publisher?action=generate', { method:'POST', headers:{host:'127.0.0.1:3173',origin:'http://127.0.0.1:3173'} }))).status,401);
   assert.equal((await handlePublisher(new Request('http://localhost:3173/api/publisher?action=generate', { method:'POST', headers:{host:'127.0.0.1:3173',origin:'https://outside.invalid','x-forwarded-host':'outside.invalid'} }))).status,403);
 });
-test('unchanged creative constants, schemas and storage retain source provenance', () => {
+test('creative constants outside car guidance, schemas and storage retain source provenance', () => {
   const provenance = JSON.parse(readFileSync('docs/publisher/source.json','utf8'));
   // rules.js intentionally adds strict car-type normalization in this candidate;
   // its music, hashtag and anti-repetition behavior has targeted regression tests.
   for (const name of ['constants.js','schemas.js','storage.js']) {
-    const digest = createHash('sha256').update(readFileSync(`lib/publisher/engine/${name}`)).digest('hex');
+    let source = readFileSync(`lib/publisher/engine/${name}`, 'utf8');
+    if (name === 'constants.js') {
+      // Only the automotive guidance intentionally differs from the source:
+      // physical factory markings are now required instead of prohibited.
+      assert.ok(source.includes(CREATIVE_UNIVERSES.cars.guidance));
+      source = source.replace(CREATIVE_UNIVERSES.cars.guidance,
+        'Une automobile premium sans marque visible doit être le sujet principal, avec une sensation de route et de mouvement.');
+    }
+    const digest = createHash('sha256').update(source).digest('hex');
     assert.equal(digest, provenance.sourceFilesSha256[`app/frontend/server/publisher/${name}`]);
   }
 });
