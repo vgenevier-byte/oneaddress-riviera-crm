@@ -3,6 +3,7 @@ import { BASE, finite, number } from "./finance";
 import { imageHeaderDimensions } from "./photos-validation";
 import { assertImageByteBudget, assertEncodedImageBudget, jpegDataByteLength, TOTAL_IMAGE_BYTES } from "./image-budget";
 import { blankPhotos } from "./presentation-assets";
+import { normalizeAddressValue, type AddressValue } from "../address";
 
 export type PhotoRole = "main" | "view" | "inside" | "operation";
 export const PHOTO_ROLES: PhotoRole[] = ["main", "view", "inside", "operation"];
@@ -10,7 +11,7 @@ export type ProjectState = typeof BASE & { [field: string]: string | boolean };
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type ImportMeta = { [key: string]: JsonValue };
 export type GalleryPhoto = { data: string; label: string; page: number | null; width: number | null; height: number | null; source?: string };
-export type ProjectData = { state: ProjectState; photos: Record<PhotoRole, string>; importMeta: ImportMeta | null; importGallery: GalleryPhoto[]; photoGalleryRoles: Partial<Record<PhotoRole, number>> };
+export type ProjectData = { state: ProjectState; photos: Record<PhotoRole, string>; importMeta: ImportMeta | null; importGallery: GalleryPhoto[]; photoGalleryRoles: Partial<Record<PhotoRole, number>>; addressDetails?: AddressValue };
 export const LIMITS = { jsonBytes: 180_000_000, fileBytes: 25_000_000, totalImageBytes: TOTAL_IMAGE_BYTES, pdfFiles: 6, sourceDocuments: 30, galleryPhotos: 480, imagePixels: 40_000_000, imageDimension: 16_000, metadataBytes: 1_000_000 } as const;
 const jpegPattern = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
@@ -73,6 +74,7 @@ export function validateProjectData(input: unknown): ProjectData {
     }
   }
   // Original compatibility rule: old projects had no common rentalPeriod.
+  if (input.addressDetails !== undefined) result.addressDetails = normalizeAddressValue(input.addressDetails, result.state.address);
   if (input.state.rentalPeriod === undefined) { const h = number(result.state.holding), w = number(result.state.weeks); result.state.rentalPeriod = String(Math.max(12, finite(h) ? h : 12, finite(w) ? Math.ceil(w * 12 / 52) : 12)); }
   for (const role of PHOTO_ROLES) if (input.photos[role] !== undefined) result.photos[role] = validateJpegData(input.photos[role]);
   if (input.importMeta !== undefined && input.importMeta !== null) {

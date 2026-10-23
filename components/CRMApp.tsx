@@ -95,6 +95,9 @@ import HouseWorkerEditor from "./HouseWorkerEditor";
 import HouseTimeExpenseEditor from "./HouseTimeExpenseEditor";
 import QuickRepliesView from "./QuickRepliesView";
 import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
+import { AddressField } from "./address/AddressField";
+import { AddressMapLink } from "./address/AddressMapLink";
+import { normalizeAddressValue, readAddressForm } from "@/lib/address";
 import ContactDocuments, { ContactDocumentLibrary } from "./ContactDocuments";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
 import { getContactLabel, getContactPersonName, getContactSecondaryLabel, getContactIdentityValidationError, validateContactIdentity, type ContactIdentityValidation } from "@/lib/contactIdentity";
@@ -566,6 +569,7 @@ function normalizeHouseTrackingHouse(value: unknown): HouseTrackingHouse | null 
     id: String(raw.id || makeId("house")),
     name: String(raw.name || "Maison à compléter"),
     address: String(raw.address || ""),
+    addressDetails: normalizeAddressValue(raw.addressDetails, String(raw.address || "")),
     notes: String(raw.notes || ""),
     createdAt: String(raw.createdAt || new Date().toISOString()),
     createdBy: raw.createdBy ? String(raw.createdBy) : undefined,
@@ -3458,6 +3462,7 @@ function HouseTrackingView({
   timeEntries,
   payments,
   onAddHouse,
+  onUpdateHouse,
   onDeleteHouse,
   onAddWorker,
   onUpdateWorker,
@@ -3478,7 +3483,8 @@ function HouseTrackingView({
   workers: HouseTrackingWorker[];
   timeEntries: HouseTimeEntry[];
   payments: HousePayment[];
-  onAddHouse: (house: HouseTrackingHouse) => void;
+  onAddHouse: (house: HouseTrackingHouse) => FormSave;
+  onUpdateHouse?: (house: HouseTrackingHouse) => FormSave;
   onDeleteHouse: (id: string) => void;
   onAddWorker: (worker: HouseTrackingWorker) => void;
   onUpdateWorker?: (id: string, patch: HouseWorkerEdit) => Promise<FormSaveResult>;
@@ -3496,6 +3502,10 @@ function HouseTrackingView({
 
   const business = useBusinessPermissions();
   const canEditTimeExpenses = access ? access.fullAccess || access.modules.houseTracking?.level === "contribute" : business?.write !== false;
+  const { language } = useI18n();
+  const [editingHouse, setEditingHouse] = useState<HouseTrackingHouse | null>(null);
+  const houseConfirmation = useConfirmedForm(business?.markDirty);
+  const houseDraftId = useRef<string | null>(null);
   const today = new Date().toISOString().slice(0, 10);
   const activeWorkers = useMemo(() => workers.filter(isHouseTrackingWorkerActive), [workers]);
   const archivedWorkers = useMemo(() => workers.filter((worker) => !isHouseTrackingWorkerActive(worker)), [workers]);
@@ -3820,15 +3830,19 @@ function HouseTrackingView({
 
     if (!name) return window.alert(dialogT("crm.house.8d89aeb6e6"));
 
-    onAddHouse({
-      id: makeId("house"),
+    const formElement = event.currentTarget;
+    const house = {
+      ...editingHouse,
+      id: editingHouse?.id ?? (houseDraftId.current ||= makeId("house")),
       name,
       address: String(form.get("address") ?? "").trim(),
+      addressDetails: readAddressForm(form, "address", editingHouse?.addressDetails),
       notes: String(form.get("notes") ?? "").trim(),
-      createdAt: new Date().toISOString()
+      createdAt: editingHouse?.createdAt ?? new Date().toISOString()
+    };
+    void houseConfirmation.submit(formElement, () => editingHouse && onUpdateHouse ? onUpdateHouse(house) : onAddHouse(house), newerDraft => {
+      if (!newerDraft) { formElement.reset(); houseDraftId.current = null; setEditingHouse(null); }
     });
-
-    event.currentTarget.reset();
   }
 
   async function submitWorker(event: React.FormEvent<HTMLFormElement>) {
@@ -4286,14 +4300,16 @@ function HouseTrackingView({
           <section className="card house-tab-panel">
             <p className="eyebrow" data-semantic-text={"Réglages"}>{t("crm.house.4ed117e09c")}</p>
             <h3>{t("crm.house.58d07cab4d")}</h3>
-            <BusinessForm className="form-grid house-compact-form" onSubmit={submitHouse}>
-              <BusinessLabel>{t("crm.house.b2c124536d")}<input name="name" placeholder={t("crm.house.3a4d1efc3f")} />
+            <BusinessForm key={editingHouse?.id ?? "new-house"} className="form-grid house-compact-form" pending={houseConfirmation.saving} onChangeCapture={houseConfirmation.changed} onSubmit={submitHouse}>
+              <ConfirmedFormMessage message={houseConfirmation.message} />
+              <BusinessLabel>{t("crm.house.b2c124536d")}<input name="name" defaultValue={editingHouse?.name} placeholder={t("crm.house.3a4d1efc3f")} />
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.79e5cf20de")}<input name="address" placeholder={t("crm.house.79e5cf20de")} />
+              <AddressField name="address" multiline value={editingHouse?.address} metadata={editingHouse?.addressDetails} label={t("crm.house.79e5cf20de")} className="full"
+                reuseAddresses={contacts.filter(contact => contact.postalAddress).map(contact => ({ label: getHouseContactDisplayName(contact), address: contact.postalAddress, metadata: contact.postalAddressDetails }))} />
+              <BusinessLabel>{t("crm.house.8a7525b149")}<textarea name="notes" defaultValue={editingHouse?.notes} placeholder={t("crm.house.725032bb63")} />
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.8a7525b149")}<textarea name="notes" placeholder={t("crm.house.725032bb63")} />
-              </BusinessLabel>
-              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.house.e43ab9e9e4")}</BusinessButton>
+              <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{editingHouse ? (language === "en" ? "Save house" : "Enregistrer la maison") : t("crm.house.e43ab9e9e4")}</BusinessButton>
+              {editingHouse && <BusinessButton type="button" className="secondary-button" onClick={() => setEditingHouse(null)}>{language === "en" ? "Cancel" : "Annuler"}</BusinessButton>}
             </BusinessForm>
             <div className="list-stack house-history-list">
               {houses.length === 0 ? <p className="muted-line">{t("crm.house.153fc60415")}</p> : houses.map((house) => (
@@ -4301,7 +4317,9 @@ function HouseTrackingView({
                   <div>
                     <strong>{house.name}</strong>
                     <span>{house.address || t("crm.house.a8293fde8d")}</span>
+                    <AddressMapLink address={house.address} metadata={house.addressDetails} />
                   </div>
+                  {onUpdateHouse && <BusinessButton permission="write" type="button" className="secondary-button" onClick={() => setEditingHouse(house)}>{language === "en" ? "Edit" : "Modifier"}</BusinessButton>}
                   <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.efa472048f")) && onDeleteHouse(house.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
                 </article>
               ))}
@@ -6948,17 +6966,20 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
     const type = choice.trim();
 
-    const contactExample =
-      "Heily Aavik | Client | Standard | Français | Prospect | À compléter | À compléter | Super Cannes | À compléter | À compléter | Ancienne donnée récupérée | Villa Kanupi | Disponibilité Villa Kanupi à vérifier | Vérifier disponibilité du 11/07/2026 au 19/07/2026";
+    if (type === "1") {
+      if (setActiveTab("contacts")) {
+        setTimeout(() => document.querySelector<HTMLInputElement>(".contact-create-form input[name=name]")?.focus(), 0);
+      }
+      return;
+    }
+    if (type !== "2") return;
 
     const leadExample =
       "Villa | Heily Aavik | Villa Kanupi | 11/07/2026 | 19/07/2026 | À compléter | Nouveau | Moyenne | À compléter | Vérifier disponibilité Villa Kanupi et envoyer proposition privée | Budget, nombre de personnes et critères à compléter";
 
     const raw = window.prompt(
-      type === "2"
-        ? dialogT("crm.shell.7d404b001c")
-        : dialogT("crm.shell.ba223c937e"),
-      type === "2" ? leadExample : contactExample
+      dialogT("crm.shell.7d404b001c"),
+      leadExample
     );
 
     if (!raw) return;
@@ -6981,59 +7002,6 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       if (!cleaned) return "";
 
       return normalizeQuickEntryDate(cleaned) || cleaned;
-    }
-
-    if (type === "1") {
-      const [
-        name,
-        kind,
-        clientLevel,
-        preferredLanguage,
-        relationshipStatus,
-        email,
-        phone,
-        city,
-        postalAddress,
-        budget,
-        source,
-        preferences,
-        importantNotes,
-        notes
-      ] = parts;
-
-      if (!cleanExpressValue(name)) {
-        window.alert(dialogT("crm.shell.1cd0583961"));
-        return;
-      }
-
-      const contact = {
-        id: crypto.randomUUID(),
-        name: cleanExpressValue(name),
-        kind: cleanExpressValue(kind) || "Client",
-        clientLevel: cleanExpressValue(clientLevel) || "Standard",
-        preferredLanguage: cleanExpressValue(preferredLanguage) || "Français",
-        relationshipStatus: cleanExpressValue(relationshipStatus) || "Prospect",
-        email: cleanExpressValue(email),
-        phone: cleanExpressValue(phone),
-        city: cleanExpressValue(city),
-        postalAddress: cleanExpressValue(postalAddress),
-        budget: parseExpressNumber(budget),
-        source: cleanExpressValue(source) || "Ajout contact express",
-        preferences: cleanExpressValue(preferences),
-        importantNotes: cleanExpressValue(importantNotes),
-        notes: cleanExpressValue(notes),
-        createdAt: new Date().toISOString().slice(0, 10)
-      } as any;
-
-      if (!confirmDuplicateContact(contact as Contact)) return;
-
-      setData((current: any) => ({
-        ...current,
-        contacts: [contact, ...(current.contacts ?? [])]
-      }));
-
-      notify(screenNotice("crm.shell.f96f13465b"));
-      return;
     }
 
     if (type === "2") {
@@ -7564,13 +7532,37 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
   
 
-  function addHouseTrackingHouse(house: HouseTrackingHouse) {
-    setData((current) => ({
-      ...current,
-      houseTrackingHouses: [stampCreated(house, activeActor), ...(((current as any).houseTrackingHouses ?? []) as HouseTrackingHouse[])]
-    }));
-
-    notify(screenNotice("crm.shell.76a6654637"));
+  async function saveHouseTrackingHouse(house: HouseTrackingHouse): Promise<FormSaveResult> {
+    const before = currentBusinessData.current;
+    if (!sharedWorkspaceReady || workspaceBusy.current || workspaceSync.current.dirty(before)) {
+      return { ok: false, message: "Attendez la synchronisation des modifications en cours, puis réessayez. Votre saisie est conservée." };
+    }
+    const existing = (before.houseTrackingHouses ?? []).some(row => row.id === house.id);
+    const record = existing ? stampUpdated(house, activeActor) : stampCreated(house, activeActor);
+    const payload = { ...before, houseTrackingHouses: existing
+      ? (before.houseTrackingHouses ?? []).map(row => row.id === house.id ? record : row)
+      : [record, ...(before.houseTrackingHouses ?? [])] };
+    try {
+      const operation = await beginHouseOperation();
+      const saved = await writeSharedWorkspace(payload, operation.signal, operation.token);
+      operation.signal.throwIfAborted();
+      if (!saved) return { ok: false, message: "Enregistrement non confirmé. Votre saisie est conservée ; vérifiez la connexion et vos droits." };
+      setData(current => {
+        const merged = { ...payload } as CRMData;
+        for (const key of Object.keys(current) as (keyof CRMData)[]) {
+          if (workspaceFingerprint(current[key]) !== workspaceFingerprint(before[key])) {
+            (merged as any)[key] = current[key];
+            if (key === "houseTrackingHouses") workspaceSync.current.conflict();
+          }
+        }
+        return merged;
+      });
+      setFormDirty(false);
+      notify(screenNotice("crm.shell.76a6654637"));
+      return { ok: true, recordId: house.id };
+    } catch (error) {
+      return { ok: false, cancelled: isCancelled(error), message: "Enregistrement non confirmé. Votre saisie est conservée ; vérifiez la connexion et vos droits." };
+    }
   }
 
   function deleteHouseTrackingHouse(id: string) {
@@ -8006,6 +7998,7 @@ async function addContact(event: React.FormEvent<HTMLFormElement>): Promise<Form
       phone: String(form.get("phone") ?? "").trim(),
       city: String(form.get("city") ?? "").trim(),
       postalAddress: readPostalAddress(form),
+      postalAddressDetails: readAddressForm(form, "postalAddress"),
       budget: safeNumber(form.get("budget")),
       source: String(form.get("source") ?? "").trim() || "Direct",
       notes: String(form.get("notes") ?? "").trim(),
@@ -9113,7 +9106,8 @@ function createQuoteDraftFromLead(lead: Lead) {
             workers={(((data as any).houseTrackingWorkers ?? []) as HouseTrackingWorker[])}
             timeEntries={(((data as any).houseTimeEntries ?? []) as HouseTimeEntry[])}
             payments={(((data as any).housePayments ?? []) as HousePayment[])}
-            onAddHouse={addHouseTrackingHouse}
+            onAddHouse={saveHouseTrackingHouse}
+            onUpdateHouse={saveHouseTrackingHouse}
             onDeleteHouse={deleteHouseTrackingHouse}
             onAddWorker={addHouseTrackingWorker}
             onUpdateWorker={updateHouseTrackingWorker}
@@ -11972,6 +11966,7 @@ function ContactsView({
       phone: String(form.get("phone") ?? "").trim(),
       city: String(form.get("city") ?? "").trim(),
       postalAddress: readPostalAddress(form, editingContact.postalAddress),
+      postalAddressDetails: readAddressForm(form, "postalAddress", editingContact.postalAddressDetails),
       budget: form.has("budget") ? safeNumber(form.get("budget")) : editingContact.budget,
       source: String(form.get("source") ?? "").trim(),
       notes: String(form.get("notes") ?? "").trim(),
@@ -12269,7 +12264,7 @@ function ContactsView({
               <div><span>{t("crm.contacts.e408c08c6b")}</span><strong>{selectedContact.companyName || t("crm.contacts.831460cb02")}</strong></div>
               <div><span>{t("crm.contacts.969ccbd3cf")}</span><strong>{selectedContact.email || t("crm.contacts.cb6c1fb76c")}</strong></div>
               <div><span>{t("crm.contacts.cc4c424b57")}</span><strong>{selectedContact.phone || t("crm.contacts.cb6c1fb76c")}</strong></div>
-              <ContactPostalAddressDetails key={`${selectedContact.id}:${selectedContact.postalAddress ?? ""}`} address={selectedContact.postalAddress} />
+              <ContactPostalAddressDetails key={`${selectedContact.id}:${selectedContact.postalAddress ?? ""}`} address={selectedContact.postalAddress} metadata={selectedContact.postalAddressDetails} />
               <div><span>{t("crm.contacts.4d7e0f0579")}</span><strong>{selectedContact.city || getContactSupplierZone(selectedContact) || t("crm.contacts.831460cb02")}</strong></div>
               <div><span>{t("crm.contacts.64cff1319d")}</span><strong>{screen.action(selectedContact)}</strong></div>
 
@@ -12336,6 +12331,10 @@ function ContactsView({
               const target = event.target;
               if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
                 changedContactFields.current.add(target.name);
+                if (target.closest('[data-address-field="postalAddress"]')) {
+                  changedContactFields.current.add("postalAddress");
+                  changedContactFields.current.add("postalAddressDetails");
+                }
               }
             }}>
               <ConfirmedFormMessage message={getContactIdentityValidationError(edition.message) ? "" : edition.message} />
@@ -12347,7 +12346,7 @@ function ContactsView({
               </BusinessLabel>
               <BusinessLabel>{t("crm.contacts.969ccbd3cf")}<input name="email" type="email" defaultValue={editingContact.email} /></BusinessLabel>
               <BusinessLabel>{t("crm.contacts.cc4c424b57")}<input name="phone" defaultValue={editingContact.phone} /></BusinessLabel>
-              <ContactPostalAddressField value={editingContact.postalAddress} />
+              <ContactPostalAddressField value={editingContact.postalAddress} metadata={editingContact.postalAddressDetails} />
               <BusinessLabel>{t("crm.contacts.4d7e0f0579")}<input name="city" defaultValue={editingContact.city} /></BusinessLabel>
               <BusinessLabel>{t("crm.contacts.0e570ca6fa")}<input name="source" defaultValue={editingContact.source} /></BusinessLabel>
 

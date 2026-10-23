@@ -1,6 +1,8 @@
 import { createProjectData, validateProjectData, type ProjectData } from "../izord/model";
 import { AGENCY_FIELD_MAP } from "./import-fields";
 import { number as financeNumber, finite } from "../izord/finance";
+import { normalizeAddressValue, type AddressValue } from "../address";
+import { propertyAddressDetails, selectPropertyAddress } from "./address";
 import { createGuidedProperty, validateGuidedProperty, guidedReadableFields, deriveGuidedProperty, currentGuidedValue, setGuidedField, type GuidedProperty, type GuidedComposite, type GuidedKey } from "./guided";
 
 /** Property records are independent from the versioned presentation dossiers. */
@@ -17,7 +19,7 @@ export type ImportProvenance = {
   warnings: string[]; fields: Record<string, { page: number | null; extract: string }>;
 };
 export type ContactSources = { agent?: { baseline: Partial<Record<"agentName" | "agentEmail" | "agentPhone" | "agencyName", string>> }; agency?: { baseline: Partial<Record<"agencyName" | "agencyAddress" | "agencyPhone" | "agencyEmail", string>> } };
-export type FonciereData = Record<FonciereField, string> & { presentationData: ProjectData; provenance: ImportProvenance[]; guided: GuidedProperty; contactSources: ContactSources };
+export type FonciereData = Record<FonciereField, string> & { presentationData: ProjectData; provenance: ImportProvenance[]; guided: GuidedProperty; contactSources: ContactSources; propertyAddressDetails?: AddressValue; agencyAddressDetails?: AddressValue };
 export const FONCIERE_SCHEMA = "FONCIERE_PROPERTY_V1";
 export const FONCIERE_DOCUMENT_LIMIT = 30;
 function numericHypothesis(value: string): string { const parsed = financeNumber(value); return finite(parsed) ? String(parsed) : ""; }
@@ -36,6 +38,8 @@ export function validateFonciereData(input: unknown, requireName = true): Foncie
     result[key] = value;
   }
   result.guided = validateGuidedProperty(raw.guided);
+  if (raw.propertyAddressDetails !== undefined) result.propertyAddressDetails = propertyAddressDetails({ ...result, propertyAddressDetails: normalizeAddressValue(raw.propertyAddressDetails) });
+  if (raw.agencyAddressDetails !== undefined) result.agencyAddressDetails = normalizeAddressValue(raw.agencyAddressDetails, result.agencyAddress);
   if (raw.contactSources !== undefined) {
     if (!raw.contactSources || typeof raw.contactSources !== "object" || Array.isArray(raw.contactSources)) throw new Error("Origine des coordonnées invalide.");
     for (const [role, source] of Object.entries(raw.contactSources)) {
@@ -74,6 +78,9 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   const amount = (key: GuidedKey) => { const value = currentGuidedValue(data,key); return typeof value === "number" ? String(value) : key in deriveGuidedProperty(data).values ? "" : numericHypothesis(data[key as FonciereField] || ""); };
   const compositeAmount = (key: GuidedKey) => { const value = currentGuidedValue(data,key); return value && !Array.isArray(value) && typeof value === "object" && typeof value.amount === "number" ? String(value.amount) : key in deriveGuidedProperty(data).values ? "" : numericHypothesis(data[key as FonciereField] || ""); };
   set("project", data.name); set("ref", data.agencyReference); set("address", [data.propertyAddress, [data.postalCode, data.city].filter(Boolean).join(" ")].filter(Boolean).join(", "));
+  const address = propertyAddressDetails(data);
+  if (address) { set("address", address.formattedAddress); result.addressDetails = normalizeAddressValue(address, result.state.address); }
+  else delete result.addressDetails;
   set("type", text("propertyType")); set("asking", amount("askingPrice")); set("area", amount("area")); set("land", text("land") ? amount("land") : ""); set("measurement", text("areaKind"));
   const views = currentGuidedValue(data,"view"), seaExtent = currentGuidedValue(data,"seaExtent");
   // No substring inference from uncertain, negative or hypothetical source text.
@@ -94,7 +101,7 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   }
   set("decisionNotes", [data.notes, ...(["worksHypothesis","resaleHypothesis","rentalHypothesis"] as GuidedKey[]).filter(key=>text(key)).map(key=>`Hypothèse personnelle (${key === "worksHypothesis" ? "travaux" : key === "resaleHypothesis" ? "revente" : "location"}) : ${text(key)}`)].filter(Boolean).join("\n"));
   const fullText = Object.fromEntries(FONCIERE_FIELDS.filter(key => !["agentContactId","agencyContactId"].includes(key)).map(key => [key, data[key]]));
-  result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedState: structuredClone(result.state) } as unknown as import("../izord/model").JsonValue };
+  result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedState: structuredClone(result.state), ...(data.propertyAddressDetails ? { propertyAddressDetails: structuredClone(data.propertyAddressDetails) } : {}), ...(data.agencyAddressDetails ? { agencyAddressDetails: structuredClone(data.agencyAddressDetails) } : {}) } as unknown as import("../izord/model").JsonValue };
   if (source) result.importMeta.fonciereSource = { id: source.id, revision: source.revision, capturedAt: new Date().toISOString() };
   return validateProjectData(result);
 }
@@ -124,6 +131,8 @@ export function fromPresentationData(input: ProjectData): FonciereData {
     for (const key of FONCIERE_FIELDS) if (!["agentContactId","agencyContactId"].includes(key) && typeof fields.fields[key] === "string") result[key] = fields.fields[key] as string;
     if (fields.guided !== undefined) result.guided = validateGuidedProperty(fields.guided);
     if (Array.isArray(fields.provenance)) result.provenance = structuredClone(fields.provenance) as unknown as ImportProvenance[];
+    if (fields.propertyAddressDetails) result.propertyAddressDetails = normalizeAddressValue(fields.propertyAddressDetails);
+    if (fields.agencyAddressDetails) result.agencyAddressDetails = normalizeAddressValue(fields.agencyAddressDetails, result.agencyAddress);
   }
   if (hasSnapshot && fields && typeof fields === "object" && !Array.isArray(fields) && fields.mappedState && typeof fields.mappedState === "object" && !Array.isArray(fields.mappedState) && Object.entries(fields.mappedState).every(([key,value]) => state[key] === value)) {
     result.presentationData = structuredClone(presentation);
@@ -136,7 +145,7 @@ export function fromPresentationData(input: ProjectData): FonciereData {
     const changed = (key: string) => state[key] !== mapped[key];
     if (changed("project")) result.name = String(state.project || "");
     if (changed("ref")) result.agencyReference = String(state.ref || "");
-    if (changed("address")) { result.propertyAddress = String(state.address || ""); result.postalCode = ""; result.city = ""; }
+    if (changed("address")) { Object.assign(result, presentation.addressDetails?.line1 ? selectPropertyAddress(result, presentation.addressDetails) : { propertyAddress: String(state.address || ""), postalCode: "", city: "", propertyAddressDetails: presentation.addressDetails }); }
     const adapted = (key: GuidedKey, value: import("./guided").GuidedValue | undefined) => { const next = setGuidedField(result,key,value); result.guided=next.guided; };
     if (changed("type")) { const probe=createFonciereData(); probe.propertyType=String(state.type || ""); const value=deriveGuidedProperty(probe).values.propertyType; adapted("propertyType",value || (state.type ? "other" : null)); if (state.type && !value) result.guided.details.propertyType=String(state.type); }
     for (const [target,key] of [["askingPrice","asking"],["area","area"],["land","land"]] as const) if (changed(key)) { const n=financeNumber(state[key]); adapted(target,finite(n)?n:null); if (state[key] && !finite(n)) result.guided.details[target]=String(state[key]); }
@@ -165,5 +174,6 @@ export function fromPresentationData(input: ProjectData): FonciereData {
   }
   result.notes ||= String(state.decisionNotes || "");
   result.presentationData = structuredClone(presentation);
+  if (presentation.addressDetails?.line1) Object.assign(result, selectPropertyAddress(result, presentation.addressDetails));
   return validateFonciereData(result, false);
 }

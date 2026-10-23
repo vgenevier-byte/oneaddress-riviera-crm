@@ -1,4 +1,5 @@
 import type { Contact } from "./types";
+import { addressFingerprint, manualAddress, normalizeAddressValue } from "./address";
 
 export function readPostalAddress(form: FormData, existing = ""): string {
   return form.has("postalAddress") ? String(form.get("postalAddress") ?? "") : existing;
@@ -17,11 +18,19 @@ export function mergeContactUpdate(contact: Contact, update: Partial<Contact>): 
     if (contact.entityType !== undefined) merged.entityType = contact.entityType;
     else delete merged.entityType;
   }
+  if (contact.postalAddressDetails !== undefined || update.postalAddressDetails !== undefined) {
+    const details = normalizeAddressValue(update.postalAddressDetails ?? contact.postalAddressDetails, merged.postalAddress);
+    const cityChanged = update.city !== undefined && update.city !== contact.city;
+    merged.postalAddressDetails = details && cityChanged && details.city && addressFingerprint(details.city) !== addressFingerprint(merged.city)
+      ? manualAddress(merged.postalAddress, details.complement) : details;
+    if (!merged.postalAddressDetails) delete merged.postalAddressDetails;
+  }
   return merged;
 }
 
 export function getContactFormUpdate(values: Contact, changedFields: Iterable<string>): Partial<Contact> {
   const fields = new Set(changedFields);
+  if ((fields.has("postalAddress") || fields.has("city")) && values.postalAddressDetails) fields.add("postalAddressDetails");
   if (fields.has("supplierCategoryCustom")) fields.add("supplierCategory");
   if (fields.has("kind") && values.kind !== "Membre de l’organisation") {
     fields.add("relationshipStatus");

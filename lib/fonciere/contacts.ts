@@ -1,9 +1,10 @@
 import { matchesContactSearchFields, normalizeContactSearch } from "../contactSearch";
 import { getContactPersonName } from "../contactIdentity";
 import type { FonciereData } from "./model";
+import { normalizeAddressValue, type AddressValue } from "../address";
 
 /** Only fields from the server-authorized Contacts projection. */
-export type ProjectContact = { id: string; entityType?: "person" | "company"; name: string; firstName: string; companyName: string; email: string; phone: string; city: string; postalAddress: string };
+export type ProjectContact = { id: string; entityType?: "person" | "company"; name: string; firstName: string; companyName: string; email: string; phone: string; city: string; postalAddress: string; postalAddressDetails?: AddressValue };
 export type ContactCreateInput = Omit<ProjectContact, "id">;
 export type ContactRole = "agent" | "agency";
 export const AGENT_FIELDS = ["agentName", "agentPhone", "agentEmail"] as const;
@@ -71,6 +72,8 @@ export function applyProjectContact(data: FonciereData, role: ContactRole, conta
     if (data.agencyName !== values.agencyName) Object.assign(result, { agencyAddress: "", agencyPhone: "", agencyEmail: "" });
   }
   Object.assign(result, values);
+  if (role === "agency") result.agencyAddressDetails = contact?.entityType === "company" && contact.postalAddressDetails ? normalizeAddressValue(contact.postalAddressDetails, result.agencyAddress) : undefined;
+  else if (result.agencyAddress !== data.agencyAddress) delete result.agencyAddressDetails;
   result[role === "agent" ? "agentContactId" : "agencyContactId"] = contact && (role === "agent" || contact.entityType === "company") ? contact.id : "";
   result.contactSources = { ...result.contactSources };
   if (contact) result.contactSources[role] = { baseline: values };

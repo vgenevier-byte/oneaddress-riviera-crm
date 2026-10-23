@@ -4,12 +4,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { createProjectData } from "../lib/izord/model";
 import { createGeneratorRepository, GeneratorConflictError, validateUploadBlob, photoDataToBlob, type ProjectRecord } from "../lib/izord/repository";
 import { assertImageByteBudget, assertEncodedImageBudget, encodedJpegLength, jpegDataByteLength, TOTAL_IMAGE_BYTES } from "../lib/izord/image-budget";
+import { addressFingerprint, formatAddress, type AddressValue } from "../lib/address";
 
 const id = "11111111-1111-4111-8111-111111111111";
 const owner = "22222222-2222-4222-8222-222222222222";
 const project: ProjectRecord = { id, owner_id: owner, revision: 7, title: "Fictif", status: "draft", payload: {}, created_at: "2026-09-17T00:00:00Z", updated_at: "2026-09-17T00:00:00Z" };
 function stub(options: { conflict?: boolean; lateRevision?: number; sessionId?: string; signal?: AbortController } = {}) {
   const mutations: { name: string; args: Record<string, unknown> }[] = [];
+  let persistedPayload: unknown;
   const client = {
     auth: {
       getUser: async () => ({ data: { user: { id: owner } }, error: null }),
@@ -18,10 +20,11 @@ function stub(options: { conflict?: boolean; lateRevision?: number; sessionId?: 
     storage: { from: () => ({}) },
     rpc: async (name: string, args: Record<string, unknown>) => {
       mutations.push({ name, args }); options.signal?.abort();
+      if (name === "izord_save_generator" && !options.conflict) persistedPayload = structuredClone(args.p_payload);
       return options.conflict ? { data: null, error: { code: "40001", message: "revision_conflict" } } : { data: 8, error: null };
     },
     from: (table: string) => {
-      const result = { data: table === "izord_projects" ? { ...project, revision: options.lateRevision || 8 } : [], error: null };
+      const result = { data: table === "izord_projects" ? { ...project, revision: options.lateRevision || 8, payload: persistedPayload || project.payload } : [], error: null };
       const query = { select: () => query, eq: () => query, order: async () => result, single: async () => result };
       return query;
     },
@@ -38,6 +41,17 @@ test("generator save sends expected revision and keeps incomplete values distinc
   assert.equal(payload.data.state.acq, ""); assert.equal(payload.data.state.works, "0");
   assert.deepEqual(Object.values(payload.data.photos), ["", "", "", ""]);
   assert.ok(!JSON.stringify(payload).includes("base64"));
+});
+
+test("generator repository persists and reloads address metadata through its revision-checked payload", async () => {
+  const { repository, mutations } = stub(), data = createProjectData();
+  const value: AddressValue = { houseNumber: "1", street: "rue fictive", line1: "1 rue fictive", complement: "Bâtiment A", postalCode: "01000", city: "Bourg-en-Bresse", country: "France", countryCode: "FR", formattedAddress: "", latitude: 46.2, longitude: 5.2, source: "ign", sourceId: "fixture", precision: "address", fingerprint: "" };
+  value.formattedAddress = formatAddress(value); value.fingerprint = addressFingerprint(value.formattedAddress);
+  data.state.address = value.formattedAddress; data.addressDetails = value;
+  const saved = await repository.saveProject({ project, data });
+  const reloaded = await repository.loadProject(saved.project.id);
+  assert.equal(mutations.length, 1); assert.deepEqual(reloaded.data.addressDetails, value); assert.equal(reloaded.data.state.address, value.formattedAddress);
+  assert.equal(reloaded.project.revision, 8); assert.deepEqual(reloaded.sourceDocuments, []);
 });
 
 test("generator conflict does not alter the caller's unsaved draft", async () => {

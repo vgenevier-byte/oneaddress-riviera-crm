@@ -1,0 +1,19 @@
+.field { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.field label { min-width: 0; }
+.field input, .field textarea { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+.field textarea { resize: vertical; }
+.search { position: relative; min-width: 0; }
+.suggestions { list-style: none; padding: 4px; margin: 4px 0 0; position: absolute; top: 100%; left: 0; right: 0; z-index: 30; max-height: 280px; overflow-y: auto; border: 1px solid #d4d7d5; background: #fff; color: #1e2a25; border-radius: 8px; box-shadow: 0 8px 24px #0002; }
+.suggestions button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; min-height: 48px; padding: 10px; border: 0; border-radius: 5px; background: transparent; color: inherit; font: inherit; text-align: left; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.suggestions button:hover, .suggestions button[aria-selected="true"] { background: #eaf1ec; }
+.suggestions small { opacity: .75; font-size: 11px; }
+.structure { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.structure label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; }
+.status:empty { display: none; }
+.status, .coverage { font-size: 11px; line-height: 1.5; }
+.attribution { font-size: 10px; opacity: .75; }
+.attribution a { color: inherit; }
+.reuse { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.reuse label { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.reuse select { min-width: 0; max-width: 100%; }
+@media (max-width: 520px) { .structure { grid-template-columns: minmax(0, 1fr); } .suggestions { max-height: 230px; } }

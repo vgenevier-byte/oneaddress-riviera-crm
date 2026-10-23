@@ -1,23 +1,20 @@
 "use client";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
-import { useId, useState } from "react";
+import { useState } from "react";
+import type { AddressValue } from "@/lib/address";
+import { AddressField } from "./address/AddressField";
+import { AddressMapLink } from "./address/AddressMapLink";
 import styles from "./ContactPostalAddress.module.css";
 
-export function ContactPostalAddressField({ value = "" }: { value?: string }) {
-  const {t} = useI18n();
-
-  const helpId = useId();
-  return (
-    <label className={`full ${styles.field}`}>{t("modules.contactPostalAddress.fullPostalAddress")}
-      <textarea name="postalAddress" rows={3} defaultValue={value} aria-describedby={helpId}
-        placeholder={t("modules.postal.addressExample")} />
-      <small id={helpId}>{t("modules.contactPostalAddress.streetNumberAndNameAdditionalDetailsPostcodeTownOrCityAndCountry")}</small>
-    </label>
-  );
+export function ContactPostalAddressField({ value = "", metadata }: { value?: string; metadata?: AddressValue }) {
+  const { t } = useI18n();
+  return <AddressField name="postalAddress" multiline value={value} metadata={metadata} cityFieldName="city"
+    className={`full ${styles.field}`} label={t("modules.contactPostalAddress.fullPostalAddress")}
+    placeholder={t("modules.postal.addressExample")} />;
 }
 
-export function ContactPostalAddressDetails({ address = "" }: { address?: string }) {
+export function ContactPostalAddressDetails({ address = "", metadata }: { address?: string; metadata?: AddressValue }) {
   const {t} = useI18n();
 
   const [copyState, setCopyState] = useState<"idle" | "copying" | "copied" | "failed">("idle");
@@ -38,6 +35,7 @@ export function ContactPostalAddressDetails({ address = "" }: { address?: string
       <span>{t("modules.contactPostalAddress.postalAddress")}</span>
       <p className={styles.address}>{hasAddress ? address : t("modules.contactDocuments.notProvided")}</p>
       {hasAddress && <>
+        <AddressMapLink address={address} metadata={metadata} />
         <button className="secondary-button" type="button" disabled={copyState === "copying"} onClick={copyAddress}>
 
           {t("modules.contactPostalAddress.copyADDRESS")}

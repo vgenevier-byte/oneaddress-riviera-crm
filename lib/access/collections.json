@@ -54,6 +54,10 @@
         "type": "string",
         "label": "Adresse postale"
       },
+      "postalAddressDetails": {
+        "type": "object",
+        "label": "Détails de l’adresse postale"
+      },
       "supplierCategory": {
         "type": "string",
         "label": "Catégorie prestataire"
@@ -779,6 +783,10 @@
       "address": {
         "type": "string",
         "label": "Adresse"
+      },
+      "addressDetails": {
+        "type": "object",
+        "label": "Détails de l’adresse"
       }
     }
   },

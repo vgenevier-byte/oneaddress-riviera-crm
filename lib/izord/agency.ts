@@ -4,10 +4,11 @@ import { LIMITS, PHOTO_ROLES, createProjectData, assertProjectImageBudget, type 
 import { fileData, resizeImported, cropPhoto, RATIOS, checkAbort } from "./photos";
 import { PDF_READER_SOURCE } from "./agency-worker";
 import { enrichAgencyFacts } from "./agency-details";
+import { normalizeAddressValue, type AddressValue } from "../address";
 export type PdfPage = { page:number; text:string };
 export type ExtractionEvidence = { page:number|null; extract:string };
 export type AgencyExtraction = { filename:string; pages:number; fields:Record<string,string>; evidence:Record<string,ExtractionEvidence>; extra:string[]; warnings:string[]; agency:string; parser:string; rawText:string };
-export type AgencyReport = AgencyExtraction & { gallery:GalleryPhoto[]; readerWarnings:string[]; roles:Record<PhotoRole,number>; sourceFile:File; extractionMethod?:"text"|"ocr"|"mixed"; ocrPages?:number[] };
+export type AgencyReport = AgencyExtraction & { gallery:GalleryPhoto[]; readerWarnings:string[]; roles:Record<PhotoRole,number>; sourceFile:File; extractionMethod?:"text"|"ocr"|"mixed"; ocrPages?:number[]; addressDetails?:AddressValue };
 export type PdfReadResult = { pages:PdfPage[]; images:{bytes:Uint8Array;page:number;width:number;height:number}[]; warnings:string[] };
 export const IMPORT_FIELDS: [string,string][]=[['project','Nom du projet'],['ref','Référence agence'],['address','Adresse / localisation'],['type','Typologie'],['sea','Vue mer'],['land','Terrain (m²)'],['area','Surface annoncée (m²)'],['asking','Prix demandé (€)'],['features','Équipements / particularités'],['measurement','Nature des surfaces'],['propertyWarnings','Points à confirmer']];
 export const ROLE_LABELS={main:'1 · Vue d’ensemble',view:'2 · Vue / environnement',inside:'3 · Intérieur',operation:'4 · État existant'};
@@ -131,6 +132,7 @@ export async function analyzeAgencyFiles(files: File[] | FileList, options: { si
 export async function applyAgencyReport(report: AgencyReport, signal?: AbortSignal): Promise<ProjectData> {
   checkAbort(signal); const next = createProjectData();
   for (const key of Object.keys(BASE)) if (key in report.fields && typeof next.state[key] === "string") { if (report.fields[key].length > 1000) throw new Error(`Champ importé trop long : ${key}.`); next.state[key] = report.fields[key]; }
+  if (report.addressDetails) next.addressDetails = normalizeAddressValue(report.addressDetails, next.state.address);
   for (const key of ["acq","works","resale","weekly"]) next.state[key] = "";
   next.state.costsReviewed = false;
   for (const role of PHOTO_ROLES) { const index = report.roles[role]; if (index === -1) continue; const photo = report.gallery[index]; if (!Number.isInteger(index) || !photo) throw new Error("Affectation de photographie invalide."); next.photos[role] = await cropPhoto(photo.data, RATIOS[role], signal); next.photoGalleryRoles[role] = index; }

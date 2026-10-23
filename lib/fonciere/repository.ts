@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { normalizeAddressValue } from "../address";
 import { createProjectData, LIMITS, PHOTO_ROLES } from "../izord/model";
 import { assertEncodedImageBudget, assertImageByteBudget, encodedJpegLength } from "../izord/image-budget";
 import { photoDataToBlob, validateUploadBlob, type OperationOptions } from "../izord/repository";
@@ -35,7 +36,7 @@ async function blobData(blob: Blob, options: OperationOptions) {
 }
 function contactOption(row: Record<string, unknown>): ContactOption {
   const text = (key: string) => typeof row[key] === "string" ? row[key] as string : "";
-  return { id: text("id"), ...(row.entityType === "company" || row.entityType === "person" ? { entityType: row.entityType } : {}), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), postalAddress: text("postalAddress") };
+  return { id: text("id"), ...(row.entityType === "company" || row.entityType === "person" ? { entityType: row.entityType } : {}), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), postalAddress: text("postalAddress"), ...(row.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(row.postalAddressDetails, text("postalAddress")) } : {}) };
 }
 
 /** Captured-token clients from useScopedOperations are supported. Auth, Contacts
@@ -158,7 +159,7 @@ export function createFonciereRepository(client: SupabaseClient) {
       if (entityType === "company" ? !companyName : !name) throw new Error(entityType === "company" ? "Le nom de l’entreprise est obligatoire." : "Le nom du contact est obligatoire.");
       const snapshot = await contacts(options);
       if (duplicateProjectContacts(snapshot.contacts, input).length) throw new Error("Un contact possède déjà cette identité ou ces coordonnées. Sélectionnez-le dans les résultats de recherche.");
-      const id = crypto.randomUUID(), patch = { entityType, name, firstName: input.firstName || "", companyName, email: input.email || "", phone: input.phone || "", city: input.city || "", postalAddress: input.postalAddress || "", kind: "Prestataire", supplierCategory: "Agence immobilière" };
+      const id = crypto.randomUUID(), patch = { entityType, name, firstName: input.firstName || "", companyName, email: input.email || "", phone: input.phone || "", city: input.city || "", postalAddress: input.postalAddress || "", ...(input.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(input.postalAddressDetails, input.postalAddress) } : {}), kind: "Prestataire", supplierCategory: "Agence immobilière" };
       const result = await guarded(options.signal, () => client.rpc("crm_mutate_record", { p_module: "contacts", p_collection: "contacts", p_id: id, p_patch: patch, p_revision: snapshot.revision, p_delete: false })); failure(result.error);
       const row = (result.data as { collections?: { contacts?: Record<string, unknown>[] } })?.collections?.contacts?.find(row => row.id === id);
       if (!row) throw new Error("La création du contact n’a pas été confirmée."); return contactOption(row);

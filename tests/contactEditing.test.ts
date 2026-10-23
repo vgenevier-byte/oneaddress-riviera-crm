@@ -9,6 +9,7 @@ import { matchesContactSearch } from "../lib/contactSearch";
 import { fictionalContact, fictionalAccount } from "./fixtures/vendorBanking";
 import { isEligibleVendorContact } from "../lib/vendorContacts";
 import type { Contact } from "../lib/types";
+import { readAddressForm } from "../lib/address";
 
 const address = "12 avenue Exemple\nBâtiment B, chez l’amie Élodie\n06400 Cannes\nFrance";
 const source = readFileSync("components/CRMApp.tsx", "utf8");
@@ -33,7 +34,7 @@ for (const kind of ["Client", "Prestataire", "Propriétaire"] as const) {
       if (postalAddress) form.set("postalAddress", postalAddress);
       let state = { contacts: [] as Contact[] };
       const add = handler("addContact", {
-        FormData: class { constructor() { return form; } }, readPostalAddress,
+        FormData: class { constructor() { return form; } }, readPostalAddress, readAddressForm,
         makeId: () => "contact-test", stampCreated: (c: Contact) => c, activeActor: "Test",
         safeNumber: (v: unknown) => Number(v) || 0, getSupplierCategoryFromForm: () => "Entretien",
         validateContactIdentity, currentBusinessData: { current: state },
@@ -131,3 +132,24 @@ for (const nextKind of ["Client", "Propriétaire"] as const) {
     assert.deepEqual(mergeContactUpdate(result, { postalAddress: "" }), { ...result, postalAddress: "" });
   });
 }
+
+test("métadonnées d’adresse : omission préservée et adresse/ville modifiée sans ancien géocodage", () => {
+  const details: NonNullable<Contact["postalAddressDetails"]> = {
+    houseNumber: "12", street: "avenue Exemple", line1: "12 avenue Exemple", complement: "Bâtiment B",
+    postalCode: "06400", city: "Cannes", country: "France", countryCode: "FR", formattedAddress: address,
+    latitude: 43.55, longitude: 7.02, source: "ign", sourceId: "fictional-selection", precision: "address",
+    fingerprint: address.normalize("NFC").replace(/\s+/g, " ").trim().toLocaleLowerCase()
+  };
+  const original = { ...fictionalContact, city: "Cannes", postalAddress: address, postalAddressDetails: details };
+  assert.deepEqual(mergeContactUpdate(original, { notes: "Note seule" }).postalAddressDetails, details);
+  assert.deepEqual(getContactFormUpdate(original, ["postalAddress"]), { postalAddress: address, postalAddressDetails: details });
+  for (const update of [{ postalAddress: "7 adresse manuelle\nL-0010 Luxembourg" }, { city: "Monaco" }]) {
+    const next = mergeContactUpdate(original, update);
+    assert.equal(next.postalAddressDetails?.source, "manual");
+    assert.equal(next.postalAddressDetails?.latitude, undefined);
+    assert.equal(next.postalAddressDetails?.sourceId, undefined);
+    assert.equal(next.postalAddressDetails?.postalCode, "");
+    assert.equal(next.postalAddressDetails?.complement, "Bâtiment B");
+  }
+  assert.equal(mergeContactUpdate(original, { postalAddress: "" }).postalAddressDetails, undefined);
+});

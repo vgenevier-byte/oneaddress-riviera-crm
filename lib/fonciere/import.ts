@@ -4,6 +4,8 @@ import { createFonciereData, validateFonciereData, type FonciereData, type Fonci
 
 import { AGENCY_FIELD_MAP } from "./import-fields";
 import { deriveGuidedProperty, GUIDED_KEYS, guidedReadableFields, changeGuidedPropertyType, type GuidedKey } from "./guided";
+import { propertyAddressDetails, selectPropertyAddress } from "./address";
+import { normalizeAddressValue } from "../address";
 export { AGENCY_FIELD_MAP } from "./import-fields";
 
 export type AgencyImportProposal = { key: FonciereField; label: string; current: string; proposed: string };
@@ -26,6 +28,7 @@ export async function agencyReportToFonciere(report: AgencyReport, signal?: Abor
   if (!data.fees && report.evidence.agencyFee) data.fees = report.fields.agencyFee || "";
   if (!data.agencyName && report.agency !== "Agence à confirmer") data.agencyName = report.agency;
   data.presentationData = await applyAgencyReport(report, signal);
+  if (data.presentationData.addressDetails?.line1) Object.assign(data, selectPropertyAddress(data, data.presentationData.addressDetails));
   data.provenance = [{ id: crypto.randomUUID(), importedAt: new Date().toISOString(), filename: report.filename.slice(0,240), method: report.extractionMethod || "text", warnings: [...new Set([...report.warnings, ...report.readerWarnings])].slice(0,100).map(value=>value.slice(0,2000)), fields }];
   data.guided = deriveGuidedProperty(data);
   return validateFonciereData(data, false);
@@ -58,6 +61,11 @@ export function applyAgencyImport(current: FonciereData, imported: FonciereData,
       result.guided.inactive = result.guided.inactive.filter(k=>k !== guidedKey);
     }
   }
+  if (selectedKeys.some(key => ["propertyAddress", "city", "postalCode"].includes(key))) {
+    result.propertyAddressDetails = propertyAddressDetails({ ...result, propertyAddressDetails: incoming.propertyAddressDetails });
+    if (!result.propertyAddressDetails) result.guided.values.coordinates = null;
+  }
+  if (selectedKeys.includes("agencyAddress")) result.agencyAddressDetails = incoming.agencyAddressDetails ? normalizeAddressValue(incoming.agencyAddressDetails, result.agencyAddress) : undefined;
   const photos = new Set(result.presentationData.importGallery.map(photo => photo.data));
   for (const photo of incoming.presentationData.importGallery) if (!photos.has(photo.data)) { result.presentationData.importGallery.push({ ...photo }); photos.add(photo.data); }
   // Keep existing role assignments on reimport. Fresh records can use reviewed source photos.

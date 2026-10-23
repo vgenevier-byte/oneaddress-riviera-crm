@@ -1,3 +1,5 @@
+import type { AddressValue } from "./address";
+
 export type ContactKind = "Client" | "Propriétaire" | "Prestataire" | "Membre de l’organisation";
 export type ContactEntityType = "person" | "company";
 export type SupplierCategory = string;
@@ -66,6 +68,7 @@ export type Contact = {
   phone: string;
   city: string;
   postalAddress: string;
+  postalAddressDetails?: AddressValue;
   budget: number;
   source: string;
   notes: string;
@@ -225,6 +228,7 @@ export type HouseTrackingHouse = {
   id: string;
   name: string;
   address: string;
+  addressDetails?: AddressValue;
   notes?: string;
   createdAt: string;
   createdBy?: string;
