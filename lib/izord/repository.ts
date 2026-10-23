@@ -52,7 +52,7 @@ export async function validateUploadBlob(blob: Blob, kind: AssetRecord["kind"]):
   const header = new Uint8Array(await blob.slice(0, 1024).arrayBuffer());
   const starts = (...bytes: number[]) => bytes.every((byte, index) => header[index] === byte);
   const valid = kind === "pdf" ? blob.type === "application/pdf" && new TextDecoder().decode(header).includes("%PDF-")
-    : kind === "photo" ? (blob.type === "image/jpeg" && starts(255, 216, 255)) || (blob.type === "image/png" && starts(137, 80, 78, 71, 13, 10, 26, 10))
+    : kind === "photo" ? (blob.type === "image/jpeg" && starts(255, 216, 255)) || (blob.type === "image/png" && starts(137, 80, 78, 71, 13, 10, 26, 10)) || (blob.type === "image/webp" && new TextDecoder().decode(header.slice(0, 4)) === "RIFF" && new TextDecoder().decode(header.slice(8, 12)) === "WEBP")
       : blob.type === pptMime && starts(80, 75, 3, 4);
   if (!valid) throw new Error("Le contenu du fichier ne correspond pas au type autorisé.");
 }
@@ -174,7 +174,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
       const created = await guarded(options.signal, () => client.rpc("izord_create_project", { p_title: title.trim() || "Nouveau projet" })); failure(created.error); return guarded(options.signal, () => readProject(String(created.data), options));
     },
     listAssets, listVersions, loadProject, downloadAsset,
-    async saveProject(input: { project: ProjectRecord; data: ProjectData; previous?: LoadedProject; status?: ProjectStatus; sourceFiles?: File[] }, options: OperationOptions = {}): Promise<LoadedProject> {
+    async saveProject(input: { project: ProjectRecord; data: ProjectData; previous?: LoadedProject; status?: ProjectStatus; sourceFiles?: File[]; replaceSourceDocuments?: boolean }, options: OperationOptions = {}): Promise<LoadedProject> {
       const who = await guarded(options.signal, () => actor(options.signal)), data = validateProjectData(input.data), empty = createProjectData(), persisted = structuredClone(data);
       const before = input.previous?.project.id === input.project.id ? input.previous : undefined, old = stored(before?.project.payload), reusable = new Map<string, string>();
       if (old && before) {
@@ -190,9 +190,9 @@ export function createGeneratorRepository(client: SupabaseClient) {
       }
       for (const role of PHOTO_ROLES) persisted.photos[role] = await guarded(options.signal, () => persistPhoto(data.photos[role], empty.photos[role], `${role}.jpg`));
       for (let i = 0; i < data.importGallery.length; i++) persisted.importGallery[i].data = await guarded(options.signal, () => persistPhoto(data.importGallery[i].data, "", `galerie-${i + 1}.jpg`));
-      const sourceDocuments = [...(before?.sourceDocuments || [])];
-      if (sourceDocuments.length + (input.sourceFiles?.length || 0) > LIMITS.pdfFiles) throw new Error("Six documents PDF sources maximum par version.");
-      for (const file of input.sourceFiles || []) sourceDocuments.push((await guarded(options.signal, () => uploadAsset(input.project, file, "pdf", file.name, options))).id);
+      const sourceDocuments = input.replaceSourceDocuments ? [] : [...(before?.sourceDocuments || [])];
+      if (sourceDocuments.length + (input.sourceFiles?.length || 0) > LIMITS.sourceDocuments) throw new Error("Trente documents sources maximum par version.");
+      for (const file of input.sourceFiles || []) sourceDocuments.push((await guarded(options.signal, () => uploadAsset(input.project, file, file.type === "application/pdf" ? "pdf" : "photo", file.name, options))).id);
       const payload: StoredPayload = { schema: "IZORD_GENERATOR_V1", data: persisted, sourceDocuments };
       if (new TextEncoder().encode(JSON.stringify(payload)).length > 950000) throw new Error("Métadonnées du dossier trop volumineuses ; aucun enregistrement confirmé.");
       await guarded(options.signal, () => sameActor(who, options.signal)); options.onProgress?.({ stage: "save", completed: 0, total: 1, label: "Enregistrement de la révision" });

@@ -11,7 +11,7 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { [key:
 export type ImportMeta = { [key: string]: JsonValue };
 export type GalleryPhoto = { data: string; label: string; page: number | null; width: number | null; height: number | null; source?: string };
 export type ProjectData = { state: ProjectState; photos: Record<PhotoRole, string>; importMeta: ImportMeta | null; importGallery: GalleryPhoto[]; photoGalleryRoles: Partial<Record<PhotoRole, number>> };
-export const LIMITS = { jsonBytes: 180_000_000, fileBytes: 25_000_000, totalImageBytes: TOTAL_IMAGE_BYTES, pdfFiles: 6, galleryPhotos: 480, imagePixels: 40_000_000, imageDimension: 16_000, metadataBytes: 1_000_000 } as const;
+export const LIMITS = { jsonBytes: 180_000_000, fileBytes: 25_000_000, totalImageBytes: TOTAL_IMAGE_BYTES, pdfFiles: 6, sourceDocuments: 30, galleryPhotos: 480, imagePixels: 40_000_000, imageDimension: 16_000, metadataBytes: 1_000_000 } as const;
 const jpegPattern = /^data:image\/jpeg;base64,[A-Za-z0-9+/]+={0,2}$/;
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 export function assertProjectImageBudget(input: { photos: Record<string, unknown>; importGallery?: unknown }): number {

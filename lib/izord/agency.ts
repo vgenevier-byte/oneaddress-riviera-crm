@@ -3,10 +3,11 @@ import { fmt, BASE } from "./finance";
 import { LIMITS, PHOTO_ROLES, createProjectData, assertProjectImageBudget, type GalleryPhoto, type PhotoRole, type ProjectData } from "./model";
 import { fileData, resizeImported, cropPhoto, RATIOS, checkAbort } from "./photos";
 import { PDF_READER_SOURCE } from "./agency-worker";
+import { enrichAgencyFacts } from "./agency-details";
 export type PdfPage = { page:number; text:string };
 export type ExtractionEvidence = { page:number|null; extract:string };
 export type AgencyExtraction = { filename:string; pages:number; fields:Record<string,string>; evidence:Record<string,ExtractionEvidence>; extra:string[]; warnings:string[]; agency:string; parser:string; rawText:string };
-export type AgencyReport = AgencyExtraction & { gallery:GalleryPhoto[]; readerWarnings:string[]; roles:Record<PhotoRole,number>; sourceFile:File };
+export type AgencyReport = AgencyExtraction & { gallery:GalleryPhoto[]; readerWarnings:string[]; roles:Record<PhotoRole,number>; sourceFile:File; extractionMethod?:"text"|"ocr"|"mixed"; ocrPages?:number[] };
 export type PdfReadResult = { pages:PdfPage[]; images:{bytes:Uint8Array;page:number;width:number;height:number}[]; warnings:string[] };
 export const IMPORT_FIELDS: [string,string][]=[['project','Nom du projet'],['ref','Référence agence'],['address','Adresse / localisation'],['type','Typologie'],['sea','Vue mer'],['land','Terrain (m²)'],['area','Surface annoncée (m²)'],['asking','Prix demandé (€)'],['features','Équipements / particularités'],['measurement','Nature des surfaces'],['propertyWarnings','Points à confirmer']];
 export const ROLE_LABELS={main:'1 · Vue d’ensemble',view:'2 · Vue / environnement',inside:'3 · Intérieur',operation:'4 · État existant'};
@@ -81,21 +82,48 @@ export function workerRead(buffer: ArrayBuffer, options: { signal?: AbortSignal;
   });
 }
 export async function analyzeAgencyFiles(files: File[] | FileList, options: { signal?:AbortSignal; onProgress?:(filename:string,page:number,total:number)=>void } = {}): Promise<AgencyReport[]> {
-  const selected = Array.from(files); if (selected.length > LIMITS.pdfFiles) throw new Error("Maximum six PDF par import. Chaque PDF reste un bien distinct.");
+  const selected = Array.from(files); if (selected.length > LIMITS.pdfFiles) throw new Error("Maximum six fiches par import. Chaque document reste un bien distinct.");
   const reports: AgencyReport[] = [];
   for (const file of selected) {
     checkAbort(options.signal);
-    if (!/\.pdf$/i.test(file.name) || file.type && file.type !== "application/pdf") throw new Error("Utilisez une fiche au format PDF.");
-    if (!file.size || file.size > LIMITS.fileBytes) throw new Error(`${file.name} : maximum 25 Mo par PDF, fichier non vide.`);
+    const pdf = /\.pdf$/i.test(file.name) && (!file.type || file.type === "application/pdf");
+    const image = /\.(?:jpe?g|png|webp)$/i.test(file.name) && (!file.type || /^(?:image\/(?:jpeg|png|webp))$/.test(file.type));
+    if (!pdf && !image) throw new Error("Utilisez une fiche PDF, JPG, PNG ou WebP.");
+    if (!file.size || file.size > LIMITS.fileBytes) throw new Error(`${file.name} : maximum 25 Mo par fiche, fichier non vide.`);
+    const onProgress = (page:number,total:number) => options.onProgress?.(file.name,page,total);
+    if (image) {
+      const { readAgencyImage } = await import("./agency-ocr");
+      const read = await readAgencyImage(file, { signal:options.signal,onProgress });
+      const extraction = enrichAgencyFacts(parseAgency(read.pages,file.name),read.pages);
+      reports.push({ ...extraction,gallery:read.gallery,readerWarnings:read.warnings,roles:{main:read.gallery.length?0:-1,view:-1,inside:-1,operation:-1},sourceFile:file,extractionMethod:"ocr",ocrPages:read.ocrPages });
+      continue;
+    }
     const bytes = await file.arrayBuffer(); checkAbort(options.signal);
-    const data = await workerRead(bytes, { signal: options.signal, onProgress:(page,total)=>options.onProgress?.(file.name,page,total) });
-    const extraction = parseAgency(data.pages, file.name); const gallery: GalleryPhoto[] = [];
+    if (!new TextDecoder("latin1").decode(bytes.slice(0,1024)).includes("%PDF-")) throw new Error("Ce fichier n’est pas un PDF reconnu.");
+    let data: PdfReadResult = {pages:[],images:[],warnings:[]}, readError:unknown;
+    try { data = await workerRead(bytes.slice(0), { signal: options.signal, onProgress }); }
+    catch (error) { checkAbort(options.signal); readError = error; }
+    let ocrPages:number[] = [], fallbackGallery:GalleryPhoto[] = [];
+    if (readError || data.warnings.some(warning=>/image.*(?:non JPEG|compression multiple|intégrée en ligne)/i.test(warning)) || data.pages.some(page=>page.text.replace(/\s/g,"").length<40 || (page.text.match(/�/g)?.length||0)>page.text.length/4)) {
+      try {
+        const { readAgencyPdfFallback } = await import("./agency-ocr");
+        const fallback = await readAgencyPdfFallback(bytes,data.pages,{signal:options.signal,onProgress});
+        data.pages=fallback.pages;data.warnings.push(...fallback.warnings);ocrPages=fallback.ocrPages;fallbackGallery=fallback.gallery;
+        if (fallback.gallery.some(photo=>photo.source==="PDF")) { data.images=[];data.warnings=data.warnings.filter(warning=>!/^Une image non JPEG n’a pas été importée automatiquement\.$/.test(warning)); }
+      } catch (error) {
+        checkAbort(options.signal);
+        data.warnings.push(`Lecture PDF/OCR partielle : ${error instanceof Error?error.message:"moteur local indisponible"}. Compléter manuellement ; le document original reste disponible.`);
+        if (!data.pages.length) data.pages=[{page:1,text:""}];
+      }
+    }
+    const extraction = enrichAgencyFacts(parseAgency(data.pages, file.name),data.pages); const gallery: GalleryPhoto[] = [];
     for (const image of data.images) {
       checkAbort(options.signal);
       try { const value = await resizeImported(await fileData(new Blob([Uint8Array.from(image.bytes)], { type: "image/jpeg" }), options.signal), options.signal); gallery.push({ page:image.page,width:image.width,height:image.height,data:value,label:`Photo ${gallery.length + 1} · p. ${image.page}`,source:"PDF" }); }
       catch (error) { checkAbort(options.signal); extraction.warnings.push(`Une photographie n’a pas pu être décodée : ${error instanceof Error ? error.message : "JPEG non lisible"}`); }
     }
-    reports.push({ ...extraction, gallery, readerWarnings:data.warnings || [], roles:{ main:gallery.length?0:-1,view:gallery.length>1?1:-1,inside:gallery.length>2?2:-1,operation:gallery.length>3?3:-1 }, sourceFile:file });
+    gallery.push(...fallbackGallery);
+    reports.push({ ...extraction, gallery, readerWarnings:data.warnings || [], roles:{ main:gallery.length?0:-1,view:gallery.length>1?1:-1,inside:gallery.length>2?2:-1,operation:gallery.length>3?3:-1 }, sourceFile:file,extractionMethod:ocrPages.length?(data.pages.some(page=>!ocrPages.includes(page.page)&&page.text.trim())?"mixed":"ocr"):"text",ocrPages });
   }
   return reports;
 }
@@ -106,6 +134,6 @@ export async function applyAgencyReport(report: AgencyReport, signal?: AbortSign
   for (const key of ["acq","works","resale","weekly"]) next.state[key] = "";
   next.state.costsReviewed = false;
   for (const role of PHOTO_ROLES) { const index = report.roles[role]; if (index === -1) continue; const photo = report.gallery[index]; if (!Number.isInteger(index) || !photo) throw new Error("Affectation de photographie invalide."); next.photos[role] = await cropPhoto(photo.data, RATIOS[role], signal); next.photoGalleryRoles[role] = index; }
-  next.importMeta = { filename:report.filename,pages:report.pages,agency:report.agency,parser:report.parser,evidence:report.evidence,extra:report.extra,warnings:[...report.warnings,...report.readerWarnings],validatedAt:new Date().toISOString(),roles:{...report.roles} };
+  next.importMeta = { filename:report.filename,pages:report.pages,agency:report.agency,parser:report.parser,evidence:report.evidence,agencyFields:{...report.fields},extractionMethod:report.extractionMethod||"text",ocrPages:report.ocrPages||[],extra:report.extra,warnings:[...report.warnings,...report.readerWarnings],validatedAt:new Date().toISOString(),roles:{...report.roles} };
   next.importGallery = report.gallery.map(photo=>({...photo})); assertProjectImageBudget(next); checkAbort(signal); return next;
 }

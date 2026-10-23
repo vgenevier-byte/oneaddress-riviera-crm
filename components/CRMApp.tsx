@@ -5572,7 +5572,7 @@ function DashboardQuickTile({
 
 export {createQuickEntryRecords, promptQuickEntryText};
 
-export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => boolean | void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
+export default function CRMApp({ access, initialTab = "dashboard", initialContactId, sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; initialContactId?: string; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => boolean | void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
   const { t, label, locale, screen, screenText, dialogText, dialogT } = useCRMDisplay();
 
   const beginHouseOperation = useScopedOperations("houseTracking");
@@ -5602,7 +5602,7 @@ export default function CRMApp({ access, initialTab = "dashboard", sourceFocus, 
 
   const [activeTab, setActiveTabState] = useState<Tab>(initialTab);
   const [navigationRevision, setNavigationRevision] = useState(0);
-  const [focusContactId, setFocusContactId] = useState<string | undefined>();
+  const [focusContactId, setFocusContactId] = useState<string | undefined>(initialContactId);
   const [, setMobileMoreOpen] = useState(false);
 
 
@@ -8855,7 +8855,7 @@ function createQuoteDraftFromLead(lead: Lead) {
   return (
     <main className="crm-shell crm-readable-redesign" onChangeCapture={event=>{if((event.target as HTMLElement).closest("form"))setFormDirty(true);}} onSubmitCapture={()=>setFormDirty(false)}>
       <UnifiedNavigation access={access} accountId={sessionUserId} navigationRevision={navigationRevision} active={activeTab} badges={sidebarBadgeCounts} onLogout={onLogout} onNavigate={tab => {
-        if (tab === "monthlyCharges" || tab === "izord" || tab === "publisher" || tab === "admin") return onExternalNavigate(tab); else return setActiveTab(tab);
+        if (tab === "fonciere" || tab === "monthlyCharges" || tab === "izord" || tab === "publisher" || tab === "admin") return onExternalNavigate(tab); else return setActiveTab(tab);
       }} />
 
       <section className="content-panel">

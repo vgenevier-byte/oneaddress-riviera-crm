@@ -10,6 +10,7 @@ export type GeneratorDraft = {
   loaded: LoadedProject | null;
   dirty: boolean;
   sourceFiles: File[];
+  replaceSourceDocuments?: boolean;
   reports: AgencyReport[];
   reportIndex: number;
   reviewed: boolean;

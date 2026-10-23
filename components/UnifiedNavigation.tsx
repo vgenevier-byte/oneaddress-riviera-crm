@@ -7,11 +7,11 @@ import { administrationItem, allowedNavigation, groupForModule, mobileShortcutIt
 import styles from "./UnifiedNavigation.module.css";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import LanguageSelector from "./LanguageSelector";
-export type UnifiedTab = ModuleId | "admin";
+export type UnifiedTab = ModuleId | "admin" | "fonciere";
 export default function UnifiedNavigation({ access, active, accountId, navigationRevision = 0, onNavigate, onLogout, badges = {} }: { access: AccessSnapshot; active: UnifiedTab; accountId: string; navigationRevision?: number; onNavigate: (tab: UnifiedTab) => boolean | void; onLogout: () => void; badges?: Partial<Record<ModuleId, number>> }) {
  const { t } = useI18n();
  const [more, setMore] = useState(false);
- const [openedGroup, setOpenedGroup] = useState<NavigationGroupId | null>(() => groupForModule(active));
+ const [openedGroup, setOpenedGroup] = useState<NavigationGroupId | "fonciere" | null>(() => groupForModule(active));
  const [destination, setDestination] = useState({ active, accountId, navigationRevision });
  // Follow confirmed destinations, never data refreshes or badge/access object identity.
  if (destination.active !== active || destination.accountId !== accountId || destination.navigationRevision !== navigationRevision) {
@@ -72,7 +72,7 @@ export default function UnifiedNavigation({ access, active, accountId, navigatio
  const entries = allowedNavigation(access);
  const navigate = (tab: UnifiedTab) => { if (onNavigate(tab) !== false) setMore(false); };
  function button(item: NavigationModule | typeof administrationItem, surface: "desktop" | "more" | "shortcut") {
-  const count = item.tab === "admin" ? 0 : badges[item.tab];
+  const count = item.tab === "admin" || item.tab === "fonciere" ? 0 : badges[item.tab];
   const selected = active === item.tab;
   const className = surface === "shortcut" ? `mobile-crm-nav-button ${selected ? "is-active" : ""}` : surface === "more" ? `unified-more-button ${selected ? "is-active" : ""}` : `${styles.row} ${selected ? styles.active : ""}`;
   return <button key={item.tab} data-navigation-module={item.tab} type="button" className={className} aria-current={selected ? "page" : undefined} onClick={() => navigate(item.tab)}>
@@ -86,7 +86,7 @@ export default function UnifiedNavigation({ access, active, accountId, navigatio
    if (entry.kind === "module") return button(entry.item, surface);
    const expanded = openedGroup === entry.id;
    const containsActive = entry.items.some(item => item.tab === active);
-   const pending = !expanded && entry.items.some(item => (badges[item.tab] ?? 0) > 0);
+   const pending = !expanded && entry.items.some(item => item.tab !== "fonciere" && (badges[item.tab] ?? 0) > 0);
    const panelId = `unified-${surface}-group-${entry.id}`;
    return <div key={entry.id} className={styles.group}>
     <button type="button" data-navigation-group={entry.id} className={`${surface === "more" ? "unified-more-button" : styles.row} ${styles.category} ${!expanded && containsActive ? styles.containsActive : ""}`} aria-expanded={expanded} aria-controls={panelId} onClick={() => setOpenedGroup(expanded ? null : entry.id)}>

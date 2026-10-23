@@ -60,9 +60,11 @@ export const accessMessages = {
     "fr": "Bateaux",
     "en": "Boats"
   },
+  "navigation.module.fonciere": { fr: "Projets", en: "Projects" },
+  "navigation.group.fonciere": { fr: "Foncière", en: "Property Investment" },
   "navigation.module.izord": {
-    "fr": "IZORD Invest",
-    "en": "IZORD Invest"
+    "fr": "Présentations Projets",
+    "en": "Project Presentations"
   },
   "navigation.module.publisher": {
     "fr": "Instagram Publisher",

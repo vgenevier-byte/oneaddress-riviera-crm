@@ -10,12 +10,13 @@ export const navigationGroups = [
 ] as const satisfies readonly { id: string; label: string; modules: readonly ModuleId[] }[];
 
 export type NavigationGroupId = typeof navigationGroups[number]["id"];
-export type NavigationModule = typeof moduleItems[number];
+export type NavigationModule = typeof moduleItems[number] | { readonly tab: "fonciere"; readonly label: "Projets"; readonly icon: "⌂" };
 export type NavigationEntry =
   | { kind: "module"; item: NavigationModule }
-  | { kind: "group"; id: NavigationGroupId; label: string; items: NavigationModule[] };
+  | { kind: "group"; id: NavigationGroupId | "fonciere"; label: string; items: NavigationModule[] };
 
-export function groupForModule(module: ModuleId | "admin"): NavigationGroupId | null {
+export function groupForModule(module: ModuleId | "admin" | "fonciere"): NavigationGroupId | "fonciere" | null {
+  if (module === "fonciere" || module === "izord") return "fonciere";
   return navigationGroups.find(group => (group.modules as readonly string[]).includes(module))?.id ?? null;
 }
 
@@ -29,7 +30,7 @@ export function allowedNavigation(access: AccessSnapshot): NavigationEntry[] {
     const items = group.modules.filter(module => readable(access, module)).map(itemFor);
     if (items.length) entries.push({ kind: "group", id: group.id, label: group.label, items });
   }
-  if (readable(access, "izord")) entries.push({ kind: "module", item: itemFor("izord") });
+  if (readable(access, "izord")) entries.push({ kind: "group", id: "fonciere", label: "Foncière", items: [{ tab: "fonciere", label: "Projets", icon: "⌂" }, itemFor("izord")] });
   return entries;
 }
 

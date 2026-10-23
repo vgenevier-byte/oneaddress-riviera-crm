@@ -1,6 +1,6 @@
 import { crmNavigationItems } from "@/components/crmNavigation";
 const housePosition = crmNavigationItems.findIndex(item => item.tab === "houseTracking") + 1;
-export const moduleItems = [...crmNavigationItems.slice(0, housePosition), { tab: "monthlyCharges", label: "Charges mensuelles", icon: "▥" }, ...crmNavigationItems.slice(housePosition), { tab: "izord", label: "IZORD Invest", icon: "◇" }, { tab: "publisher", label: "Instagram Publisher", icon: "▧" }] as const;
+export const moduleItems = [...crmNavigationItems.slice(0, housePosition), { tab: "monthlyCharges", label: "Charges mensuelles", icon: "▥" }, ...crmNavigationItems.slice(housePosition), { tab: "izord", label: "Présentations Projets", icon: "◇" }, { tab: "publisher", label: "Instagram Publisher", icon: "▧" }] as const;
 export type ModuleId = typeof moduleItems[number]["tab"];
 export type AccessLevel = "none" | "read" | "contribute";
 export const sensitiveLabels = { delete: "Suppression", export: "Export et téléchargement", bank_read: "Consultation / copie des coordonnées bancaires", bank_write: "Modification / vérification des RIB", payment: "Préparation du paiement", generate: "Générer / régénérer", mark_published: "Marquer comme publié" };
