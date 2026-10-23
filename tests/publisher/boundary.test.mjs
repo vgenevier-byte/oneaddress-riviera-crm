@@ -29,11 +29,13 @@ test('unknown and former authentication actions are closed before any service ca
   assert.equal((await handlePublisher(new Request('http://localhost:3173/api/publisher?action=generate', { method:'POST', headers:{host:'127.0.0.1:3173',origin:'http://127.0.0.1:3173'} }))).status,401);
   assert.equal((await handlePublisher(new Request('http://localhost:3173/api/publisher?action=generate', { method:'POST', headers:{host:'127.0.0.1:3173',origin:'https://outside.invalid','x-forwarded-host':'outside.invalid'} }))).status,403);
 });
-test('creative constants outside car guidance, schemas and storage retain source provenance', () => {
+test('creative constants outside car guidance and storage retain source provenance', () => {
   const provenance = JSON.parse(readFileSync('docs/publisher/source.json','utf8'));
+  // schemas.js intentionally normalizes booking captions; its language, length,
+  // location and hashtag guarantees have targeted regression tests.
   // rules.js intentionally adds strict car-type normalization in this candidate;
   // its music, hashtag and anti-repetition behavior has targeted regression tests.
-  for (const name of ['constants.js','schemas.js','storage.js']) {
+  for (const name of ['constants.js','storage.js']) {
     let source = readFileSync(`lib/publisher/engine/${name}`, 'utf8');
     if (name === 'constants.js') {
       // Only the automotive guidance intentionally differs from the source:
