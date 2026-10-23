@@ -18,6 +18,7 @@ test("property selection fills one structured block, retaining agency and unrela
   assert.equal(selected.propertyAddress, "1 bis rue de la Paix\nBâtiment A, étage 2"); assert.equal(selected.postalCode, "06000"); assert.equal(selected.city, "Nice");
   assert.equal(selected.agencyAddress, original.agencyAddress); assert.equal(selected.notes, original.notes); assert.equal(original.propertyAddress, "");
   assert.equal(propertyAddressText(selected), address().formattedAddress);
+  assert.equal(selected.guided.values.coordinates, undefined);
   assert.deepEqual(validateFonciereData(selected).propertyAddressDetails, address());
   assert.match(googleMapsUrl(propertyAddressText(selected), propertyAddressDetails(selected)), /query=43.7%2C7.26/);
 });
@@ -25,11 +26,11 @@ test("property selection fills one structured block, retaining agency and unrela
 test("manual locality or street correction invalidates geocode and never attaches old locality to a replacement", () => {
   const first = selectPropertyAddress(createFonciereData(), address());
   const edited = editPropertyAddress(first, "city", "Monaco");
-  assert.equal(edited.propertyAddressDetails?.source, "manual"); assert.equal(edited.propertyAddressDetails?.latitude, undefined); assert.equal(edited.propertyAddressDetails?.sourceId, undefined); assert.equal(edited.guided.values.coordinates, null);
+  assert.equal(edited.propertyAddressDetails?.source, "manual"); assert.equal(edited.propertyAddressDetails?.latitude, undefined); assert.equal(edited.propertyAddressDetails?.sourceId, undefined); assert.equal(edited.guided.values.coordinates, undefined);
   assert.equal(edited.propertyAddressDetails?.complement, first.propertyAddressDetails?.complement); assert.equal(edited.propertyAddressDetails?.country, "France");
   assert.ok(!googleMapsUrl(propertyAddressText(edited), edited.propertyAddressDetails).includes("43.7"));
   const next = selectPropertyAddress(first, address({ line1: "Rue sans numéro", houseNumber: "", street: "Rue sans numéro", postalCode: "", city: "", complement: "", precision: "street", latitude: undefined, longitude: undefined }));
-  assert.equal(next.city, ""); assert.equal(next.postalCode, ""); assert.equal(next.guided.values.locationPrecision, "approximate"); assert.equal(next.guided.values.coordinates, null);
+  assert.equal(next.city, ""); assert.equal(next.postalCode, ""); assert.equal(next.guided.values.locationPrecision, "approximate"); assert.equal(next.guided.values.coordinates, undefined);
   first.city = "Luxembourg";
   assert.equal(validateFonciereData({ ...first, name: "Fictif" }).propertyAddressDetails, undefined);
 });
@@ -74,6 +75,26 @@ test("agency selection copies only authorized company address; imported changes 
   assert.equal(company.postalAddress, address().formattedAddress);
   const imported = createFonciereData(); imported.propertyAddress = "Nouvelle adresse extraite";
   const applied = applyAgencyImport(linked, imported, ["propertyAddress"]);
-  assert.equal(applied.propertyAddressDetails, undefined); assert.equal(applied.guided.values.coordinates, null);
+  assert.equal(applied.propertyAddressDetails, undefined); assert.equal(applied.guided.values.coordinates, undefined);
   assert.equal(applied.agencyAddress, linked.agencyAddress); assert.deepEqual(applied.agencyAddressDetails, linked.agencyAddressDetails);
+});
+
+test("address selection, manual changes and reimport preserve historical business coordinates without projecting them", () => {
+  const historical = createFonciereData(); historical.name = "Ancienne fiche"; historical.notes = "Note conservée";
+  historical.guided.values.coordinates = { latitude: 41.9, longitude: 12.5 };
+  historical.guided.details.coordinates = "Ancienne précision conservée";
+  const legacy = structuredClone(historical.guided);
+  const selected = selectPropertyAddress(historical, address());
+  assert.deepEqual(selected.guided.values.coordinates, legacy.values.coordinates);
+  assert.equal(selected.propertyAddressDetails?.latitude, 43.7);
+  const manual = editPropertyAddress(selected, "city", "Monaco");
+  assert.deepEqual(manual.guided.values.coordinates, legacy.values.coordinates);
+  assert.equal(manual.propertyAddressDetails?.latitude, undefined);
+  const incoming = createFonciereData(); incoming.propertyAddress = "Adresse importée";
+  const imported = applyAgencyImport(manual, incoming, ["propertyAddress"]);
+  const saved = validateFonciereData(JSON.parse(JSON.stringify(imported)));
+  assert.deepEqual(saved.guided.values.coordinates, legacy.values.coordinates);
+  assert.equal(saved.guided.details.coordinates, legacy.details.coordinates);
+  assert.equal(saved.notes, historical.notes);
+  assert.doesNotMatch(String(toPresentationData(saved).state.environment), /Latitude|Longitude|41[.,]9|12[.,]5|Ancienne précision/);
 });

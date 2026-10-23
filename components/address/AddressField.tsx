@@ -39,7 +39,7 @@ const messages = {
     country: "Pays / pays de recherche", complement: "Complément (résidence, bâtiment, appartement…)", number: "Numéro et suffixe", street: "Voie", postalCode: "Code postal", city: "Ville",
     addressPrecision: "Adresse au numéro", streetPrecision: "Rue : numéro non confirmé", cityPrecision: "Commune : adresse non confirmée",
     replace: "Remplacer le texte actuel et ses corrections manuelles par cette adresse ? Le complément renseigné séparément sera conservé ; vérifiez qu’il correspond à la nouvelle adresse.",
-    confirmed: "Adresse sélectionnée. Les champs restent modifiables.", manualPrecision: "Saisie manuelle : coordonnées et référence externes invalidées.",
+    confirmed: "Adresse sélectionnée. Les champs restent modifiables.", manualPrecision: "Adresse saisie manuellement. Les champs restent modifiables.",
     reuse: "Reprendre une adresse existante", reusePlaceholder: "Choisir une fiche autorisée…", use: "Utiliser cette adresse",
   },
   en: {
@@ -49,7 +49,7 @@ const messages = {
     country: "Country / search country", complement: "Additional details (residence, building, apartment…)", number: "House number and suffix", street: "Street", postalCode: "Postal code", city: "City",
     addressPrecision: "House number address", streetPrecision: "Street: house number unconfirmed", cityPrecision: "Municipality: address unconfirmed",
     replace: "Replace the current text and its manual corrections with this address? Additional details entered in the separate field will be kept; check that they belong to the new address.",
-    confirmed: "Address selected. You can still edit every field.", manualPrecision: "Manual entry: external coordinates and reference have been cleared.",
+    confirmed: "Address selected. You can still edit every field.", manualPrecision: "Address entered manually. You can still edit every field.",
     reuse: "Reuse an existing address", reusePlaceholder: "Choose an authorised record…", use: "Use this address",
   },
 };

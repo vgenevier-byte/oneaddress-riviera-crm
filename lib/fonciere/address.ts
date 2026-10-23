@@ -17,8 +17,7 @@ export function propertyAddressDetails(data: Pick<FonciereData, "propertyAddress
 }
 
 export function selectPropertyAddress(data: FonciereData, value: AddressValue): FonciereData {
-  let result: FonciereData = { ...data, propertyAddress: [value.line1, value.complement].filter(Boolean).join("\n"), postalCode: value.postalCode, city: value.city, propertyAddressDetails: value };
-  result = setGuidedField(result, "coordinates", value.latitude !== undefined && value.longitude !== undefined ? { latitude: value.latitude, longitude: value.longitude } : null);
+  const result: FonciereData = { ...data, propertyAddress: [value.line1, value.complement].filter(Boolean).join("\n"), postalCode: value.postalCode, city: value.city, propertyAddressDetails: value };
   return setGuidedField(result, "locationPrecision", value.precision === "address" ? "exact" : "approximate");
 }
 
@@ -41,5 +40,5 @@ export function editPropertyAddress(data: FonciereData, key: "propertyAddress" |
     next.formattedAddress = formatAddress(next); next.fingerprint = addressFingerprint(next.formattedAddress);
     result.propertyAddressDetails = next;
   }
-  return setGuidedField(result, "coordinates", null);
+  return result;
 }

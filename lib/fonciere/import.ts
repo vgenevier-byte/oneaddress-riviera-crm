@@ -63,7 +63,6 @@ export function applyAgencyImport(current: FonciereData, imported: FonciereData,
   }
   if (selectedKeys.some(key => ["propertyAddress", "city", "postalCode"].includes(key))) {
     result.propertyAddressDetails = propertyAddressDetails({ ...result, propertyAddressDetails: incoming.propertyAddressDetails });
-    if (!result.propertyAddressDetails) result.guided.values.coordinates = null;
   }
   if (selectedKeys.includes("agencyAddress")) result.agencyAddressDetails = incoming.agencyAddressDetails ? normalizeAddressValue(incoming.agencyAddressDetails, result.agencyAddress) : undefined;
   const photos = new Set(result.presentationData.importGallery.map(photo => photo.data));

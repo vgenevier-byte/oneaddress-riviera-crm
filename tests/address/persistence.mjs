@@ -1,6 +1,6 @@
 /** Actual Auth/PostgREST/PostgreSQL checks on the explicitly guarded fictitious local bench. */
 import assert from 'node:assert/strict';
-import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {readFileSync,writeFileSync,mkdirSync,readdirSync} from 'node:fs';
 import {createHash,randomUUID} from 'node:crypto';
 import {Client} from 'pg';
 import {createClient} from '@supabase/supabase-js';
@@ -31,6 +31,28 @@ try{
   for(const fn of funcs)assert.deepEqual((await sql.query('select oid,proacl,proconfig,prosecdef from pg_proc where oid=$1',[fn.oid])).rows[0],fn);
   const exposed=(await sql.query("select proname from pg_proc where pronamespace='app_private'::regnamespace and (proname like '%address%' or proname='reconcile_address_record') and (has_function_privilege('anon',oid,'execute') or has_function_privilege('authenticated',oid,'execute'))")).rows;assert.deepEqual(exposed,[]);
   writeFileSync(out+'/migration-preservation.json',JSON.stringify({passed:true,migrationSha256:createHash('sha256').update(source).digest('hex'),preserved:Object.keys(before),policiesPreserved:true,functionOidsAndAclsPreserved:true,noNewCallablePrivateFunctions:true},null,2));
+ });
+ await test('retired-geography migration preserves every payload, policy, function identity and privilege',async()=>{
+  const migration=readdirSync('supabase/migrations').find(name=>name.endsWith('_preserve_fonciere_geographic_history.sql'));
+  assert.ok(migration,'A dedicated additive migration is required');
+  const source=readFileSync('supabase/migrations/'+migration,'utf8');
+  const preserved=await snapshot();
+  for(const table of ['fonciere_projects','izord_projects','fonciere_assets'])preserved[table]=(await sql.query(`select to_jsonb(t) value from public.${table} t order by to_jsonb(t)::text`)).rows;
+  const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+  const beforeHashes=Object.fromEntries(Object.entries(preserved).map(([table,rows])=>[table,digest(rows)]));
+  const policies=(await sql.query('select * from pg_policies order by schemaname,tablename,policyname')).rows;
+  const fn=(await sql.query("select oid,proowner,proacl,proconfig,prosecdef,prorettype from pg_proc where oid='app_private.guard_project_address_metadata()'::regprocedure")).rows[0];
+  const triggers=(await sql.query("select oid,tgrelid,tgfoid,tgenabled,pg_get_triggerdef(oid) definition from pg_trigger where tgfoid='app_private.guard_project_address_metadata()'::regprocedure order by oid")).rows;
+  await sql.query(source);
+  const afterHashes={};
+  for(const table of Object.keys(preserved))afterHashes[table]=digest((await sql.query(`select to_jsonb(t) value from public.${table} t order by to_jsonb(t)::text`)).rows);
+  assert.deepEqual(afterHashes,beforeHashes);
+  assert.deepEqual((await sql.query('select * from pg_policies order by schemaname,tablename,policyname')).rows,policies);
+  assert.deepEqual((await sql.query('select oid,proowner,proacl,proconfig,prosecdef,prorettype from pg_proc where oid=$1',[fn.oid])).rows[0],fn);
+  assert.deepEqual((await sql.query("select oid,tgrelid,tgfoid,tgenabled,pg_get_triggerdef(oid) definition from pg_trigger where tgfoid='app_private.guard_project_address_metadata()'::regprocedure order by oid")).rows,triggers);
+  assert.deepEqual((await sql.query("select has_function_privilege('anon',oid,'execute') anonymous,has_function_privilege('authenticated',oid,'execute') authenticated from pg_proc where oid=$1",[fn.oid])).rows[0],{anonymous:false,authenticated:false});
+  assert.equal((await sql.query("select position('guided,values,coordinates' in prosrc)=0 preserved from pg_proc where oid=$1",[fn.oid])).rows[0].preserved,true);
+  writeFileSync(out+'/geography-migration-preservation.json',JSON.stringify({passed:true,migration,migrationSha256:createHash('sha256').update(source).digest('hex'),beforeHashes,afterHashes,policiesPreserved:true,functionIdentityAndPrivilegesPreserved:true,triggersPreserved:true},null,2));
  });
  const grants=['dashboard','contacts','leads','tasks','quotes','bookings','vendorQuotes','vendorInvoices','houseTracking','documents','planning','properties','vehicles','boats','izord','publisher','monthlyCharges'];
  await sql.query("insert into public.app_memberships(user_id,workspace_id,role,status) values($1,'oar','member','active') on conflict(user_id,workspace_id) do update set status='active'",[fixture.users.admin.id]);
@@ -102,7 +124,30 @@ try{
   const row=structuredClone(loaded.project.payload);row.data.propertyAddress='Autre rue fictive';
   await ok(users.writer.rpc('fonciere_save_project',{p_id:loaded.project.id,p_expected_revision:loaded.project.revision,p_payload:row,p_contact:'',p_agency_contact:''}));
   const changed=(await ok(users.writer.from('fonciere_projects').select('payload').eq('id',loaded.project.id).single())).payload;
-  assert.equal(changed.data.propertyAddressDetails.source,'manual');assert.equal(changed.data.propertyAddressDetails.latitude,undefined);assert.equal(changed.data.guided.values.coordinates,null);assert.deepEqual(changed.data.agencyAddressDetails,agency);
+  assert.equal(changed.data.propertyAddressDetails.source,'manual');assert.equal(changed.data.propertyAddressDetails.latitude,undefined);assert.equal(changed.data.guided.values.coordinates,undefined);assert.deepEqual(changed.data.agencyAddressDetails,agency);
+ });
+ await test('historical geographic values survive authenticated address edits and reload without entering new presentation text',async()=>{
+  const {createRequire}=await import('node:module');const require=createRequire(import.meta.url);
+  const compiled=process.env.ADDRESS_COMPILED||'/private/tmp/address-persistence-compiled';
+  const {createFonciereRepository}=require(compiled+'/lib/fonciere/repository.js');
+  const {createFonciereData,toPresentationData}=require(compiled+'/lib/fonciere/model.js');
+  const {selectPropertyAddress,editPropertyAddress}=require(compiled+'/lib/fonciere/address.js');
+  const repo=createFonciereRepository(users.writer);
+  let data=selectPropertyAddress(createFonciereData(),selected);data.name='Ancienne propriété fictive '+randomUUID();data.notes='Note historique conservée';data.agencyAddress='Adresse agence historique';data.agencyPhone='+33 4 00 00 00 00';data.agencyEmail='agence@example.invalid';
+  data.guided.values.coordinates={latitude:41.9,longitude:12.5};data.guided.details.coordinates='Précision historique';data.guided.inactive=['coordinates'];
+  const originalGuided=structuredClone(data.guided),originalSnapshots=await tables();
+  let saved=await repo.saveProject({data}),loaded=await repo.loadProject(saved.project.id);
+  assert.deepEqual(loaded.data.guided,originalGuided);
+  const edited=editPropertyAddress(loaded.data,'city','Monaco');
+  const originalId=saved.project.id;
+  saved=await repo.saveProject({previous:loaded,data:edited});loaded=await repo.loadProject(saved.project.id);assert.equal(loaded.project.id,originalId);
+  assert.equal(loaded.data.propertyAddressDetails.source,'manual');assert.equal(loaded.data.propertyAddressDetails.latitude,undefined);assert.equal(loaded.data.propertyAddressDetails.longitude,undefined);assert.equal(loaded.data.propertyAddressDetails.sourceId,undefined);
+  assert.deepEqual(loaded.data.guided,originalGuided);assert.equal(loaded.data.notes,data.notes);assert.equal(loaded.data.agencyAddress,data.agencyAddress);assert.equal(loaded.data.agencyPhone,data.agencyPhone);assert.equal(loaded.data.agencyEmail,data.agencyEmail);
+  const legacyPayload=structuredClone(loaded.project.payload);legacyPayload.data.propertyAddress='Autre adresse manuelle historique';
+  await ok(users.writer.rpc('fonciere_save_project',{p_id:loaded.project.id,p_expected_revision:loaded.project.revision,p_payload:legacyPayload,p_contact:'',p_agency_contact:''}));
+  loaded=await repo.loadProject(saved.project.id);assert.deepEqual(loaded.data.guided,originalGuided);assert.equal(loaded.data.propertyAddressDetails?.latitude,undefined);assert.equal(loaded.data.notes,data.notes);
+  const presentation=toPresentationData(loaded.data);assert.doesNotMatch(presentation.state.environment,/Latitude|Longitude|41[.,]9|12[.,]5|Précision historique/);assert.equal(presentation.importMeta.fonciereSnapshot.readableFields.coordinates,'');assert.deepEqual(presentation.importMeta.fonciereSnapshot.guided,originalGuided);
+  assert.deepEqual(await tables(),originalSnapshots);
  });
  await test('native IZORD repository save/reload keeps address metadata and new revision snapshot; historical versions stay unchanged',async()=>{
   const {createRequire}=await import('node:module');const require=createRequire(import.meta.url);

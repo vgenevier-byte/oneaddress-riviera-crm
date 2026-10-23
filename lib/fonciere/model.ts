@@ -90,7 +90,7 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   set("features", [text("rooms") && `${text("rooms")} pièces`, text("bedrooms") && `${text("bedrooms")} chambres`, ...(["condition","equipment","annexes","exterior","pool","view","floor","lots","uses","occupancy","servicing","buildability","parkingSpaces","parkingType","access"] as GuidedKey[]).filter(key => text(key)).map(key => `${key === "pool" ? "Piscine : " : ""}${text(key)}`), data.description].filter(Boolean).join(" · "));
   set("program", [text("agencyPotential") && `Potentiel annoncé par l’agence (à vérifier) : ${text("agencyPotential")}`, ...(["renovation","division","extension"] as GuidedKey[]).filter(key=>text(key)).map(key=>`${key === "renovation" ? "Rénovation" : key === "division" ? "Division" : "Agrandissement"} — étude, sans autorisation présumée : ${text(key)}`), text("resale") && `Objectifs personnels : ${text("resale")}`, text("rental") && `Objectifs locatifs : ${text("rental")}`].filter(Boolean).join("\n"));
   set("propertyWarnings", (["pointsToVerify","diagnostics","charges","constraints"] as GuidedKey[]).filter(key=>text(key)).map(key=>text(key)).join("\n"));
-  set("environment", [data.location, text("coordinates"), text("locationPrecision"), text("pointsOfInterest")].filter(Boolean).join(" · "));
+  set("environment", [data.location, text("locationPrecision"), text("pointsOfInterest")].filter(Boolean).join(" · "));
   set("source", [data.agencyName, data.agencyReference, data.provenance.map(item => item.filename).join(", ")].filter(Boolean).join(" · "));
   set("works", compositeAmount("worksHypothesis")); set("resale", compositeAmount("resaleHypothesis"));
   set("monthly", ""); set("weekly", ""); set("rentedMonths", ""); set("weeks", "");

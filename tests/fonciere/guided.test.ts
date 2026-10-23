@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createFonciereData, validateFonciereData, toPresentationData, fromPresentationData, FONCIERE_FIELDS } from "../../lib/fonciere/model";
-import { changeGuidedPropertyType, currentGuidedValue, deriveGuidedProperty, readGuidedField, setGuidedField, reconfirmGuidedField, parseGuidedNumber, toggleGuidedMulti, validateGuidedProperty, guidedReadableFields } from "../../lib/fonciere/guided";
+import { changeGuidedPropertyType, currentGuidedValue, deriveGuidedProperty, readGuidedField, setGuidedField, reconfirmGuidedField, parseGuidedNumber, toggleGuidedMulti, validateGuidedProperty, guidedReadableFields, formatGuidedValue, isGuidedFieldApplicable } from "../../lib/fonciere/guided";
 import { applyAgencyImport, proposeAgencyImport } from "../../lib/fonciere/import";
 import { calculate } from "../../lib/izord/finance";
 
@@ -9,6 +9,24 @@ const property = () => { const d=createFonciereData(); d.name="Projet fictif"; r
 test("guided French numbers retain empty, explicit zero and reject narratives",()=>{
   assert.equal(parseGuidedNumber("1 250 000 €"),1250000); assert.equal(parseGuidedNumber("1\u202f250,75 €"),1250.75); assert.equal(parseGuidedNumber(""),null); assert.equal(parseGuidedNumber("0"),0); assert.throws(()=>parseGuidedNumber("environ 1M"));
   let d=property(); d.area="12"; d=setGuidedField(d,"area",null); assert.equal(readGuidedField(d,"area"),null); d=setGuidedField(d,"area",0); assert.equal(readGuidedField(d,"area"),0); assert.equal(d.area,"12");
+});
+test("historical geographic values remain valid but never become active or readable business fields",()=>{
+  const d=property(); d.guided.values.coordinates={latitude:43.7,longitude:7.26}; d.guided.details.coordinates="Position historique";
+  const original=structuredClone(d.guided);
+  assert.deepEqual(validateFonciereData(JSON.parse(JSON.stringify(d))).guided,original);
+  assert.deepEqual(readGuidedField(d,"coordinates"),original.values.coordinates);
+  assert.equal(currentGuidedValue(d,"coordinates"),undefined);
+  assert.equal(isGuidedFieldApplicable("coordinates","villa"),false);
+  for (const lang of ["fr","en"] as const) {
+    assert.equal(formatGuidedValue("coordinates",original.values.coordinates,lang),"");
+    assert.equal(guidedReadableFields(d,lang).coordinates,"");
+  }
+  const changed=changeGuidedPropertyType(d,"apartment");
+  assert.deepEqual(changed.guided.values.coordinates,original.values.coordinates);
+  assert.deepEqual(changed.guided.inactive,original.inactive);
+  d.guided.inactive=["coordinates"];
+  assert.deepEqual(validateFonciereData(d).guided.inactive,["coordinates"]);
+  assert.throws(()=>setGuidedField(d,"coordinates",{latitude:91}),/Nombre/);
 });
 test("only exact reliable source text is adapted; unknown, negated and hypothetical claims stay unchanged",()=>{
   const d=property(); Object.assign(d,{propertyType:"Villa",rooms:"35",bedrooms:"12",area:"130,5 m²",pool:"Piscine possible sous réserve d’autorisation",view:"Vue mer à confirmer",equipment:"Sans climatisation ; ascenseur envisagé",diagnostics:"DPE : C; GES : B",fees:"Honoraires inclus, charge vendeur 5%"});

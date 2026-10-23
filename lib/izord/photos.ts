@@ -1,5 +1,5 @@
 /** Full-image resize and centered crops retain the original generator's geometry/JPEG quality. */
-import { LIMITS, PHOTO_ROLES, validateJpegData, assertProjectImageBudget, type GalleryPhoto, type ImportMeta, type PhotoRole, type ProjectData } from "./model";
+import { LIMITS, PHOTO_ROLES, validateJpegData, assertProjectImageBudget, type GalleryPhoto, type ImportMeta, type JsonValue, type PhotoRole, type ProjectData } from "./model";
 import { imageFileKind, imageHeaderDimensions, validateImageDimensions } from "./photos-validation";
 export { imageFileKind, imageHeaderDimensions, validateImageDimensions } from "./photos-validation";
 import { blankPhotos } from "./presentation-assets";
@@ -71,4 +71,23 @@ export async function assignGalleryPhoto(project: ProjectData, role: PhotoRole, 
   const next = { ...project, photos: { ...project.photos, [role]: crop }, photoGalleryRoles: { ...project.photoGalleryRoles, [role]: index }, importMeta: meta };
   assertProjectImageBudget(next); return next;
 }
-export function importedNotes(meta: ImportMeta | null): string { if (!meta) return ""; return '\n\nIMPORT DE LA FICHE AGENCE\n' + JSON.stringify(meta, null, 2) + '\nPréremplissage local à partir du texte et des JPEG incorporés au PDF. Les montants d’acquisition cible, travaux, revente et location ne proviennent pas de cet import. La validation porte sur une relecture utilisateur, pas sur une certification de l’agence ou d’un professionnel.\n'; }
+function notesMetadata(meta: ImportMeta): string {
+  // Render a separate copy: source snapshots retain their complete historical data.
+  const rendered = structuredClone(meta);
+  const object = (value: unknown): value is Record<string, JsonValue> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+  const snapshot = rendered.fonciereSnapshot;
+  if (object(snapshot)) {
+    for (const key of ["fields", "readableFields"]) if (object(snapshot[key])) delete snapshot[key].coordinates;
+    const guided = snapshot.guided;
+    if (object(guided)) {
+      for (const key of ["values", "details"]) if (object(guided[key])) delete guided[key].coordinates;
+      if (Array.isArray(guided.inactive)) guided.inactive = guided.inactive.filter(key => key !== "coordinates");
+    }
+  }
+  return JSON.stringify(rendered, (key, value: unknown) => {
+    if (!["propertyAddressDetails", "agencyAddressDetails", "addressDetails"].includes(key) || !object(value)) return value;
+    const address = { ...value }; delete address.latitude; delete address.longitude;
+    return address;
+  }, 2);
+}
+export function importedNotes(meta: ImportMeta | null): string { if (!meta) return ""; return '\n\nIMPORT DE LA FICHE AGENCE\n' + notesMetadata(meta) + '\nPréremplissage local à partir du texte et des JPEG incorporés au PDF. Les montants d’acquisition cible, travaux, revente et location ne proviennent pas de cet import. La validation porte sur une relecture utilisateur, pas sur une certification de l’agence ou d’un professionnel.\n'; }

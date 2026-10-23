@@ -7,7 +7,7 @@ export type GuidedLocale = "fr" | "en";
 export type GuidedLabel = { fr: string; en: string };
 export type GuidedOption = { value: string; label: GuidedLabel };
 export type GuidedSubfield = { key: string; label: GuidedLabel; kind: "choice" | "number" | "text" | "multi"; options?: readonly GuidedOption[]; unit?: string; integer?: boolean; min?: number; max?: number };
-export type GuidedFieldDefinition = { label: GuidedLabel; kind: "choice" | "multi" | "number" | "composite" | "checklist" | "diagnostics"; options?: readonly GuidedOption[]; unit?: string; integer?: boolean; min?: number; max?: number; types?: readonly string[]; subfields?: readonly GuidedSubfield[] };
+export type GuidedFieldDefinition = { label: GuidedLabel; kind: "choice" | "multi" | "number" | "composite" | "checklist" | "diagnostics"; options?: readonly GuidedOption[]; unit?: string; integer?: boolean; min?: number; max?: number; types?: readonly string[]; subfields?: readonly GuidedSubfield[]; legacyOnly?: boolean };
 export type GuidedComposite = { [key: string]: string | number | string[] | null | undefined };
 export type GuidedRow = { code: string; status: string; detail?: string; documentId?: string; grade?: string };
 export type GuidedValue = string | number | null | string[] | GuidedComposite | GuidedRow[];
@@ -61,7 +61,8 @@ export const GUIDED_FIELD_DEFINITIONS = {
   resaleHypothesis: composite("Hypothèse personnelle de revente", "Personal resale assumption", [sub("amount", "Prix estimé", "Estimated price", "number", { unit: "€", min: 0 }), sub("timing", "Échéance", "Timing", "text"), sub("comment", "Hypothèse / commentaire", "Assumption / comment", "text")]),
   rentalHypothesis: composite("Hypothèse personnelle de location", "Personal rental assumption", [sub("mode", "Mode", "Mode", "choice", { options: [...options([["long_term", "Longue durée", "Long-term"], ["seasonal", "Saisonnier", "Seasonal"], ["mixed", "Mixte", "Mixed"]]), ...uncertain, ...other] }), sub("amount", "Loyer estimé", "Estimated rent", "number", { unit: "€", min: 0 }), sub("period", "Unité du loyer", "Rent period", "choice", { options: [...options([["night", "Nuit", "Night"], ["week", "Semaine", "Week"], ["month", "Mois", "Month"], ["year", "Année", "Year"]]), ...uncertain] }), sub("occupiedUnits", "Unités louées sur la période étudiée", "Occupied units over study period", "number", { min: 0 }), sub("occupancyPercent", "Taux d’occupation estimé", "Estimated occupancy", "number", { unit: "%", min: 0, max: 100 }), sub("comment", "Période étudiée / hypothèses", "Study period / assumptions", "text")]),
   locationPrecision: choice("Précision de la localisation", "Location precision", [["exact", "Adresse exacte", "Exact address"], ["approximate", "Localisation approximative", "Approximate location"]]),
-  coordinates: composite("Coordonnées géographiques", "Geographic coordinates", [sub("latitude", "Latitude", "Latitude", "number", { min: -90, max: 90 }), sub("longitude", "Longitude", "Longitude", "number", { min: -180, max: 180 })]),
+  // Retain the historical schema for validation and round trips only.
+  coordinates: composite("Coordonnées géographiques", "Geographic coordinates", [sub("latitude", "Latitude", "Latitude", "number", { min: -90, max: 90 }), sub("longitude", "Longitude", "Longitude", "number", { min: -180, max: 180 })], { legacyOnly: true }),
   floor: num("Étage", "Floor", "", { min: -1000000, integer: true, types: ["apartment", ...commercial] }),
   lots: num("Nombre de lots / logements", "Lots / dwellings", "", { integer: true, types: ["building", "mixed"] }),
   uses: multi("Usages", "Uses", [["residential", "Habitation", "Residential"], ["commercial", "Commerce", "Retail"], ["offices", "Bureaux", "Offices"], ["industrial", "Activité / stockage", "Industrial / storage"]], { types: commercial }),
@@ -172,10 +173,10 @@ export function setGuidedField(data: FonciereData, key: GuidedKey, value: Guided
   return { ...data, guided: validateGuidedProperty(guided) };
 }
 export function setGuidedFieldDetail(data: FonciereData, key: GuidedKey, value: string): FonciereData { const guided = structuredClone(data.guided); guided.details[key] = value; return { ...data, guided: validateGuidedProperty(guided) }; }
-export function isGuidedFieldApplicable(key: GuidedKey, type: unknown): boolean { const def: GuidedFieldDefinition = GUIDED_FIELD_DEFINITIONS[key]; return !def.types || typeof type !== "string" || ["other","to_confirm","not_applicable"].includes(type) || def.types.includes(type); }
+export function isGuidedFieldApplicable(key: GuidedKey, type: unknown): boolean { const def: GuidedFieldDefinition = GUIDED_FIELD_DEFINITIONS[key]; return !def.legacyOnly && (!def.types || typeof type !== "string" || ["other","to_confirm","not_applicable"].includes(type) || def.types.includes(type)); }
 export function changeGuidedPropertyType(data: FonciereData, type: string | null): FonciereData {
   const guided = deriveGuidedProperty(data); const previous = guided.values.propertyType;
-  if (previous !== type) for (const key of GUIDED_KEYS) if (!isGuidedFieldApplicable(key, type) && (guided.values[key] !== undefined || typeof data[key as keyof FonciereData] === "string" && !!data[key as keyof FonciereData])) guided.inactive.push(key);
+  if (previous !== type) for (const key of GUIDED_KEYS) if (!(GUIDED_FIELD_DEFINITIONS[key] as GuidedFieldDefinition).legacyOnly && !isGuidedFieldApplicable(key, type) && (guided.values[key] !== undefined || typeof data[key as keyof FonciereData] === "string" && !!data[key as keyof FonciereData])) guided.inactive.push(key);
   guided.values.propertyType = type; guided.inactive = [...new Set(guided.inactive)];
   return { ...data, guided: validateGuidedProperty(guided) };
 }
@@ -193,6 +194,7 @@ export function currentGuidedValue(data: FonciereData, key: GuidedKey): GuidedVa
 export function formatGuidedValue(key: GuidedKey, value: GuidedValue | undefined, locale: GuidedLocale = "fr"): string {
   if (value === undefined || value === null) return "";
   const def: GuidedFieldDefinition = GUIDED_FIELD_DEFINITIONS[key];
+  if (def.legacyOnly) return "";
   const one = (value: string, opts = def.options) => opts?.find(o => o.value === value)?.label[locale] || value;
   const number = (v: number, unit = def.unit) => `${new Intl.NumberFormat(locale === "fr" ? "fr-FR" : "en-GB", { maximumFractionDigits: 10 }).format(v)}${unit ? ` ${unit}` : ""}`;
   if (typeof value === "number") return number(value);

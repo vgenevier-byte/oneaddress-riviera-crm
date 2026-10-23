@@ -68,3 +68,26 @@ test("direct-import locality stays separate from the property street and agency 
   data.state.address = "06000 Nice — adresse exacte à confirmer"; data.importMeta.agencyFields = { address: data.state.address, city: "Nice", postalCode: "06000" };
   assert.equal(fromPresentationData(data).propertyAddress, ""); assert.equal(fromPresentationData(data).city, "Nice");
 });
+
+test("new presentations omit historical coordinates from readable text while preserving saved presentations and snapshots", () => {
+  const data = createFonciereData(); Object.assign(data, { name: "Projet historique", location: "Quartier du port", agencyPhone: "+33 4 00 00 00 00", agencyEmail: "agence@example.test", agencyAddress: "8 rue de l’agence" });
+  data.guided.values.coordinates = { latitude: 43.7, longitude: 7.26 };
+  data.guided.details.coordinates = "Précision historique";
+  const historical = toPresentationData(data);
+  historical.state.environment = "Ancien texte · Latitude : 43,7 · Longitude : 7,26";
+  const oldSnapshot = historical.importMeta?.fonciereSnapshot as { readableFields: Record<string, string>; mappedState: Record<string, string> };
+  oldSnapshot.readableFields.coordinates = "Latitude : 43,7 · Longitude : 7,26 — Précision historique";
+  oldSnapshot.mappedState.environment = historical.state.environment;
+  const historicalBytes = JSON.stringify(historical);
+  const reopened = fromPresentationData(historical);
+  assert.deepEqual(reopened.guided.values.coordinates, data.guided.values.coordinates);
+  assert.equal(reopened.presentationData.state.environment, historical.state.environment);
+  const next = toPresentationData(reopened);
+  assert.equal(next.state.environment, "Quartier du port");
+  const snapshot = next.importMeta?.fonciereSnapshot as { guided: typeof data.guided; readableFields: Record<string, string>; fields: Record<string, string> };
+  assert.equal(snapshot.readableFields.coordinates, "");
+  assert.deepEqual(snapshot.guided.values.coordinates, data.guided.values.coordinates);
+  assert.equal(snapshot.fields.agencyPhone, data.agencyPhone); assert.equal(snapshot.fields.agencyEmail, data.agencyEmail); assert.equal(snapshot.fields.agencyAddress, data.agencyAddress);
+  assert.equal(JSON.stringify(historical), historicalBytes);
+  assert.equal(reopened.presentationData.state.environment, historical.state.environment);
+});
