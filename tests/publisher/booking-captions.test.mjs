@@ -16,6 +16,12 @@ const plan = {
   image_prompt: 'A quiet Mediterranean coastline in soft morning sunlight, viewed across clear open water with natural editorial realism, no people, logos or text.',
   format: 'Feed 4:5',
 };
+const articleCars = [
+  { manufacturer: 'Aston Martin', model: 'DBX707', article: 'an', carType: 'suv', carBrand: 'aston-martin', carModel: 'aston-martin-dbx707-suv-2024' },
+  { manufacturer: 'Audi', model: 'Q8', article: 'an', carType: 'suv', carBrand: 'audi', carModel: 'audi-q8-suv-coupe-2023' },
+  { manufacturer: 'Alpine', model: 'A110', article: 'an', carType: 'sports_car', carBrand: 'alpine', carModel: 'alpine-a110-second-gen-coupe' },
+  { manufacturer: 'Lamborghini', model: 'Urus SE', article: 'a', carType: 'suv', carBrand: 'lamborghini', carModel: 'lamborghini-urus-se-suv-2024' },
+];
 
 function assertCaption(post, subject) {
   const sentences = post.caption.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
@@ -228,4 +234,44 @@ await test('booking invitations reach saved captions in daily, guided and regene
       assert.ok(journal.size > journalBefore, 'The existing locked reference is journaled');
     }
   });
+
+  for (const car of articleCars) {
+    const identity = `${car.manufacturer} ${car.model}`;
+    const correctInvitation = `Reserve your next ride in ${car.article} ${identity} on the French Riviera with One Address Riviera.`;
+    const fallbackInvitation = `Book your next ride in ${car.article} ${identity} on the French Riviera with One Address Riviera.`;
+    for (const scenario of [
+      { label: 'correct article is preserved', caption: `${hook} ${correctInvitation}`, expected: `${hook} ${correctInvitation}` },
+      { label: 'missing invitation gets the correct article', caption: `${hook} The evening opens a new perspective.`, expected: `${hook} ${fallbackInvitation}` },
+      { label: 'incorrect article is replaced', caption: `${hook} Reserve your next ride in ${car.article === 'an' ? 'a' : 'an'} ${identity} on the French Riviera with One Address Riviera.`, expected: `${hook} ${fallbackInvitation}` },
+    ]) await t.test(`saved ${identity}: ${scenario.label}`, async t => {
+      await t.test('creation', async () => {
+        stored = null;
+        proposedCaption = scenario.caption;
+        const post = await send('generate', {
+          mode: 'guided', direction: { universe: 'cars', moment: 'day', style: 'elegant', carType: car.carType, carBrand: car.carBrand, carModel: car.carModel },
+        });
+        assertCaption(post, new RegExp(`ride in ${car.article} ${identity}`));
+        assert.equal(post.caption, scenario.expected, 'The final saved caption keeps a valid invitation or repairs it without changing the car identity');
+        assert.equal(post.car_context.manufacturer, car.manufacturer);
+        assert.equal(post.car_context.model, car.model);
+        assert.equal(post.car_context.referenceId, car.carModel);
+        assert.deepEqual(post.car_context, stored.car_context);
+        assert.deepEqual(calls.map(call => call.name), ['publisher_creative_plan', 'image', 'publisher_editorial_package'], 'Creation uses only the existing simulated plan, image and editorial calls');
+      });
+      await t.test('regeneration', async () => {
+        const before = structuredClone(stored);
+        proposedCaption = scenario.caption;
+        const post = await send('regenerate-text', { id: stored.id, revision: stored.revision });
+        assertCaption(post, new RegExp(`ride in ${car.article} ${identity}`));
+        assert.equal(post.caption, scenario.expected, 'The regenerated caption is saved with the correct article and exact locked identity');
+        assert.deepEqual(calls.map(call => call.name), ['publisher_text'], 'Regeneration makes one simulated text call and no repair or image call');
+        assert.deepEqual(stored.car_context, before.car_context, 'Regeneration never selects or changes the locked car');
+        assert.deepEqual(post.car_context, before.car_context);
+        assert.equal(stored.image_url, before.image_url);
+        assert.equal(stored.image_prompt, before.image_prompt);
+        assert.deepEqual([stored.primary_music_id, ...stored.alternative_music_ids], [before.primary_music_id, ...before.alternative_music_ids]);
+        assert.doesNotMatch(writes[0].text, /(?:image_url|car_context|primary_music_id|alternative_music_ids)\s*=/, 'Regeneration saves text fields without reassigning the reference');
+      });
+    });
+  }
 });
