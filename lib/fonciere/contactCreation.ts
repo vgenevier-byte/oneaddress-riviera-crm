@@ -19,6 +19,7 @@ export function projectContactCreateIntent(data: FonciereData, role: ContactRole
     } : {
       name: knownIdentity?.name || "", firstName: knownIdentity?.firstName || "",
       companyName: data.agencyName, email: data.agentEmail, phone: data.agentPhone,
+      ...(data.agencyContactId ? { companyId: data.agencyContactId } : {}),
       // A person's address cannot be inferred from the property or agency address.
     },
   };

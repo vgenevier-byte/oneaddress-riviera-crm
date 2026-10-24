@@ -100,6 +100,8 @@ import { AddressField } from "./address/AddressField";
 import { AddressMapLink } from "./address/AddressMapLink";
 import { normalizeAddressValue, readAddressForm } from "@/lib/address";
 import ContactDocuments, { ContactDocumentLibrary } from "./ContactDocuments";
+import { ContactCompanyPicker, FirstCompanyContactFields, CompanyPeople, readFirstCompanyContact, type ContactBundleSave } from "./ContactCompanyFields";
+import { getContactCompany, getCompanyPeople, matchesContactWithCompany, getCompanyContactStatus } from "@/lib/contactCompany";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
 import { getContactLabel, getContactPersonName, getContactSecondaryLabel, getContactIdentityValidationError, validateContactIdentity, type ContactIdentityValidation } from "@/lib/contactIdentity";
 import type { ContactCreateIntent, ContactCreateReturn } from "@/lib/contacts/createIntent";
@@ -5523,6 +5525,7 @@ function DashboardQuickTile({
 
     const newContact = {
       id: contactId,
+      entityType: "person",
       name: draft.contactName,
       kind: "Client",
       email: draft.email,
@@ -5645,6 +5648,7 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
 
   const [quickEntryText, setQuickEntryText] = useState("");
   const [quickEntryOpen, setQuickEntryOpen] = useState(false);
+  const pendingQuickEntry = useRef<{ text: string; contact: Contact; lead: Lead } | null>(null);
 
   // AUTO_SCROLL_LEAD_DETAILS
   useEffect(() => {
@@ -6567,19 +6571,17 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
 
 
-  function saveQuickEntryText(rawText: string) {
-    const records = createQuickEntryRecords(rawText, data.contacts, data.leads, t);
+  async function saveQuickEntryText(rawText: string) {
+    const draft = pendingQuickEntry.current?.text === rawText ? pendingQuickEntry.current : null;
+    const records = draft ? { newContact: draft.contact, newLead: draft.lead } : createQuickEntryRecords(rawText, currentBusinessData.current.contacts, currentBusinessData.current.leads, t);
     if (!records) return;
-    const {newContact, newLead} = records;
-    setData((current: any) => ({
-      ...current,
-      contacts: [newContact, ...(current.contacts ?? [])],
-      leads: [newLead, ...(current.leads ?? [])]
-    }));
-
-    setQuickEntryText("");
-    setQuickEntryOpen(false);
-
+    const { newContact, newLead } = records;
+    pendingQuickEntry.current = { text: rawText, contact: newContact, lead: newLead };
+    setQuickEntryText(rawText);
+    const result = await persistContactRecord(newContact.id, newContact, false, undefined, newLead);
+    if (!result.ok) { notify(screenNotice(confirmedFormNotice(result.message).key), "warning"); return; }
+    pendingQuickEntry.current = null;
+    setQuickEntryText(""); setQuickEntryOpen(false);
     notify(screenNotice("crm.shell.ba41058750"));
   }
 
@@ -8020,8 +8022,9 @@ async function addContact(event: React.FormEvent<HTMLFormElement>): Promise<Form
       firstName: String(form.get("firstName") ?? "").trim(),
       civility: String(form.get("civility") ?? "") as Contact["civility"],
       companyName: String(form.get("companyName") ?? "").trim(),
+      companyId: String(form.get("companyId") ?? ""),
       kind: contactKind,
-      organizationFunction: contactKind === "Membre de l’organisation" ? String(form.get("organizationFunction") ?? "").trim() : "",
+      organizationFunction: String(form.get("organizationFunction") ?? "").trim(),
       email: String(form.get("email") ?? "").trim(),
       phone: String(form.get("phone") ?? "").trim(),
       city: String(form.get("city") ?? "").trim(),
@@ -8052,7 +8055,8 @@ async function addContact(event: React.FormEvent<HTMLFormElement>): Promise<Form
     if (!currentBusinessData.current.contacts.some(existing => existing.id === contact.id) && !confirmDuplicateContact(contact)) {
       return { ok: false, cancelled: true, message: "Enregistrement non confirmé. Votre saisie est conservée ; vérifiez les données avant de réessayer." };
     }
-    const result = await persistContactRecord(contact.id, contact);
+    const bundle = readFirstCompanyContact(formElement, contact);
+    const result = await persistContactRecord(contact.id, contact, false, bundle);
     if (result.ok) notify(screenNotice("crm.shell.670cd3e9c6"));
     return result;
   }
@@ -8526,7 +8530,7 @@ function createQuoteDraftFromLead(lead: Lead) {
   }
 
   /** Contacts use the same authorised RPC for owners and limited contributors. */
-  async function persistContactRecord(id: string, value: Partial<Contact>, remove = false): Promise<FormSaveResult> {
+  async function persistContactRecord(id: string, value: Partial<Contact>, remove = false, bundle?: { person?: Pick<Contact, "id"> & Partial<Contact>; existingPersonId?: string }, messageLead?: Lead): Promise<FormSaveResult> {
     const before = currentBusinessData.current;
     const fingerprint = workspaceFingerprint(before);
     if (!sharedWorkspaceReady || workspaceBusy.current || workspaceSync.current.dirty(before)) {
@@ -8552,15 +8556,23 @@ function createQuoteDraftFromLead(lead: Lead) {
       if (expected.error) throw expected.error;
       if (String(expected.data?.updated_at || "") !== expectedRevision) throw { code: "40001", message: "revision_conflict" };
       const patch = Object.fromEntries(Object.entries(value).filter(([field, entry]) => contactMutationFields.has(field) && entry !== undefined));
+      const leadProjection = messageLead ? await op.run(() => op.client.rpc("crm_read_module", { p_module: "leads" })) : null;
+      if (leadProjection?.error) throw leadProjection.error;
       sent = true;
-      const mutation = await op.run(() => op.client.rpc("crm_mutate_record", {
+      const mutation = await op.run(() => messageLead ? op.client.rpc("crm_create_from_message", {
+        p_contact: { ...patch, id }, p_lead: { ...Object.fromEntries(Object.entries(messageLead).filter(([field, entry]) => field in (collectionCatalog.find(schema => schema.collection === "leads")?.fields ?? {}) && entry !== undefined)), id: messageLead.id },
+        p_contacts_revision: projection.data.revision, p_leads_revision: leadProjection?.data?.revision
+      }) : bundle ? op.client.rpc("crm_save_contact_bundle", {
+        p_contact: { ...patch, id }, p_person: bundle.person ? { ...Object.fromEntries(Object.entries(bundle.person).filter(([field, entry]) => contactMutationFields.has(field) && entry !== undefined)), id: bundle.person.id } : null, p_existing_person_id: bundle.existingPersonId ?? null,
+        p_revision: projection.data.revision
+      }) : op.client.rpc("crm_mutate_record", {
         p_module: "contacts", p_collection: "contacts", p_id: id, p_patch: patch,
         p_revision: projection.data.revision, p_delete: remove
       }));
       if (mutation.error) throw mutation.error;
       const returnedContacts = mutation.data?.collections?.contacts;
-      if (!mutation.data?.revision || !Array.isArray(returnedContacts) ||
-        (remove ? returnedContacts.some((contact: Contact) => contact.id === id) : !returnedContacts.some((contact: Contact) => contact.id === id))) {
+      if (!messageLead && (!mutation.data?.revision || !Array.isArray(returnedContacts) ||
+        (remove ? returnedContacts.some((contact: Contact) => contact.id === id) : !returnedContacts.some((contact: Contact) => contact.id === id)))) {
         throw new Error("contact_confirmation_missing");
       }
       // The RPC revision is a module MD5. Only an owner workspace reread can
@@ -8569,7 +8581,8 @@ function createQuoteDraftFromLead(lead: Lead) {
         .select("payload, updated_at").eq("workspace_id", SHARED_WORKSPACE_ID).single());
       if (shared.error) throw shared.error;
       if (!shared.data?.updated_at || !Array.isArray(shared.data.payload?.contacts) ||
-        (remove ? shared.data.payload.contacts.some((contact: Contact) => contact.id === id) : !shared.data.payload.contacts.some((contact: Contact) => contact.id === id))) {
+        (remove ? shared.data.payload.contacts.some((contact: Contact) => contact.id === id) : !shared.data.payload.contacts.some((contact: Contact) => contact.id === id)) ||
+        (messageLead && !shared.data.payload.leads?.some((lead: Lead) => lead.id === messageLead.id))) {
         throw new Error("contact_confirmation_missing");
       }
       const acknowledged = normalizeSharedCRMData(shared.data.payload);
@@ -8603,7 +8616,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         showWorkspaceConflict();
         return { ok: false, message: "Conflit : les données ont changé. Votre saisie est conservée ; rechargez avant de reprendre." };
       }
-      if (["22023", "42501", "23503"].includes(sqlState)) {
+      if (["22023", "42501", "23503", "23514"].includes(sqlState)) {
         return { ok: false, message: "Enregistrement refusé. Vérifiez les champs et vos droits ; votre saisie est conservée." };
       }
       if (sent) {
@@ -8664,6 +8677,10 @@ function createQuoteDraftFromLead(lead: Lead) {
         if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
       }
     }
+  }
+
+  async function saveContactBundle(contact: Pick<Contact, "id"> & Partial<Contact>, person?: Pick<Contact, "id"> & Partial<Contact>, existingPersonId?: string): Promise<FormSaveResult> {
+    return persistContactRecord(contact.id, contact, false, { person, existingPersonId });
   }
 
   async function updateContact(updatedContact: Pick<Contact, "id"> & Partial<Contact>): Promise<FormSaveResult> {
@@ -9030,7 +9047,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "contacts" && (
-          <ContactsView createIntent={contactCreateIntent} onCreateReturn={onContactCreateReturn} onDraftStateChange={setFormDirty} access={access} focusContactId={focusContactId} focusRevision={externalRevision} actor={activeActor} contacts={data.contacts} query={query} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onDelete={deleteContact} onCreateLead={(contactName) => {
+          <ContactsView createIntent={contactCreateIntent} onCreateReturn={onContactCreateReturn} onDraftStateChange={setFormDirty} access={access} focusContactId={focusContactId} focusRevision={externalRevision} actor={activeActor} contacts={data.contacts} query={query} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onBundle={saveContactBundle} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
 
@@ -11795,7 +11812,9 @@ function StatCard({ label, value, caption }: { label: string; value: string; cap
 }
 
 /** Every identity input stays mounted when the draft nature or UI language changes. */
-function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue, onIssue, prefix }: {
+function ContactIdentityFields({ contact, contacts, onOpenCompany, entityType, onEntityTypeChange, issue, onIssue, prefix }: {
+  contacts: Contact[];
+  onOpenCompany?: (contact: Contact) => void;
   contact?: Partial<Contact>;
   entityType: string;
   onEntityTypeChange: (value: string) => void;
@@ -11821,12 +11840,13 @@ function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue,
         {sortSelectOptions(["person", "company"], value => t(`crm.contacts.entityType.${value}`), language).map(value => <option key={value} value={value}>{t(`crm.contacts.entityType.${value}`)}</option>)}
       </select>{error("entityType")}
     </BusinessLabel>
-    <BusinessLabel className="full">{t(company ? "crm.contacts.identity.companyNameRequired" : "crm.contacts.identity.companyAffiliationOptional")}
+    <BusinessLabel className="full" style={company ? undefined : { display: "none" }}>{t("crm.contacts.identity.companyNameRequired")}
       <input name="companyName" defaultValue={contact?.companyName ?? ""} required={company}
         aria-invalid={issue?.field === "companyName" || undefined} aria-describedby={issue?.field === "companyName" ? errorId("companyName") : undefined}
         onInvalid={invalid("companyName", "contact_company_name_required")} />{error("companyName")}
     </BusinessLabel>
-    <p className="contact-person-heading full" hidden={!company}>{t("crm.contacts.identity.contactPersonOptional")}</p>
+    <div className="full" style={company ? { display: "none" } : { display: "contents" }}><ContactCompanyPicker contact={contact} contacts={contacts} onOpen={onOpenCompany} active={entityType === "person"} /></div>
+    <div className="full contact-identity-fields" style={company ? { display: "none" } : { display: "contents" }}>
     <BusinessLabel>{t("crm.contacts.901ce24cca")}<select name="civility" defaultValue={contact?.civility ?? ""}>
       <option value="">—</option>{sortSelectOptions([{ value: "M", text: t("crm.contacts.08f271887c") }, { value: "MME", text: t("crm.contacts.97c3250ed4") }], option => option.text, language).map(option => <option key={option.value} value={option.value}>{option.text}</option>)}
     </select></BusinessLabel>
@@ -11836,6 +11856,7 @@ function ContactIdentityFields({ contact, entityType, onEntityTypeChange, issue,
         aria-invalid={issue?.field === "name" || undefined} aria-describedby={issue?.field === "name" ? errorId("name") : undefined}
         onInvalid={invalid("name", "contact_name_required")} />{error("name")}
     </BusinessLabel>
+    </div>
   </div>;
 }
 
@@ -11850,6 +11871,7 @@ type ContactsViewProps = {
   tasks: Task[];
   onAdd: (event: React.FormEvent<HTMLFormElement>) => FormSave;
   onUpdate: (contact: Pick<Contact, "id"> & Partial<Contact>) => FormSave;
+  onBundle: ContactBundleSave;
   onDelete: (id: string) => void | Promise<void>;
   onCreateLead: (contactName: string) => void;
   onCreateTask: (contactName: string, contactId?: string) => void;
@@ -11888,6 +11910,7 @@ function ContactsViewBody({
   tasks,
   onAdd,
   onUpdate,
+  onBundle,
   onDelete,
   onCreateLead,
   onCreateTask,
@@ -11902,12 +11925,14 @@ function ContactsViewBody({
   function retainContactDraft() { business?.markDirty?.(); onDraftStateChange?.(true); }
   const creation = useConfirmedForm(retainContactDraft);
   const [creationRecordId,setCreationRecordId] = useState<string|null>(null);
+  const [creationReset, setCreationReset] = useState(0);
   const edition = useConfirmedForm(retainContactDraft);
   const changedContactFields = useRef(new Set<string>());
   const [contactFilter, setContactFilter] = useState("Tous");
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("Toutes");
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(() => contacts.find(contact => contact.id === focusContactId) ?? null);
+  const [selectedContactSnapshot, setSelectedContact] = useState<Contact | null>(() => contacts.find(contact => contact.id === focusContactId) ?? null);
+  const selectedContact = selectedContactSnapshot ? contacts.find(contact => contact.id === selectedContactSnapshot.id) ?? selectedContactSnapshot : null;
   const openedContactFocus = useRef<{ id: string; revision?: number } | undefined>(undefined);
   useEffect(() => {
     const opened = openedContactFocus.current;
@@ -12020,10 +12045,19 @@ function ContactsViewBody({
     return matchesType && (contactFilter === "Prestataires" ? matchesSupplierCategory : true);
   }), [contacts, contactFilter, supplierCategoryFilter]);
   const contactSearchIndex = useMemo(() => createContactSearchIndex(filteredByCategory), [filteredByCategory]);
-  const { direct: visibleContacts, close: closeContacts } = useMemo(() => searchContactSuggestions(contactSearchIndex, query), [contactSearchIndex, query]);
+  const { direct: visibleContacts, close: closeContacts } = useMemo(() => {
+    const results = searchContactSuggestions(contactSearchIndex, query);
+    const directIds = new Set(results.direct.map(contact => contact.id));
+    const direct = filteredByCategory.filter(contact => directIds.has(contact.id) || matchesContactWithCompany(contact, query, contacts));
+    const ids = new Set(direct.map(contact => contact.id));
+    return { direct: sortSelectOptions(direct, getContactLabel, language), close: results.close.filter(contact => !ids.has(contact.id)) };
+  }, [contactSearchIndex, query, filteredByCategory, contacts, language]);
   const searching = Boolean(normalizeContactSearch(query));
   const allContactSearchIndex = useMemo(() => createContactSearchIndex(contacts), [contacts]);
-  const searchedContacts = useMemo(() => searchDirectContacts(allContactSearchIndex, query), [allContactSearchIndex, query]);
+  const searchedContacts = useMemo(() => {
+    const ids = new Set(searchDirectContacts(allContactSearchIndex, query).map(contact => contact.id));
+    return contacts.filter(contact => ids.has(contact.id) || matchesContactWithCompany(contact, query, contacts));
+  }, [allContactSearchIndex, query, contacts]);
 
   const clientCount = searchedContacts.filter((contact) => contact.kind === "Client" && !isSupplierContact(contact)).length;
   const supplierCount = searchedContacts.filter(isSupplierContact).length;
@@ -12049,6 +12083,7 @@ function ContactsViewBody({
       firstName: form.has("firstName") ? String(form.get("firstName") ?? "").trim() : editingContact.firstName,
       civility: form.has("civility") ? String(form.get("civility") ?? "") as Contact["civility"] : editingContact.civility,
       companyName: form.has("companyName") ? String(form.get("companyName") ?? "").trim() : editingContact.companyName,
+      companyId: form.get("entityType") === "company" ? "" : form.has("companyId") ? String(form.get("companyId") ?? "") : editingContact.companyId,
       kind: nextKind,
       organizationFunction: form.has("organizationFunction") ? String(form.get("organizationFunction") ?? "").trim() : editingContact.organizationFunction,
       email: String(form.get("email") ?? "").trim(),
@@ -12081,8 +12116,11 @@ function ContactsViewBody({
     setEditingIdentityError(identityError);
     if (identityError) { event.currentTarget.querySelector<HTMLElement>(`[name="${identityError.field}"]`)?.focus(); return; }
     const update = getContactFormUpdate(updatedContact, changedContactFields.current);
+    const bundle = readFirstCompanyContact(event.currentTarget, updatedContact);
     void edition.submit(event.currentTarget, async () => {
-      const result = await onUpdate({ id: editingContact.id, ...update });
+      const result = bundle.person || bundle.existingPersonId
+        ? await onBundle({ id: editingContact.id, ...update, entityType: updatedContact.entityType }, bundle.person, bundle.existingPersonId)
+        : await onUpdate({ id: editingContact.id, ...update });
       if (result && !result.ok) setEditingIdentityError(getContactIdentityValidationError(result.message));
       return result;
     }, newerDraft => {
@@ -12168,9 +12206,11 @@ function ContactsViewBody({
                       {typeLabel(contact)}{isSupplierContact(contact) ? t("crm.contacts.f6b53f9c8a", { value1: displayValue(screen.category(getContactSupplierCategory(contact))) }) : ""}
                     </p>
                     <h3>{getContactActionLabel(contact)}</h3>
-                    {getContactSecondaryLabel(contact) && (
-                      <p className="muted-line">{t(contact.entityType === "company" ? "crm.contacts.identity.contactPerson" : "crm.contacts.79671d846d")}{" "}{getContactSecondaryLabel(contact)}</p>
-                    )}
+                    {contact.entityType === "company" && <p className="muted-line">{getCompanyContactStatus(contact, contacts) === "needs_contact" ? t("crm.contacts.company.needsContact") : t("crm.contacts.company.linkedPeopleCount", { count: getCompanyPeople(getContactCompany(contact, contacts)?.id || contact.id, contacts).length })}</p>}
+                    {contact.entityType !== "company" && getContactCompany(contact, contacts) && <p className="muted-line">{getContactLabel(getContactCompany(contact, contacts)!)}</p>}
+                    {getContactSecondaryLabel(contact) && (contact.entityType !== "company" && getContactCompany(contact, contacts)
+                      ? contact.companyName !== getContactCompany(contact, contacts)?.companyName && <p className="muted-line">{t("crm.contacts.company.historicalAffiliation", { name: contact.companyName ?? "" })}</p>
+                      : <p className="muted-line">{t(contact.entityType === "company" ? "crm.contacts.identity.contactPerson" : "crm.contacts.79671d846d")}{" "}{getContactSecondaryLabel(contact)}</p>)}
                     <p className="muted-line">
                       {contact.city || getContactSupplierZone(contact) || t("crm.contacts.75f0592b2b")}
                     </p>
@@ -12199,6 +12239,8 @@ function ContactsViewBody({
                     <BusinessButton permission="remove"
                       className="danger-button"
                       type="button"
+                      disabled={Boolean(contact.companyId && getCompanyPeople(contact.companyId, contacts).length <= 1)}
+                      title={contact.companyId && getCompanyPeople(contact.companyId, contacts).length <= 1 ? t("crm.contacts.company.lastPerson") : undefined}
                       onClick={() => {
                         const confirmed = window.confirm(dialogT("crm.contacts.a451e23492", { value1: displayValue(getContactActionLabel(contact)) }));
                         if (confirmed) void onDelete(contact.id);
@@ -12244,7 +12286,7 @@ function ContactsViewBody({
           </div>}
 
           <BusinessForm ref={creationForm} className="form-grid contact-create-form" data-saved-record-id={creationRecordId || undefined} pending={creation.saving || Boolean(pendingCreatedId)} onChangeCapture={creation.changed}
-            onReset={event => { delete event.currentTarget.dataset.contactDraftId; delete event.currentTarget.dataset.savedRecordId; setCreationRecordId(null); setNewContactEntityType("person"); setCreationIdentityError(null); }}
+            onReset={event => { delete event.currentTarget.dataset.contactDraftId; delete event.currentTarget.dataset.savedRecordId; delete event.currentTarget.dataset.companyPersonDraftId; setCreationReset(value => value + 1); setCreationRecordId(null); setNewContactEntityType("person"); setCreationIdentityError(null); }}
             onSubmit={event => {
               event.preventDefault(); onDraftStateChange?.(true);
               if (journeyPending.current || returning.current || pendingCreatedId) return;
@@ -12290,7 +12332,9 @@ function ContactsViewBody({
                 onCreateReturn?.(createIntent.id, current);
               }}>{journeyText("Sélectionner la fiche existante : ", "Select existing record: ")}{getContactLabel(contact)}{contact.email ? ` · ${contact.email}` : ""}</BusinessButton>)}
             </section>}
-            <ContactIdentityFields contact={createIntent?.prefill} entityType={newContactEntityType} onEntityTypeChange={setNewContactEntityType} issue={creationIdentityError} onIssue={setCreationIdentityError} prefix={createIntent ? `contact-create-${createIntent.id}` : "contact-create"} />
+            <ContactIdentityFields key={`identity-${creationReset}`} contacts={contacts} contact={createIntent?.prefill} entityType={newContactEntityType} onEntityTypeChange={setNewContactEntityType} issue={creationIdentityError} onIssue={setCreationIdentityError} prefix={createIntent ? `contact-create-${createIntent.id}` : "contact-create"} />
+            <FirstCompanyContactFields key={`first-person-${creationReset}`} contacts={contacts} companyId={creationRecordId ?? undefined} active={newContactEntityType === "company"} />
+            {newContactEntityType === "company" && <h4 className="full">{t("crm.contacts.company.generalDetails")}</h4>}
             <BusinessLabel>{t("crm.contacts.baaddf70fb")}<select name="kind" value={newContactKind} onChange={(event) => setNewContactKind(event.target.value as ContactKind)}>
                 {sortSelectOptions(contactKinds, kind => label(kind, "crm"), language).map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
               </select>
@@ -12301,9 +12345,7 @@ function ContactsViewBody({
             <BusinessLabel>{t("crm.contacts.4d7e0f0579")}<input name="city" defaultValue={createIntent?.prefill.city} placeholder={t("crm.contacts.897ebccda8")} /></BusinessLabel>
             <BusinessLabel>{t("crm.contacts.0e570ca6fa")}<input name="source" placeholder={t("crm.contacts.0ce7823851")} /></BusinessLabel>
 
-            {newContactKind === "Membre de l’organisation" && (
-              <BusinessLabel>{t("crm.contacts.222f9de9e7")}<input name="organizationFunction" placeholder={t("crm.contacts.60c9c50476")} /></BusinessLabel>
-            )}
+            <BusinessLabel style={newContactEntityType === "company" && newContactKind !== "Membre de l’organisation" ? { display: "none" } : undefined}>{t(newContactKind === "Membre de l’organisation" ? "crm.contacts.222f9de9e7" : "crm.contacts.company.function")}<input name="organizationFunction" placeholder={newContactKind === "Membre de l’organisation" ? t("crm.contacts.60c9c50476") : undefined} /></BusinessLabel>
 
             {newContactKind !== "Prestataire" && newContactKind !== "Membre de l’organisation" && (
               <>
@@ -12382,13 +12424,15 @@ function ContactsViewBody({
             <p className="eyebrow" data-semantic-text={"Fiche contact"}>{t("crm.contacts.9330008a8f")}</p>
             <h3>{getContactActionLabel(selectedContact)}</h3>
 
+            {selectedContact.entityType === "company" && getContactPersonName(selectedContact) && <p role="status">{t("crm.contacts.company.historicalCoordinates")}</p>}
             {selectedContact.entityType === "company" && getContactPersonName(selectedContact) && <p className="muted-line">{t("crm.contacts.identity.contactPerson")}{" "}{getContactPersonName(selectedContact)}</p>}
             <div className="contact-detail-grid">
               <div><span>{t("crm.contacts.entityType.label")}</span><strong>{t(selectedContact.entityType === "person" ? "crm.contacts.entityType.person" : selectedContact.entityType === "company" ? "crm.contacts.entityType.company" : "crm.contacts.entityType.unqualified")}</strong></div>
               <div><span>{t("crm.contacts.baaddf70fb")}</span><strong>{typeLabel(selectedContact)}</strong></div>
               <div><span>{t("crm.contacts.901ce24cca")}</span><strong>{selectedContact.civility || t("crm.contacts.831460cb02")}</strong></div>
               <div><span>{t("crm.contacts.e325bf8f90")}</span><strong>{selectedContact.firstName || t("crm.contacts.cb6c1fb76c")}</strong></div>
-              <div><span>{t("crm.contacts.e408c08c6b")}</span><strong>{selectedContact.companyName || t("crm.contacts.831460cb02")}</strong></div>
+              <div><span>{t("crm.contacts.e408c08c6b")}</span><strong>{(selectedContact.entityType !== "company" ? getContactCompany(selectedContact, contacts)?.companyName : undefined) || selectedContact.companyName || t("crm.contacts.831460cb02")}</strong></div>
+              {selectedContact.entityType !== "company" && selectedContact.companyName && getContactCompany(selectedContact, contacts) && selectedContact.companyName !== getContactCompany(selectedContact, contacts)?.companyName && <p className="muted-line full">{t("crm.contacts.company.historicalAffiliation", { name: selectedContact.companyName })}</p>}
               <div><span>{t("crm.contacts.969ccbd3cf")}</span><strong>{selectedContact.email || t("crm.contacts.cb6c1fb76c")}</strong></div>
               <div><span>{t("crm.contacts.cc4c424b57")}</span><strong>{selectedContact.phone || t("crm.contacts.cb6c1fb76c")}</strong></div>
               <ContactPostalAddressDetails key={`${selectedContact.id}:${selectedContact.postalAddress ?? ""}`} address={selectedContact.postalAddress} metadata={selectedContact.postalAddressDetails} />
@@ -12415,6 +12459,7 @@ function ContactsViewBody({
                 </>
               )}
 
+              {selectedContact.entityType !== "company" && selectedContact.kind !== "Membre de l’organisation" && selectedContact.organizationFunction && <div><span>{t("crm.contacts.company.function")}</span><strong>{selectedContact.organizationFunction}</strong></div>}
               <div className="full"><span>{t("crm.contacts.8a7525b149")}</span><p>{selectedContact.notes || t("crm.contacts.7130e80de1")}</p></div>
             </div>
 
@@ -12436,7 +12481,11 @@ function ContactsViewBody({
               </div>
             )}
 
-            {access && <ContactDocuments key={selectedContact.id} contactId={selectedContact.id} access={access}/>}
+            {selectedContact.entityType === "company" && !selectedContact.mergedIntoCompanyId && <CompanyPeople key={`company-people-${selectedContact.id}`} company={selectedContact} contacts={contacts} onOpen={setSelectedContact} onEdit={openEdit} onUpdate={onUpdate} onBundle={onBundle} onDirty={retainContactDraft} />}
+            {selectedContact.entityType !== "company" && getContactCompany(selectedContact, contacts) && <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(getContactCompany(selectedContact, contacts)!)}>{t("crm.contacts.company.openCompany")} · {getContactLabel(getContactCompany(selectedContact, contacts)!)}</BusinessButton>}
+            {selectedContact.mergedIntoCompanyId && contacts.find(item => item.id === selectedContact.mergedIntoCompanyId) && <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contacts.find(item => item.id === selectedContact.mergedIntoCompanyId)!)}>{journeyText("Ouvrir le dossier entreprise commun", "Open shared company record")}</BusinessButton>}
+            {selectedContact.entityType === "company" && contacts.some(item => item.mergedIntoCompanyId === selectedContact.id) && <section className="stack" data-company-original-records><h4>{journeyText("Fiches d’origine / informations conservées", "Original records / retained information")}</h4>{contacts.filter(item => item.mergedIntoCompanyId === selectedContact.id).map(original => <div className="item-card" key={original.id}><strong>{getContactLabel(original)}</strong><p className="muted-line">{journeyText("Identifiant d’origine : ", "Original ID: ")}{original.id}</p><BusinessButton type="button" className="secondary-button" onClick={() => setSelectedContact(original)}>{journeyText("Consulter les informations et documents d’origine", "View original information and documents")}</BusinessButton></div>)}</section>}
+            {access && <ContactDocuments key={`contact-documents-${selectedContact.id}`} contactId={selectedContact.id} access={access}/>}
 
             <div className="confirm-actions">
               <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedContact(null)} data-crm-dismiss="true">{t("crm.contacts.711e5f2e19")}</BusinessButton>
@@ -12449,7 +12498,7 @@ function ContactsViewBody({
       )}
 
       {editingContact && (
-        <div className="confirm-backdrop">
+        <div className="confirm-backdrop" style={selectedContact ? { display: "none" } : undefined}>
           <div id="contact-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
             <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.contacts.46889b43bc")}</p>
             <h3>{t("crm.contacts.b67e91e395")}</h3>
@@ -12458,6 +12507,7 @@ function ContactsViewBody({
               const target = event.target;
               if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) {
                 changedContactFields.current.add(target.name);
+                if (target.name === "entityType" && target.value === "company") changedContactFields.current.add("companyId");
                 if (target.closest('[data-address-field="postalAddress"]')) {
                   changedContactFields.current.add("postalAddress");
                   changedContactFields.current.add("postalAddressDetails");
@@ -12465,7 +12515,9 @@ function ContactsViewBody({
               }
             }}>
               <ConfirmedFormMessage message={getContactIdentityValidationError(edition.message) ? "" : edition.message} />
-              <ContactIdentityFields contact={editingContact} entityType={editingContactEntityType} onEntityTypeChange={setEditingContactEntityType} issue={editingIdentityError} onIssue={setEditingIdentityError} prefix="contact-edit" />
+              <ContactIdentityFields contacts={contacts} onOpenCompany={company => setSelectedContact(company)} contact={editingContact} entityType={editingContactEntityType} onEntityTypeChange={setEditingContactEntityType} issue={editingIdentityError} onIssue={setEditingIdentityError} prefix="contact-edit" />
+              {editingContactEntityType === "company" && !editingContact.mergedIntoCompanyId && !getCompanyPeople(editingContact.id, contacts).length && <FirstCompanyContactFields contacts={contacts} companyId={editingContact.id} />}
+              {editingContactEntityType === "company" && <h4 className="full">{t("crm.contacts.company.generalDetails")}</h4>}
 
               <BusinessLabel>{t("crm.contacts.baaddf70fb")}<select name="kind" value={editingContactKind} onChange={(event) => setEditingContactKind(event.target.value as ContactKind)}>
                   {sortSelectOptions(contactKinds, kind => label(kind, "crm"), language).map((kind) => <option key={kind} value={kind}>{label(kind, "crm")}</option>)}
@@ -12477,9 +12529,7 @@ function ContactsViewBody({
               <BusinessLabel>{t("crm.contacts.4d7e0f0579")}<input name="city" defaultValue={editingContact.city} /></BusinessLabel>
               <BusinessLabel>{t("crm.contacts.0e570ca6fa")}<input name="source" defaultValue={editingContact.source} /></BusinessLabel>
 
-              {editingContactKind === "Membre de l’organisation" && (
-                <BusinessLabel>{t("crm.contacts.222f9de9e7")}<input name="organizationFunction" defaultValue={editingContact.organizationFunction ?? ""} placeholder={t("crm.contacts.60c9c50476")} /></BusinessLabel>
-              )}
+              <BusinessLabel style={editingContactEntityType === "company" && editingContactKind !== "Membre de l’organisation" ? { display: "none" } : undefined}>{t(editingContactKind === "Membre de l’organisation" ? "crm.contacts.222f9de9e7" : "crm.contacts.company.function")}<input name="organizationFunction" defaultValue={editingContact.organizationFunction ?? ""} placeholder={editingContactKind === "Membre de l’organisation" ? t("crm.contacts.60c9c50476") : undefined} /></BusinessLabel>
 
               {editingContactKind !== "Prestataire" && editingContactKind !== "Membre de l’organisation" && (
                 <>

@@ -62,6 +62,11 @@ export type Contact = {
   firstName?: string;
   civility?: "M" | "MME" | "";
   companyName?: string;
+  // Canonical link; free-text companyName remains historical/display data.
+  companyId?: string;
+  primaryContactId?: string;
+  // A consolidated company keeps its ID and private document ownership.
+  mergedIntoCompanyId?: string;
   kind: ContactKind;
   organizationFunction?: string;
   email: string;

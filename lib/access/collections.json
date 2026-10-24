@@ -145,6 +145,14 @@
           "Très fiable",
           "À éviter"
         ]
+      },
+      "companyId": {
+        "type": "string",
+        "label": "Entreprise liée"
+      },
+      "primaryContactId": {
+        "type": "string",
+        "label": "Interlocuteur principal"
       }
     }
   },

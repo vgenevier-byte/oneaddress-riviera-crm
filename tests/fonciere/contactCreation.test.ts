@@ -48,3 +48,11 @@ test("distinct explicit intents do not reuse a consumed request or invent a busi
   assert.notEqual(first.id, second.id); assert.match(first.id, /^[0-9a-f-]{36}$/);
   assert.equal("kind" in first.prefill, false); assert.equal("supplierCategory" in first.prefill, false);
 });
+
+test("an explicit agency selection preselects the canonical company for a new person", () => {
+  const data = createFonciereData(); data.agencyContactId = "explicit-company"; data.agencyName = "Agence choisie";
+  const intent = projectContactCreateIntent(data, "agent");
+  assert.equal(intent.prefill.companyId, data.agencyContactId);
+  data.agencyContactId = "";
+  assert.equal(projectContactCreateIntent(data, "agent").prefill.companyId, undefined);
+});

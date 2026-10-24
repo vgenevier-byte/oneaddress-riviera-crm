@@ -1,5 +1,6 @@
 import { matchesContactSearchFields } from "../contactSearch";
 import { getContactLabel } from "../contactIdentity";
+import { getContactCompany } from "../contactCompany";
 import type { ContactEntityType } from "../types";
 
 /** Contact references come from the caller's authorized Contacts projection. */
@@ -26,6 +27,8 @@ export function matchesTaskContact(contact: TaskContactOption, query: string): b
 /** Never complete a restricted reference by reading a global CRM payload. */
 export function taskContactOptions(rows: unknown): TaskContactOption[] {
   if (!Array.isArray(rows)) return [];
+  const authorized = rows.filter((value): value is Record<string, unknown> & { id: string } =>
+    Boolean(value && typeof value === "object" && !Array.isArray(value) && typeof value.id === "string"));
   const seenIds = new Set<string>();
   return rows.flatMap((value: unknown) => {
     if (!value || typeof value !== "object" || Array.isArray(value)) return [];
@@ -36,6 +39,10 @@ export function taskContactOptions(rows: unknown): TaskContactOption[] {
     if (row.entityType === "person" || row.entityType === "company") option.entityType = row.entityType;
     for (const [field, source] of [["firstName", "firstName"], ["name", "name"], ["company", "companyName"], ["email", "email"]] as const) {
       if (typeof row[source] === "string" && row[source]) option[field] = row[source];
+    }
+    if (row.entityType !== "company" && typeof row.companyId === "string") {
+      const company = getContactCompany({ id: row.id, companyId: row.companyId }, authorized);
+      if (typeof company?.companyName === "string" && company.companyName) option.company = company.companyName;
     }
     return [option];
   });

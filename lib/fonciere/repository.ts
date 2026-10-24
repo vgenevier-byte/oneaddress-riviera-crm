@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeAddressValue } from "../address";
+import { getContactCompany } from "../contactCompany";
 import { createProjectData, LIMITS, PHOTO_ROLES } from "../izord/model";
 import { assertEncodedImageBudget, assertImageByteBudget, encodedJpegLength } from "../izord/image-budget";
 import { photoDataToBlob, validateUploadBlob, type OperationOptions } from "../izord/repository";
@@ -36,7 +37,7 @@ async function blobData(blob: Blob, options: OperationOptions) {
 }
 function contactOption(row: Record<string, unknown>): ContactOption {
   const text = (key: string) => typeof row[key] === "string" ? row[key] as string : "";
-  return { id: text("id"), ...(row.entityType === "company" || row.entityType === "person" ? { entityType: row.entityType } : {}), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), postalAddress: text("postalAddress"), ...(row.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(row.postalAddressDetails, text("postalAddress")) } : {}) };
+  return { id: text("id"), ...(row.entityType === "company" || row.entityType === "person" ? { entityType: row.entityType } : {}), ...(text("companyId") ? { companyId: text("companyId") } : {}), ...(text("primaryContactId") ? { primaryContactId: text("primaryContactId") } : {}), ...(text("mergedIntoCompanyId") ? { mergedIntoCompanyId: text("mergedIntoCompanyId") } : {}), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), postalAddress: text("postalAddress"), ...(row.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(row.postalAddressDetails, text("postalAddress")) } : {}) };
 }
 
 /** Captured-token clients from useScopedOperations are supported. Auth, Contacts
@@ -95,7 +96,11 @@ export function createFonciereRepository(client: SupabaseClient) {
     const result = await guarded(options.signal, () => client.rpc("crm_read_module", { p_module: "contacts" })); failure(result.error);
     const snapshot = result.data as { revision: string; collections: { contacts: Record<string, unknown>[] } };
     if (!snapshot || !Array.isArray(snapshot.collections?.contacts) || typeof snapshot.revision !== "string") throw new Error("Liste des contacts invalide.");
-    return { revision: snapshot.revision, contacts: snapshot.collections.contacts.map(contactOption) };
+    const rows = snapshot.collections.contacts.map(contactOption);
+    // The authorized projection supplies every value; canonical display does
+    // not write a historical person's free-text company name.
+    return { revision: snapshot.revision, contacts: rows.map(row => row.entityType !== "company" && row.companyId
+      ? { ...row, companyName: getContactCompany(row, rows)?.companyName || row.companyName } : row) };
   }
   return {
     async listProjects(options: OperationOptions = {}): Promise<FonciereProjectRecord[]> {
@@ -148,7 +153,7 @@ export function createFonciereRepository(client: SupabaseClient) {
     },
     async searchContacts(query: string, options: OperationOptions = {}): Promise<ContactOption[]> {
       const rows = (await contacts(options)).contacts;
-      return rows.filter(row => matchesProjectContact(row, query.trim())).slice(0, 50);
+      return rows.filter(row => !row.mergedIntoCompanyId && (matchesProjectContact(row, query.trim()) || row.entityType === "company" && rows.some(person => person.companyId === row.id && matchesProjectContact(person, query.trim())))).slice(0, 50);
     },
     async readContact(id: string, options: OperationOptions = {}): Promise<ContactOption | null> {
       if (!id || id.length > 180) return null;
@@ -157,10 +162,19 @@ export function createFonciereRepository(client: SupabaseClient) {
     async createContact(input: ContactCreateInput, options: OperationOptions = {}): Promise<ContactOption> {
       const name = input.name.trim(), companyName = input.companyName.trim(), entityType = input.entityType === "company" ? "company" : "person";
       if (entityType === "company" ? !companyName : !name) throw new Error(entityType === "company" ? "Le nom de l’entreprise est obligatoire." : "Le nom du contact est obligatoire.");
+      const existingPersonId = input.existingPersonId?.trim() || null;
+      if (entityType === "company" && Boolean(input.firstPerson) === Boolean(existingPersonId)) throw new Error("Choisissez une personne existante ou créez le premier interlocuteur de l’entreprise.");
+      if (entityType === "person" && (input.firstPerson || existingPersonId)) throw new Error("Le premier interlocuteur concerne uniquement une entreprise.");
+      if (input.firstPerson && !input.firstPerson.name.trim()) throw new Error("Le nom du premier interlocuteur est obligatoire.");
       const snapshot = await contacts(options);
       if (duplicateProjectContacts(snapshot.contacts, input).length) throw new Error("Un contact possède déjà cette identité ou ces coordonnées. Sélectionnez-le dans les résultats de recherche.");
-      const id = crypto.randomUUID(), patch = { entityType, name, firstName: input.firstName || "", companyName, email: input.email || "", phone: input.phone || "", city: input.city || "", postalAddress: input.postalAddress || "", ...(input.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(input.postalAddressDetails, input.postalAddress) } : {}), kind: "Prestataire", supplierCategory: "Agence immobilière" };
-      const result = await guarded(options.signal, () => client.rpc("crm_mutate_record", { p_module: "contacts", p_collection: "contacts", p_id: id, p_patch: patch, p_revision: snapshot.revision, p_delete: false })); failure(result.error);
+      if (existingPersonId && !snapshot.contacts.some(row => row.id === existingPersonId && row.entityType !== "company" && row.name.trim())) throw new Error("Sélectionnez une véritable fiche personne existante.");
+      const id = crypto.randomUUID(), patch = { entityType, name, firstName: input.firstName || "", companyName, email: input.email || "", phone: input.phone || "", city: input.city || "", postalAddress: input.postalAddress || "", ...(input.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(input.postalAddressDetails, input.postalAddress) } : {}), ...(entityType === "person" && input.companyId ? { companyId: input.companyId } : {}), kind: "Prestataire", supplierCategory: "Agence immobilière" };
+      const first = input.firstPerson;
+      // Build the person's own coordinates independently. Agency phone, email,
+      // address and address metadata never become personal defaults.
+      const person = first ? { id: crypto.randomUUID(), entityType: "person", name: first.name.trim(), firstName: first.firstName || "", companyName: first.companyName || "", email: first.email || "", phone: first.phone || "", city: first.city || "", postalAddress: first.postalAddress || "", ...(first.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(first.postalAddressDetails, first.postalAddress || "") } : {}), kind: "Prestataire", supplierCategory: "Agence immobilière" } : null;
+      const result = await guarded(options.signal, () => client.rpc("crm_save_contact_bundle", { p_contact: { ...patch, id }, p_person: person, p_existing_person_id: existingPersonId, p_revision: snapshot.revision })); failure(result.error);
       const row = (result.data as { collections?: { contacts?: Record<string, unknown>[] } })?.collections?.contacts?.find(row => row.id === id);
       if (!row) throw new Error("La création du contact n’a pas été confirmée."); return contactOption(row);
     },

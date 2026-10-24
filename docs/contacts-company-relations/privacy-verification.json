@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "actualLocalAuth": true,
+  "actualStorageUpload": true,
+  "actualPostgREST": true,
+  "actualNextProxy": false,
+  "remoteWrites": 0,
+  "checks": [
+    "unshared genuine personal document denied before company link",
+    "explicit company-document share is readable",
+    "company share plus person link does not grant personal document metadata",
+    "authorized company and person document catalogues remain separate",
+    "private Storage bytes remain unavailable directly",
+    "personal document keeps original person ownership"
+  ],
+  "scope": "Authenticated fictional local PostgreSQL/Auth/PostgREST/Storage. No Production, external Drive or Next proxy proof."
+}

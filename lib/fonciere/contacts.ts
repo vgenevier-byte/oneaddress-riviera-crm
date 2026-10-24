@@ -4,8 +4,12 @@ import type { FonciereData } from "./model";
 import { normalizeAddressValue, type AddressValue } from "../address";
 
 /** Only fields from the server-authorized Contacts projection. */
-export type ProjectContact = { id: string; entityType?: "person" | "company"; name: string; firstName: string; companyName: string; email: string; phone: string; city: string; postalAddress: string; postalAddressDetails?: AddressValue };
-export type ContactCreateInput = Omit<ProjectContact, "id">;
+export type ProjectContact = { id: string; entityType?: "person" | "company"; companyId?: string; primaryContactId?: string; mergedIntoCompanyId?: string; name: string; firstName: string; companyName: string; email: string; phone: string; city: string; postalAddress: string; postalAddressDetails?: AddressValue };
+export type FirstProjectCompanyPerson = Pick<ProjectContact, "name"> & Partial<Omit<ProjectContact, "id" | "name" | "companyId" | "primaryContactId" | "mergedIntoCompanyId">>;
+export type ContactCreateInput = Omit<ProjectContact, "id" | "primaryContactId" | "mergedIntoCompanyId"> & {
+  firstPerson?: FirstProjectCompanyPerson;
+  existingPersonId?: string;
+};
 export type ContactRole = "agent" | "agency";
 export const AGENT_FIELDS = ["agentName", "agentPhone", "agentEmail"] as const;
 export const AGENCY_FIELDS = ["agencyName", "agencyAddress", "agencyPhone", "agencyEmail"] as const;
@@ -37,10 +41,11 @@ export function projectContactLabel(contact: ProjectContact): string {
 }
 
 export function isAgencyOption(contact: ProjectContact): boolean {
-  return contact.entityType === "company" || Boolean(contact.companyName.trim());
+  return !contact.mergedIntoCompanyId && (contact.entityType === "company" || !contact.companyId && Boolean(contact.companyName.trim()));
 }
 
-export function contactCompanyMatches(contact: ProjectContact, agencyName: string): boolean {
+export function contactCompanyMatches(contact: ProjectContact, agencyName: string, agencyId?: string): boolean {
+  if (agencyId && contact.companyId) return contact.companyId === agencyId;
   return Boolean(agencyName.trim()) && normalizeContactSearch(contact.companyName) === normalizeContactSearch(agencyName);
 }
 

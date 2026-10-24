@@ -107,19 +107,25 @@ try {
       pass(label + ": direct company form, editable prefill, cancellation retains never-saved project, PDF and photo");
       phase = label + " company save";
       await createFromProject(page, "agency");
+      await contactField(page, "companyPersonMode").selectOption("new");
+      await contactField(page, "companyPersonFirstName").fill("Interlocuteur");
+      await contactField(page, "companyPersonName").fill(`Initial ${id}`);
       if (scenario.profile === "admin") {
-        await page.route("**/rest/v1/rpc/crm_mutate_record", route => route.abort("failed"));
+        await page.route("**/rest/v1/rpc/crm_save_contact_bundle", route => route.abort("failed"));
         await saveContact(page).click(); await page.getByText(/Enregistrement non confirmé|Enregistrement refusé|Connexion interrompue/).first().waitFor();
-        assert.equal(await contactField(page, "email").inputValue(), values.agencyEmail); await page.unroute("**/rest/v1/rpc/crm_mutate_record");
+        assert.equal(await contactField(page, "email").inputValue(), values.agencyEmail); await page.unroute("**/rest/v1/rpc/crm_save_contact_bundle");
         pass("Failed contact save stays in Contacts with every prefilled value retained");
       }
       let mutations = 0;
-      const observe = request => { if (request.url().endsWith("/rpc/crm_mutate_record") && request.postDataJSON()?.p_collection === "contacts") mutations++; };
+      const observe = request => { if (request.url().endsWith("/rpc/crm_save_contact_bundle")) mutations++; };
       page.on("request", observe);
       await form(page).evaluate(node => { node.requestSubmit(); node.requestSubmit(); });
       await project(page).waitFor(); page.off("request", observe); assert.equal(mutations, 1, "Double submit sends one creation");
       const contacts = (await rpc(token, "crm_read_module", { p_module: "contacts" })).collections.contacts;
       const company = contacts.filter(contact => contact.email === values.agencyEmail); assert.equal(company.length, 1); assert.equal(company[0].entityType, "company");
+      const initialPerson = contacts.filter(contact => contact.companyId === company[0].id);
+      assert.equal(initialPerson.length, 1); assert.equal(initialPerson[0].entityType, "person");
+      assert.equal(company[0].primaryContactId, initialPerson[0].id);
       assert.equal(await project(page).locator('input[name="agencyContactId"]').inputValue(), company[0].id);
       await assertPreserved(page, values, fileName);
       assert.equal(await project(page).locator('a[href="#fonciere-section-agency"]').getAttribute("aria-current"), "location");
@@ -141,6 +147,7 @@ try {
       await saveContact(page).click(); await project(page).waitFor();
       const after = (await rpc(token, "crm_read_module", { p_module: "contacts" })).collections.contacts;
       const agent = after.filter(contact => contact.email === values.agentEmail); assert.equal(agent.length, 1); assert.equal(agent[0].entityType, "person");
+      assert.equal(agent[0].companyId, company[0].id);
       assert.equal(await project(page).locator('input[name="agentContactId"]').inputValue(), agent[0].id);
       assert.equal(await project(page).locator('input[name="agencyContactId"]').inputValue(), company[0].id);
       await assertPreserved(page, values, fileName);
@@ -188,7 +195,7 @@ try {
       phase = label + " ordinary creation";
       if (scenario.profile === "admin") await page.locator(".mobile-shared-db-status.connected").waitFor({ state: "attached" });
       await contactField(page, "name").fill(`Contact ordinaire ${id}`); await contactField(page, "email").fill(`ordinary-${id}@example.invalid`);
-      const ordinarySave = page.waitForResponse(response => response.url().endsWith("/rpc/crm_mutate_record") && response.request().method() === "POST" && response.ok());
+      const ordinarySave = page.waitForResponse(response => response.url().endsWith("/rpc/crm_save_contact_bundle") && response.request().method() === "POST" && response.ok());
       await form(page).locator('button[type="submit"]').click(); await ordinarySave;
       const ordinary = (await rpc(token, "crm_read_module", { p_module: "contacts" })).collections.contacts.filter(contact => contact.email === `ordinary-${id}@example.invalid`);
       assert.equal(ordinary.length, 1); assert.equal(ordinary[0].entityType, "person");

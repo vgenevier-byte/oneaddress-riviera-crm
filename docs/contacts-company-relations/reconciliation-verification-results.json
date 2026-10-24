@@ -1,0 +1,80 @@
+{
+  "date": "2026-10-24",
+  "environment": {
+    "kind": "disposable local PostgreSQL database",
+    "node": "v24.16.0",
+    "postgres": "17.6",
+    "productionWrites": false,
+    "applicationFixturesModified": false
+  },
+  "scope": {
+    "actualJournalMigration": true,
+    "actualAdministrativeSQLScripts": true,
+    "referenceTables": "minimal compatible schema",
+    "fullApplicationServerGuards": false,
+    "authAndRLSAPIFlows": false,
+    "serverIssuedJSONBDigestCAS": true,
+    "resultDerivedFromLockedServerWorkspace": true
+  },
+  "sha256": {
+    "scripts/contact-company-reconcile.mjs": "0d1a71ff2a7c1585c45f043f0fab58a7ddc42969e4b850cb84055ee55a29cd77",
+    "scripts/contact-company-rollback.sql": "5e8cbfe6cc48ba4f315dc44da49bc18527dc47a9348a4b9070685cc97700f0de",
+    "supabase/migrations/20261024081412_contact_company_reconciliation_journal.sql": "34786ae5bb82d67b1206d439067b69863032680e8d84f6853e060cd449deb51a",
+    "tests/contacts-company-relations/reconcile.test.mjs": "a84a9418d301efb657a5bf3048e93f341c6e9c27a8ec171bebb324965a451634",
+    "tests/contacts-company-relations/reconciliation-postgres.test.mjs": "27033e49034d639a29b46c995efaafd43bdfcca7d26ba9f04e3af4f2d120bdd1",
+    "scripts/contact-company-postcheck.sql": "5f770f7f849376b8386f8588207bd5543d820358b8811847c0b3593c150b7904"
+  },
+  "sql": {
+    "file": "tests/contacts-company-relations/reconciliation-postgres.test.mjs",
+    "exitCode": 0,
+    "tests": 17,
+    "passed": 17,
+    "failed": 0,
+    "skipped": 0,
+    "names": [
+      "journal migration enables RLS and denies client access to original personal snapshots",
+      "confirmed legacy classifications persist atomically without replacing IDs, source values or accounting",
+      "apply twice creates one person and one durable journal; rollback restores exact payload and cannot silently reapply",
+      "concurrent revision or payload changes abort before journal insertion",
+      "post-apply contact corrections block rollback",
+      "post-apply accounting corrections block rollback",
+      "confirmed legacy classifications pass the postcheck and an unplanned type change is detected separately",
+      "new canonical task reference blocks rollback without deleting history",
+      "new deleted canonical task reference blocks rollback without deleting history",
+      "new legacy task identity reference blocks rollback without deleting history",
+      "new account identity reference blocks rollback without deleting history",
+      "new historical task event reference blocks rollback without deleting history",
+      "new Foncière agent reference blocks rollback without deleting history",
+      "new Foncière agency reference blocks rollback without deleting history",
+      "new contact document scope reference blocks rollback without deleting history",
+      "concurrent external reference writer finishes before the rollback check and its reference is preserved",
+      "administrative reconciliation and guarded rollback persist safely in PostgreSQL"
+    ]
+  },
+  "node": {
+    "file": "tests/contacts-company-relations/reconcile.test.mjs",
+    "exitCode": 0,
+    "tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "names": [
+      "explicit reconciliation preserves each identity, values, notes and every original reference",
+      "uncertain names or domains have no operation and never become a relationship",
+      "conflicting input, silent overwrites, missing evidence and incomplete companies fail before producing SQL",
+      "certain company consolidation retains original ID and divergent values for provenance",
+      "repeated explicit creation uses fixed ID and never invents a personal coordinate",
+      "explicitly confirmed legacy business qualification preserves all names, coordinates and original IDs"
+    ]
+  },
+  "postcheckSQLLocalValidation": {
+    "passed": true,
+    "syntheticDataOnly": true,
+    "countsAndPlannedFields": true,
+    "approvedLegacyClassifications": true,
+    "unplannedTypeChangeDetected": true,
+    "noncontactsUnchanged": true,
+    "projectionCatalogueMetadataOnly": true,
+    "productionSession": false
+  }
+}

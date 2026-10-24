@@ -1,0 +1,23 @@
+{
+  "passed": true,
+  "actualLocalPostgres": true,
+  "exactInstalledTrigger": true,
+  "isolatedTemporaryRows": true,
+  "workspacePayloadAndRevisionUnchanged": true,
+  "remoteWrites": 0,
+  "migrationSHA256": "798d95e487fe2bac9e91b58b931c04677eb8019c5a23b22889c9637175a88b6c",
+  "guardDefinitionSHA256": "cdc6a210274f7870c3d5186436a3251d2ba10e16bd3ee5e45f1018839af88ab7",
+  "checks": [
+    "linked typed person with missing ID rejected",
+    "linked typed person with empty ID rejected",
+    "linked typed person with numeric ID rejected",
+    "linked typed person with invalid characters ID rejected",
+    "linked typed person with too long ID rejected",
+    "new company with missing ID rejected",
+    "new company with empty ID rejected",
+    "new company with numeric ID rejected",
+    "new company with invalid characters ID rejected",
+    "valid stable company and genuine person IDs accepted",
+    "real workspace payload author and revision unchanged"
+  ]
+}

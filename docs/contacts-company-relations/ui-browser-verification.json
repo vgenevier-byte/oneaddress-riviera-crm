@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "results": [
+    "owner-1792830762576: independent person persists without company",
+    "owner-1792830762576: company without first person blocked in UI",
+    "owner-1792830762576: whitespace-only first-person surname visibly rejected before RPC",
+    "owner-1792830762576: failed atomic save retains draft and leaves no company/person",
+    "owner-1792830762576: company/person save is atomic, double-submit safe and searchable after reload",
+    "owner-1792830762576: existing person attached without duplication",
+    "owner-1792830762576: primary contact changes, detach preserves person, last contact protected",
+    "owner-1792830762576: fr relation controls fit 1440px viewport",
+    "owner-1792830762576: person company selector, own function and open-company link persist after reload",
+    "owner-1792830762576: message creation confirms one real person and lead atomically",
+    "contributor-1792830762576: independent person persists without company",
+    "contributor-1792830762576: company without first person blocked in UI",
+    "contributor-1792830762576: whitespace-only first-person surname visibly rejected before RPC",
+    "contributor-1792830762576: failed atomic save retains draft and leaves no company/person",
+    "contributor-1792830762576: company/person save is atomic, double-submit safe and searchable after reload",
+    "contributor-1792830762576: existing person attached without duplication",
+    "contributor-1792830762576: primary contact changes, detach preserves person, last contact protected",
+    "contributor-1792830762576: en relation controls fit 390px viewport",
+    "contributor-1792830762576: person company selector, own function and open-company link persist after reload"
+  ],
+  "errors": [],
+  "boundary": "Real LOCAL password Auth and PostgREST with persistent fictional data. Failed save request aborted before admission. Mobile viewports emulated. No Production session or physical device."
+}

@@ -1,0 +1,45 @@
+{
+  "passed": true,
+  "environment": "actual candidate UI + real loopback Auth/RPC/Storage, fictional data",
+  "productionWrites": 0,
+  "physicalDevice": false,
+  "run": "1792830646015",
+  "phase": "noContacts UI permission boundary",
+  "checks": [
+    "admin-fr: direct company form, editable prefill, cancellation retains never-saved project, PDF and photo",
+    "Failed contact save stays in Contacts with every prefilled value retained",
+    "admin-fr: confirmed actual contact ID returns to agency section, single creation, project still visibly unsaved",
+    "admin-fr: person name, direct coordinates and company remain separate; cancel and actual save preserve the agency link",
+    "admin-fr: existing duplicate uses its true ID without a write; replacement confirmation preserves a declined local correction",
+    "admin-fr: ordinary Contacts draft survives contextual company/person creation and both return actions",
+    "admin-fr: real project save/reload retains correct canonical roles, exact PDF content and photo",
+    "admin-fr: existing-project cancellation preserves correction; next Contacts visit opens ordinary form with consumed context",
+    "admin-fr: ordinary Contacts creation still saves once through the actual RPC and stays in Contacts",
+    "writer-en: direct company form, editable prefill, cancellation retains never-saved project, PDF and photo",
+    "writer-en: confirmed actual contact ID returns to agency section, single creation, project still visibly unsaved",
+    "writer-en: person name, direct coordinates and company remain separate; cancel and actual save preserve the agency link",
+    "writer-en: existing duplicate uses its true ID without a write; replacement confirmation preserves a declined local correction",
+    "writer-en: ordinary Contacts draft survives contextual company/person creation and both return actions",
+    "writer-en: real project save/reload retains correct canonical roles, exact PDF content and photo",
+    "writer-en: existing-project cancellation preserves correction; next Contacts visit opens ordinary form with consumed context",
+    "writer-en: ordinary Contacts creation still saves once through the actual RPC and stays in Contacts",
+    "other: Contacts read-only or absent permission exposes no project contact creation action",
+    "noContacts: Contacts read-only or absent permission exposes no project contact creation action",
+    "No uncaught browser application errors"
+  ],
+  "errors": [],
+  "records": [
+    {
+      "profile": "admin",
+      "projectId": "d7c09740-0a9d-455c-892e-db50f447ffb6",
+      "agencyContactId": "c-573fd546",
+      "agentContactId": "c-9544550c"
+    },
+    {
+      "profile": "writer",
+      "projectId": "a2fef2a2-f1e2-4b40-bbf1-6d4cd6642fee",
+      "agencyContactId": "5cc2c623-db47-4fd5-bea7-75a866eb23b7",
+      "agentContactId": "5515da54-5352-4e0b-8672-54811d2fb036"
+    }
+  ]
+}

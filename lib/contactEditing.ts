@@ -18,6 +18,12 @@ export function mergeContactUpdate(contact: Contact, update: Partial<Contact>): 
     if (contact.entityType !== undefined) merged.entityType = contact.entityType;
     else delete merged.entityType;
   }
+  for (const field of ["companyId", "primaryContactId", "mergedIntoCompanyId"] as const) {
+    if (update[field] === undefined) {
+      if (contact[field] !== undefined) merged[field] = contact[field];
+      else delete merged[field];
+    }
+  }
   if (contact.postalAddressDetails !== undefined || update.postalAddressDetails !== undefined) {
     const details = normalizeAddressValue(update.postalAddressDetails ?? contact.postalAddressDetails, merged.postalAddress);
     const cityChanged = update.city !== undefined && update.city !== contact.city;

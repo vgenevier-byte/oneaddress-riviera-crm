@@ -17,7 +17,7 @@ import styles from "./ProjectContacts.module.css";
 type Props = { data: FonciereData; onChange: (data: FonciereData) => void; canReadContacts: boolean; canWriteContacts: boolean; disabled?: boolean; accessSignal?: AbortSignal; onOpenContact?: (id: string) => void; onPendingChange?: (pending: boolean) => void; onCreateContact?: (intent: ContactCreateIntent) => boolean; contactReturn?: ProjectContactReturn; onContactReturnHandled?: () => void };
 type SearchState = { query: string; rows: ProjectContact[]; loading: boolean; error: string };
 const asPickerContact = (row: ProjectContact): Contact => ({ ...row, kind: "Client", budget: 0, source: "", notes: "", createdAt: "" });
-const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entityType: row.entityType, name: row.name, firstName: row.firstName || "", companyName: row.companyName || "", email: row.email, phone: row.phone, city: row.city, postalAddress: row.postalAddress, postalAddressDetails: row.postalAddressDetails });
+const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entityType: row.entityType, companyId: row.companyId, primaryContactId: row.primaryContactId, mergedIntoCompanyId: row.mergedIntoCompanyId, name: row.name, firstName: row.firstName || "", companyName: row.companyName || "", email: row.email, phone: row.phone, city: row.city, postalAddress: row.postalAddress, postalAddressDetails: row.postalAddressDetails });
 const blankSearch = (query = ""): SearchState => ({ query, rows: [], loading: false, error: "" });
 
 export default function ProjectContacts({ data, onChange, canReadContacts, canWriteContacts, disabled = false, accessSignal, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
@@ -72,7 +72,7 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
   }, [agencySearch.query, agentSearch.query, canReadContacts, accessSignal, begin, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedAgent = canReadContacts ? linked[data.agentContactId] : undefined;
-  const inconsistent = selectedAgent && data.agencyName && !contactCompanyMatches(selectedAgent, data.agencyName);
+  const inconsistent = selectedAgent && data.agencyName && !contactCompanyMatches(selectedAgent, data.agencyName, data.agencyContactId);
   function select(role: ContactRole, contact: ProjectContact | null) {
     const current = latest.current;
     if (current.disabled || !current.canReadContacts || current.accessSignal?.aborted) return false;
@@ -111,7 +111,7 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
   function renderPicker(role: ContactRole) {
     const search = role === "agency" ? agencySearch : agentSearch, setter = role === "agency" ? setAgencySearch : setAgentSearch;
     const id = data[role === "agency" ? "agencyContactId" : "agentContactId"];
-    const rows = search.rows.filter(row => role !== "agent" || !filterAgency || contactCompanyMatches(row, data.agencyName));
+    const rows = search.rows.filter(row => role !== "agent" || !filterAgency || contactCompanyMatches(row, data.agencyName, data.agencyContactId));
     return <div className={styles.picker} key={role}>
       <SearchableBusinessContactPicker contacts={rows.map(asPickerContact)} value={id} queryValue={search.query} fallbackContactName={id ? role === "agency" ? data.agencyName : data.agentName : ""} selectedRecord={canReadContacts && linked[id] ? asPickerContact(linked[id]) : null} onSelect={row => select(role, row ? asProjectContact(row) : null)} searchMode="all" name={`${role}ContactId`} disabled={disabled || !canReadContacts || creating} loading={search.loading} onQueryChange={query => setter(previous => ({ ...previous, query, rows: [], error: "", loading: false }))} onOpenContact={openContact} resultLabel={row => projectContactLabel(asProjectContact(row))} label={role === "agency" ? t("Agence / entreprise du CRM", "CRM agency / company") : t("Agent immobilier / interlocuteur du CRM", "CRM estate agent / contact")} labels={{ placeholder: t("Entreprise, prénom, nom, email ou téléphone…", "Company, first or last name, email or phone…"), empty: t("Aucun contact correspondant", "No matching contacts"), change: t("Changer", "Change"), clear: t("Retirer le lien", "Unlink"), open: t("Ouvrir le contact", "Open contact"), loading: t("Recherche des contacts autorisés…", "Searching authorized contacts…"), unavailable: t("Contact lié — chargement indisponible", "Linked contact — loading unavailable") }} />
       {search.loading && <p role="status">{t("Recherche des contacts autorisés…", "Searching authorized contacts…")}</p>}

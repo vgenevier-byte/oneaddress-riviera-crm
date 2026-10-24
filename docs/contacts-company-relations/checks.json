@@ -1,0 +1,54 @@
+{
+  "date": "2026-10-24",
+  "unitTests": {
+    "passed": 75,
+    "failed": 0
+  },
+  "server": "docs/contacts-company-relations/server-verification.json",
+  "privacy": "docs/contacts-company-relations/privacy-verification.json",
+  "reconciliation": "docs/contacts-company-relations/reconciliation-verification-results.json",
+  "typescript": {
+    "passed": true
+  },
+  "lint": {
+    "passed": true,
+    "existingWarnings": 2
+  },
+  "build": {
+    "passed": true,
+    "target": "local fictional Supabase configuration"
+  },
+  "boundaries": {
+    "productionAuthenticatedCRM": false,
+    "externalDrive": false,
+    "mobilePhysicalDevice": false
+  },
+  "browser": {
+    "passed": true,
+    "scenarios": 19,
+    "mode": "production",
+    "sourceFilesMatched": 211,
+    "desktop": "1440px FR owner",
+    "mobile": "390px EN limited contributor"
+  },
+  "fonciereBrowser": {
+    "passed": true,
+    "checks": 20,
+    "report": "docs/contacts-company-relations/fonciere-browser-verification.json"
+  },
+  "reconciliationSQL": {
+    "passed": 17,
+    "failed": 0
+  },
+  "productionData": {
+    "applied": true,
+    "operations": 17,
+    "originalIdsRetained": 53,
+    "contacts": 55,
+    "companies": 10,
+    "linkedPeople": 9,
+    "incompleteCompanies": 2,
+    "referenceTablesPreserved": 11,
+    "idempotentRerun": true
+  }
+}

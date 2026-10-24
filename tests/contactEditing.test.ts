@@ -34,7 +34,7 @@ for (const kind of ["Client", "Prestataire", "Propriétaire"] as const) {
       if (postalAddress) form.set("postalAddress", postalAddress);
       let state = { contacts: [] as Contact[] };
       const add = handler("addContact", {
-        FormData: class { constructor() { return form; } }, readPostalAddress, readAddressForm,
+        FormData: class { constructor() { return form; } }, readPostalAddress, readAddressForm, readFirstCompanyContact: () => ({}),
         makeId: () => "contact-test", stampCreated: (c: Contact) => c, activeActor: "Test",
         safeNumber: (v: unknown) => Number(v) || 0, getSupplierCategoryFromForm: () => "Entretien",
         validateContactIdentity, currentBusinessData: { current: state },

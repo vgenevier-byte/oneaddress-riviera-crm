@@ -1,0 +1,110 @@
+{
+  "journal": {
+    "plan_id": "ed37cd47506b21cbeb8c4129c12b0d568cbf5b8cd33bc8b3317f5e8eb9783b4c",
+    "rolled_back": false,
+    "after_revision": "2026-10-24T09:12:30.874832+00:00",
+    "before_revision": "2026-10-23T13:30:06.336227+00:00",
+    "operation_count": 17,
+    "before_payload_md5": "b2469520f88cd7c83c2c16bb73f1eaf5"
+  },
+  "contacts": {
+    "total": 55,
+    "companies": 10,
+    "linked_people": 9,
+    "company_aliases": 0,
+    "explicit_people": 13,
+    "legacy_unqualified": 32,
+    "missing_original_ids": 0,
+    "invalid_company_links": 0,
+    "invalid_primary_links": 0,
+    "original_fields_changed": 0,
+    "planned_patch_mismatches": 0,
+    "companies_needing_contact": 2,
+    "planned_creation_mismatches": 0,
+    "approved_entity_classifications": 2,
+    "unplanned_entity_classifications": 0
+  },
+  "workspace": {
+    "updated_at": "2026-10-24T09:12:30.874832+00:00",
+    "collection_md5": {
+      "boats": "81ef6bcb9e0ff1567f086ac2e30e2255",
+      "leads": "92fef05ea713c9d214859708755e97dd",
+      "quotes": "61d62226a7bc77a86dd2612842b572f6",
+      "contacts": "76982145d4d6394fdfbaf6426d9883c5",
+      "vehicles": "d751713988987e9331980363e24189ce",
+      "documents": "2df1108de20a8ad1fc5beb5e0760d197",
+      "suppliers": "d751713988987e9331980363e24189ce",
+      "properties": "025af28042e14d2080fde6250d48fccb",
+      "vendorQuotes": "f3da81e25f9c3b1781b21f8d3d5b1c27",
+      "housePayments": "038e80421ea6e34865e13014d30e83fa",
+      "vendorInvoices": "a4c1b3847fc7de9e3038939e9e8c2d9d",
+      "planningEntries": "fa54e611adae8e84a722536d2d00b2a2",
+      "houseTimeEntries": "9e2234ad310d7c4b691c91a373d6b843",
+      "houseTrackingHouses": "73c59825bb51a350f34936cd92f09a3f",
+      "houseTrackingWorkers": "d1e37ecf305bfeb217ab0b09f8968929"
+    },
+    "noncontacts_unchanged": true,
+    "matches_journal_contacts": true
+  },
+  "projection_catalogue": {
+    "companyId": true,
+    "primaryContactId": true,
+    "alias_not_client_writable": true,
+    "status_not_client_writable": true
+  },
+  "reference_fingerprints": {
+    "task_events": {
+      "md5": "e8cff48a6f2c7d1b9d1dff05cf7bab4f",
+      "count": 32
+    },
+    "task_records": {
+      "md5": "e68991f10129a79b13297c96fbde1f30",
+      "count": 11
+    },
+    "izord_projects": {
+      "md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "count": 0
+    },
+    "fonciere_projects": {
+      "md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "count": 0
+    },
+    "crm_contacts_legacy": {
+      "md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "count": 0
+    },
+    "crm_document_scopes": {
+      "md5": "2d98ba5d380ed4232edd3f75dabf2921",
+      "count": 16
+    },
+    "crm_document_shares": {
+      "md5": "f07d1083fc8118e4eead03e4721e8141",
+      "count": 8
+    },
+    "task_identity_links": {
+      "md5": "441bfcb78abd96a462f6ae86fd4cbdd1",
+      "count": 2
+    },
+    "document_drive_trash": {
+      "md5": "620735cf2ee5e5e621a0ff03d164cc45",
+      "count": 2
+    },
+    "izord_project_versions": {
+      "md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "count": 0
+    },
+    "fonciere_project_contacts": {
+      "md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "count": 0
+    }
+  },
+  "verification": {
+    "passed": true,
+    "externalReferenceTablesCompared": 11,
+    "allOriginalIdsAndValuesPreserved": true,
+    "administrativeProductionSQL": true,
+    "authenticatedCRMProductionSession": false,
+    "idempotentProductionRerun": true,
+    "idempotentRerunRevision": "2026-10-24T09:12:30.874832+00:00"
+  }
+}

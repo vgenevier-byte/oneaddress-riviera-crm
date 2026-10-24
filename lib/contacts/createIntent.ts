@@ -6,7 +6,7 @@ export type ContactCreateIntent = {
   origin: "fonciere";
   role: "agency" | "agent";
   entityType: "company" | "person";
-  prefill: Pick<Partial<Contact>, "name" | "firstName" | "civility" | "companyName" | "email" | "phone" | "postalAddress" | "postalAddressDetails" | "city">;
+  prefill: Pick<Partial<Contact>, "name" | "firstName" | "civility" | "companyName" | "companyId" | "email" | "phone" | "postalAddress" | "postalAddressDetails" | "city">;
   identityHint?: string;
 };
 

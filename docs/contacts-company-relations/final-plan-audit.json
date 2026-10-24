@@ -1,0 +1,28 @@
+{
+  "date": "2026-10-24",
+  "status": "independently-reviewed-before-data-application",
+  "planId": "ed37cd47506b21cbeb8c4129c12b0d568cbf5b8cd33bc8b3317f5e8eb9783b4c",
+  "operations": 17,
+  "unchangedInitialOperations": 12,
+  "humanConfirmedAdditionalOperations": 5,
+  "originalIdsRetained": 53,
+  "allOriginalFieldValuesRetained": true,
+  "explicitLegacyClassificationsAdded": 2,
+  "workspaceContactReferenceOccurrencesRetained": 14,
+  "externalContactAndDocumentOwnerIdsRetained": true,
+  "noInventedPlaceholderIdentity": true,
+  "noIdentityConsolidationOrPersonMerge": true,
+  "finalPreviewMatchesPlanner": true,
+  "finalSQLMatchesGenerator": true,
+  "expected": {
+    "contacts": 55,
+    "companies": 10,
+    "explicitPeople": 13,
+    "unqualifiedLegacyContacts": 32,
+    "linkedPeople": 9,
+    "createdPeople": 2,
+    "existingPeopleLinked": 7,
+    "companiesNeedingContact": 2
+  },
+  "productionDataApplicationVerified": false
+}
