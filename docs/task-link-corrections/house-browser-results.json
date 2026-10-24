@@ -1,0 +1,69 @@
+{
+  "realAuth": true,
+  "realHTTPRPC": true,
+  "realPostgres": true,
+  "actualCRMComponents": true,
+  "fictionalData": true,
+  "businessWrites": 0,
+  "taskWrites": 2,
+  "externalProviderCalls": 0,
+  "instagramPublications": 0,
+  "houseCatalog": {
+    "count": 482,
+    "chosenHouseIndex": 481,
+    "chosenHouseId": "house-fix-dfcfaa89-229"
+  },
+  "results": [
+    {
+      "name": "worker_period fr 1440: complete house search, keyboard explicit ID, query preservation, All houses and canonical persistence",
+      "passed": true
+    },
+    {
+      "name": "monthly_charges en 390: complete house search, keyboard explicit ID, query preservation, All houses and canonical persistence",
+      "passed": true
+    }
+  ],
+  "receipts": [
+    {
+      "taskId": "5416750f-0de1-495a-9600-92f3149bf702",
+      "revision": 1,
+      "target": {
+        "id": "link-5a38bfb6-worker",
+        "type": "worker_period",
+        "context": {
+          "endDate": "2026-11-30",
+          "houseId": "house-fix-dfcfaa89-229",
+          "startDate": "2026-11-01"
+        }
+      },
+      "primary": true,
+      "dueDate": "2026-12-10",
+      "freshAuthRead": true,
+      "inverseRead": true,
+      "browserReload": true,
+      "transientCatalogueFailurePreservesId": true,
+      "staleLabelsCleared": true,
+      "retryResolvesSameId": true
+    },
+    {
+      "taskId": "0d4c1b8f-5e0f-4a9e-ba16-346c1ec54a5f",
+      "revision": 1,
+      "target": {
+        "id": "2026-11",
+        "type": "monthly_charges",
+        "context": {
+          "source": "hours",
+          "houseId": "house-fix-dfcfaa89-229",
+          "personId": "link-5a38bfb6-worker"
+        }
+      },
+      "primary": true,
+      "dueDate": "2026-12-10",
+      "freshAuthRead": true,
+      "inverseRead": true,
+      "browserReload": true
+    }
+  ],
+  "pageErrors": [],
+  "externalRequests": []
+}

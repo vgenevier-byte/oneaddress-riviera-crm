@@ -1,0 +1,41 @@
+{
+  "name": "historical dossier A to current OTHER dossier B, text-only save and native reload",
+  "passed": true,
+  "actualBusinessView": true,
+  "actualAuth": true,
+  "actualRpc": true,
+  "actualPostgres": true,
+  "actualStorage": true,
+  "appMode": "production-local",
+  "loopbackOnly": true,
+  "sourceDossierId": "d037dcad-8dce-49fd-a27c-a12fbd1b204e",
+  "sourceHistoricalRevision": 2,
+  "targetDossierId": "4910abb7-d193-49da-8e60-ce58653317b8",
+  "revisionBefore": 4,
+  "revisionAfter": 5,
+  "nativeReload": true,
+  "sourceDossierEntirelyUnchanged": true,
+  "onlyEditedField": "data.state.features",
+  "beforePhotoStateHash": "bda3a6d970db68969f73d59b539d58c40de8cd49386253c58d0c6b8e92525f35",
+  "afterPhotoStateHash": "bda3a6d970db68969f73d59b539d58c40de8cd49386253c58d0c6b8e92525f35",
+  "beforeSlotsHash": "57d17720c27316d846151ead010e6671383e44f6400acf41a620c9c2bfdb73eb",
+  "afterSlotsHash": "57d17720c27316d846151ead010e6671383e44f6400acf41a620c9c2bfdb73eb",
+  "renderedBeforeHash": "4a55bf5d068f16d98a0074414c0b58adb8a02ece6e93b569f521b9e9201980eb",
+  "renderedAfterHash": "4a55bf5d068f16d98a0074414c0b58adb8a02ece6e93b569f521b9e9201980eb",
+  "priorSnapshotsUnchanged": true,
+  "assetRowsUnchanged": true,
+  "photoAssets": 6,
+  "sourceDocuments": 1,
+  "referenceSlots": 7,
+  "storageObjectsByteHashesVerified": 7,
+  "photoUploads": 0,
+  "saveRpcCalls": 1,
+  "paidGenerationCalls": 0,
+  "pageErrors": [],
+  "events": [
+    {
+      "path": "/rest/v1/rpc/izord_save_generator",
+      "method": "POST"
+    }
+  ]
+}

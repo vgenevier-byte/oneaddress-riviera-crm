@@ -1,0 +1,51 @@
+{
+  "actualBusinessView": true,
+  "actualAuth": true,
+  "actualRpc": true,
+  "actualStorage": true,
+  "appMode": "production-local",
+  "loopbackOnly": true,
+  "paidGenerationCalls": 0,
+  "instagramPublications": 0,
+  "results": [
+    {
+      "name": "historical revision is read-only before reopening current dossier 1",
+      "passed": true
+    },
+    {
+      "name": "historic to current, text-only save and native reload retain all real photo bytes in dossier 1",
+      "passed": true
+    },
+    {
+      "name": "historical revision is read-only before reopening current dossier 2",
+      "passed": true
+    },
+    {
+      "name": "historic to current, text-only save and native reload retain all real photo bytes in dossier 2",
+      "passed": true
+    },
+    {
+      "name": "historical recovery after a bounded local access outage keeps revision2 read-only",
+      "passed": true
+    },
+    {
+      "name": "assigned reader can open current and historical dossier but cannot edit 1",
+      "passed": true
+    },
+    {
+      "name": "assigned reader can open current and historical dossier but cannot edit 2",
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "events": [
+    {
+      "path": "/rest/v1/rpc/izord_save_generator",
+      "method": "POST"
+    },
+    {
+      "path": "/rest/v1/rpc/izord_save_generator",
+      "method": "POST"
+    }
+  ]
+}

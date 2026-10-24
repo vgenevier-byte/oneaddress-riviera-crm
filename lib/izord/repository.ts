@@ -7,7 +7,11 @@ export type ProjectRecord = { id: string; owner_id: string; title: string; revis
 export type VersionRecord = { project_id: string; revision: number; title: string; status: ProjectStatus; author_id: string; created_at: string };
 export type AssetRecord = { id: string; project_id: string; project_revision: number; object_path: string; kind: "pdf" | "photo" | "presentation"; lifecycle: "pending" | "finalized" | "withdrawn"; reader_download: boolean; created_by: string; created_at: string; expected_size: number | null; expected_mime: string | null; original_name: string | null };
 type StoredPayload = { schema: "IZORD_GENERATOR_V1"; data: ProjectData; sourceDocuments: string[] };
-export type LoadedProject = { project: ProjectRecord; data: ProjectData; assets: AssetRecord[]; sourceDocuments: string[] };
+/** Omitted photo bytes are a view projection, never an editable baseline. */
+export type LoadedProject = { project: ProjectRecord; data: ProjectData; assets: AssetRecord[]; sourceDocuments: string[]; photoHydration: "complete" | "omitted"; historicalRevision: number | null };
+export function canEditLoadedProject(value: LoadedProject): boolean {
+  return value.photoHydration === "complete" && value.historicalRevision === null;
+}
 export type TransferProgress = { stage: "upload" | "save"; completed: number; total: number; label: string };
 export type OperationOptions = { signal?: AbortSignal; onProgress?: (progress: TransferProgress) => void };
 export class GeneratorConflictError extends Error { constructor() { super("Une version plus récente existe. Vos modifications locales sont conservées : exportez-les avant de recharger et rapprocher les changements."); this.name = "GeneratorConflictError"; } }
@@ -124,7 +128,9 @@ export function createGeneratorRepository(client: SupabaseClient) {
   async function loadProject(id: string, options: OperationOptions & { hydratePhotos?: boolean; revision?: number } = {}): Promise<LoadedProject> {
     const who = await guarded(options.signal, () => actor(options.signal)), project = await guarded(options.signal, () => readProject(id, options)), assets = await guarded(options.signal, () => listAssets(id, options)), payload = stored(project.payload);
     await guarded(options.signal, () => sameActor(who, options.signal));
-    if (!payload) return { project, data: createProjectData(), assets, sourceDocuments: [] };
+    const photoHydration = options.hydratePhotos === false ? "omitted" as const : "complete" as const;
+    const historicalRevision = options.revision ?? null;
+    if (!payload) return { project, data: createProjectData(), assets, sourceDocuments: [], photoHydration, historicalRevision };
     if (payload.data.importGallery.length > LIMITS.galleryPhotos || !payload.data.photos || typeof payload.data.photos !== "object") throw new Error("Photothèque distante invalide ou trop volumineuse.");
     const references = [...PHOTO_ROLES.map(role => payload.data.photos[role]), ...payload.data.importGallery.map(photo => photo.data)].filter(Boolean);
     if (options.hydratePhotos !== false) {
@@ -150,7 +156,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
     if (options.hydratePhotos === false) { data.importGallery = []; data.photoGalleryRoles = {}; }
     else for (const photo of data.importGallery) photo.data = await guarded(options.signal, () => hydrate(photo.data, empty.photos.main));
     await guarded(options.signal, () => sameActor(who, options.signal));
-    return { project, data: validateProjectData(data), assets, sourceDocuments: [...payload.sourceDocuments] };
+    return { project, data: validateProjectData(data), assets, sourceDocuments: [...payload.sourceDocuments], photoHydration, historicalRevision };
   }
   async function uploadAsset(project: ProjectRecord, blob: Blob, kind: AssetRecord["kind"], name: string, options: OperationOptions): Promise<AssetRecord> {
     const who = await guarded(options.signal, () => actor(options.signal)); await guarded(options.signal, () => validateUploadBlob(blob, kind)); await guarded(options.signal, () => sameActor(who, options.signal));
@@ -201,21 +207,32 @@ export function createGeneratorRepository(client: SupabaseClient) {
     },
     listAssets, listVersions, loadProject, downloadAsset,
     async saveProject(input: { project: ProjectRecord; data: ProjectData; previous?: LoadedProject; status?: ProjectStatus; sourceFiles?: File[]; replaceSourceDocuments?: boolean }, options: OperationOptions = {}): Promise<LoadedProject> {
+      abortIfNeeded(options.signal);
+      const before = input.previous;
+      // A saved native dossier must have a complete current baseline. In
+      // particular, blank view placeholders must never become photo deletions.
+      if (before && (!canEditLoadedProject(before) || before.project.id !== input.project.id || before.project.revision !== input.project.revision)
+        || stored(input.project.payload) && !before) {
+        throw new Error("Ce dossier est en lecture seule ou ses photographies n’ont pas été chargées. Rouvrez la version actuelle avant d’enregistrer.");
+      }
       const who = await guarded(options.signal, () => actor(options.signal)), data = validateProjectData(input.data), empty = createProjectData(), persisted = structuredClone(data);
-      const before = input.previous?.project.id === input.project.id ? input.previous : undefined, old = stored(before?.project.payload), reusable = new Map<string, string>();
+      const old = stored(before?.project.payload), reusable = new Map<string, string>();
       if (old && before) {
         for (const role of PHOTO_ROLES) if (old.data.photos[role]) reusable.set(before.data.photos[role], old.data.photos[role]);
         old.data.importGallery.forEach((photo, index) => { if (before.data.importGallery[index]) reusable.set(before.data.importGallery[index].data, photo.data); });
       }
       const uploaded = new Map<string, string>();
-      async function persistPhoto(value: string, fallback: string, name: string) {
+      async function persistPhoto(value: string, fallback: string, name: string, previousValue?: string, previousReference?: string) {
+        // Equal bytes do not identify an asset: distinct saved photographs may
+        // be byte-identical. Preserve an unchanged slot's own reference first.
+        if (previousReference && value === previousValue) return previousReference;
         if (value === fallback) return "";
         if (reusable.has(value)) return reusable.get(value)!;
         if (!uploaded.has(value)) uploaded.set(value, (await guarded(options.signal, () => uploadAsset(input.project, photoDataToBlob(value), "photo", name, options))).id);
         await guarded(options.signal, () => sameActor(who, options.signal)); return uploaded.get(value)!;
       }
-      for (const role of PHOTO_ROLES) persisted.photos[role] = await guarded(options.signal, () => persistPhoto(data.photos[role], empty.photos[role], `${role}.jpg`));
-      for (let i = 0; i < data.importGallery.length; i++) persisted.importGallery[i].data = await guarded(options.signal, () => persistPhoto(data.importGallery[i].data, "", `galerie-${i + 1}.jpg`));
+      for (const role of PHOTO_ROLES) persisted.photos[role] = await guarded(options.signal, () => persistPhoto(data.photos[role], empty.photos[role], `${role}.jpg`, before?.data.photos[role], old?.data.photos[role]));
+      for (let i = 0; i < data.importGallery.length; i++) persisted.importGallery[i].data = await guarded(options.signal, () => persistPhoto(data.importGallery[i].data, "", `galerie-${i + 1}.jpg`, before?.data.importGallery[i]?.data, old?.data.importGallery[i]?.data));
       const sourceDocuments = input.replaceSourceDocuments ? [] : [...(before?.sourceDocuments || [])];
       if (sourceDocuments.length + (input.sourceFiles?.length || 0) > LIMITS.sourceDocuments) throw new Error("Trente documents sources maximum par version.");
       for (const file of input.sourceFiles || []) sourceDocuments.push((await guarded(options.signal, () => uploadAsset(input.project, file, file.type === "application/pdf" ? "pdf" : "photo", file.name, options))).id);
@@ -229,7 +246,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
       // as the newer returned revision: keep the exact acknowledged revision.
       const exact = Number(saved.data);
       if (project.revision !== exact) throw new GeneratorConflictError();
-      const result: LoadedProject = { project: { ...project, revision: exact, payload, title: data.state.project.trim() || input.project.title, status: input.status || input.project.status, author_id: who }, data, assets: await guarded(options.signal, () => listAssets(input.project.id, options)), sourceDocuments };
+      const result: LoadedProject = { project: { ...project, revision: exact, payload, title: data.state.project.trim() || input.project.title, status: input.status || input.project.status, author_id: who }, data, assets: await guarded(options.signal, () => listAssets(input.project.id, options)), sourceDocuments, photoHydration: "complete", historicalRevision: null };
       await guarded(options.signal, () => sameActor(who, options.signal)); options.onProgress?.({ stage: "save", completed: 1, total: 1, label: "Révision confirmée" }); abortIfNeeded(options.signal); return result;
     },
     uploadPresentation(project: ProjectRecord, blob: Blob, options: OperationOptions = {}) { return uploadAsset(project, blob, "presentation", `presentation-r${project.revision}.pptx`, options); },

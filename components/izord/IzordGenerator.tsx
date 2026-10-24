@@ -6,7 +6,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { specialistMessage } from "@/lib/i18n/catalogs/specialist";
 
 import { TaskSourceActions } from "@/components/TaskLinkProvider";
-import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
+import { TASK_TARGET_NAVIGATED, taskTargetHref, useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
 import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -15,7 +15,7 @@ import { calculate, errorsFor, number, rentalExportIssues } from "@/lib/izord/fi
 import { analyzeAgencyFiles, applyAgencyReport, IMPORT_FIELDS, type AgencyReport } from "@/lib/izord/agency";
 import { addPhotoFile, assignGalleryPhoto } from "@/lib/izord/photos";
 import { generatePresentation } from "@/lib/izord/presentation";
-import { createGeneratorRepository, type LoadedProject, type ProjectRecord, type VersionRecord, type ProjectStatus } from "@/lib/izord/repository";
+import { canEditLoadedProject, createGeneratorRepository, type LoadedProject, type ProjectRecord, type VersionRecord, type ProjectStatus } from "@/lib/izord/repository";
 import type { GeneratorDraft } from "@/lib/izord/draftRecovery";
 import PresentationPreview from "./PresentationPreview";
 import ProjectSourcePicker from "../fonciere/ProjectSourcePicker";
@@ -45,10 +45,10 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
   const eur = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? new Intl.NumberFormat(locale,{style:"currency",currency:"EUR",minimumFractionDigits:0,maximumFractionDigits:0}).format(value) : displayLabel("À renseigner","izord");
   const pct = (value: number | null) => value === null ? "—" : new Intl.NumberFormat(locale,{minimumFractionDigits:1,maximumFractionDigits:1}).format(value) + " %";
 
-  const [historicalRevision, setHistoricalRevision] = useState<number | null>(null);
+  const [historicalRevision, setHistoricalRevision] = useState<number | null>(()=>recovery?.historicalRevision??recovery?.loaded?.historicalRevision??null);
   const taskFocus = useTaskTargetFocus("presentation", "document");
   const handledTaskFocus = useRef("");
-  const canWrite = !historicalRevision && ["admin","partner","contributor"].includes(role), canApprove = !historicalRevision && ["admin","partner"].includes(role);
+  const roleCanWrite = ["admin","partner","contributor"].includes(role);
   const [projects,setProjects] = useState<ProjectRecord[]>([]), [listLoading,setListLoading] = useState(true);
   const [projectQuery,setProjectQuery]=useState("");
   const projectIndex=useMemo(()=>createSearchIndex(projects,project=>{
@@ -58,6 +58,8 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
   const visibleProjects=useMemo(()=>searchIndex(projectIndex,projectQuery),[projectIndex,projectQuery]);
   const [draftId,setDraftId] = useState(()=>recovery?.draftId??crypto.randomUUID());
   const [data,setData] = useState<ProjectData|null>(recovery?.data??null), [loaded,setLoaded] = useState<LoadedProject|null>(recovery?.loaded??null);
+  const canWrite = roleCanWrite && historicalRevision === null && (!loaded || canEditLoadedProject(loaded));
+  const canApprove = canWrite && ["admin","partner"].includes(role);
   const [dirty,setDirty] = useState(recovery?.dirty??false), [busy,setBusy] = useState(false), [notice,setNotice] = useState(recovery?"Brouillon repris après vérification des droits. Aucune sauvegarde automatique. Décision et état à enregistrer revérifiés. Contrôlez la liste et les transferts : une opération déjà envoyée peut avoir abouti. Relancez toute analyse ou conversion interrompue.":"");
   const [error,setError] = useState(""), [conflict,setConflict] = useState(recovery?.conflict??false), [remote,setRemote] = useState<LoadedProject|null>(null);
   const [workflow,setWorkflow] = useState<ProjectStatus>(recovery?.workflow??"draft"), [versions,setVersions] = useState<VersionRecord[]>([]);
@@ -72,8 +74,8 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
   const financialErrors = data ? [...errorsFor(data.state), ...rentalExportIssues(result!)] : [];
 
   useLayoutEffect(()=>{
-    if(!accessSignal.aborted)onDraft({draftId,data,loaded,dirty,sourceFiles,replaceSourceDocuments,reports,reportIndex,reviewed,pdfFiles,conflict,workflow});
-  },[accessSignal,onDraft,draftId,data,loaded,dirty,sourceFiles,replaceSourceDocuments,reports,reportIndex,reviewed,pdfFiles,conflict,workflow]);
+    if(!accessSignal.aborted)onDraft({draftId,data,loaded,historicalRevision,dirty,sourceFiles,replaceSourceDocuments,reports,reportIndex,reviewed,pdfFiles,conflict,workflow});
+  },[accessSignal,onDraft,draftId,data,loaded,historicalRevision,dirty,sourceFiles,replaceSourceDocuments,reports,reportIndex,reviewed,pdfFiles,conflict,workflow]);
 
   useEffect(() => {
     let alive=true;
@@ -95,10 +97,18 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
   function field(key:keyof ProjectState,value:string|boolean){if(data)edit({...data,state:{...data.state,[key]:value}});}
   function fresh(next=createProjectData(),files:File[]=[]){setHistoricalRevision(null);begin();setDraftId(crypto.randomUUID());setData(next);setLoaded(null);setVersions([]);setSourceFiles(files);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setWorkflow("draft");setDirty(true);setBusy(false);setError("");setConflict(false);setRemote(null);setNotice("Nouveau brouillon — non enregistré");}
   async function refreshList(){const operation=begin();try{const list=await repository.listProjects({signal:operation.signal});if(current(operation.id))setProjects(list);}catch{if(current(operation.id))setError("Liste indisponible.");}}
-  async function open(project:ProjectRecord, revision?:number){
+  async function open(project:ProjectRecord, revision?:number, preserveTarget=false){
     if(!leave())return;setHistoricalRevision(revision ?? null);const operation=begin();setDraftId(crypto.randomUUID());setData(null);setLoaded(null);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setBusy(true);setError("");setNotice("Ouverture…");
-    try{const value=await repository.loadProject(project.id,{signal:operation.signal,hydratePhotos:canWrite && !revision,revision});const history=await repository.listVersions(project.id,{signal:operation.signal});
-      if(current(operation.id)){setDraftId(crypto.randomUUID());setLoaded(value);setData(value.data);setWorkflow(value.project.status);setVersions(history);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setConflict(false);setRemote(null);setNotice("Enregistré · révision "+value.project.revision);}
+    try{const value=await repository.loadProject(project.id,{signal:operation.signal,hydratePhotos:roleCanWrite && revision === undefined,revision});const history=await repository.listVersions(project.id,{signal:operation.signal});
+      if(current(operation.id)){
+        if(!preserveTarget){
+          const reference={type:"presentation",id:value.project.id,...(revision===undefined?{}:{context:{revision:String(revision)}})};
+          handledTaskFocus.current=JSON.stringify(reference);
+          window.history.replaceState(window.history.state,"",taskTargetHref(reference));
+          window.dispatchEvent(new Event(TASK_TARGET_NAVIGATED));
+        }
+        setDraftId(crypto.randomUUID());setLoaded(value);setData(value.data);setWorkflow(value.project.status);setVersions(history);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setConflict(false);setRemote(null);setNotice("Enregistré · révision "+value.project.revision);
+      }
     }catch(e){if(current(operation.id))setError(messageOf(e));}finally{if(current(operation.id))setBusy(false);}
   }
   useEffect(() => {
@@ -112,7 +122,7 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
       if (!project) { setError(language === "en" ? "This presentation is unavailable." : "Cette présentation est inaccessible."); return; }
       const raw = taskFocus.context?.revision;
       const revision = raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined;
-      if (loaded?.project.id !== id || revision !== (historicalRevision ?? undefined)) void open(project, revision);
+      if (loaded?.project.id !== id || revision !== (historicalRevision ?? undefined)) void open(project, revision, taskFocus.type === "document");
     }, 0);
     return () => window.clearTimeout(timer);
     // The repository rechecks RLS for the project, revision and assets.
@@ -130,7 +140,7 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
       const project=loaded?.project??await repository.createProject(snapshot.state.project||"Nouveau projet",{signal:operation.signal});
       if(!current(operation.id))return null;
       // Retain the created identity if a later upload fails; retry never creates a duplicate project.
-      if(!loaded)setLoaded({project,data:snapshot,assets:[],sourceDocuments:[]});
+      if(!loaded)setLoaded({project,data:snapshot,assets:[],sourceDocuments:[],photoHydration:"complete",historicalRevision:null});
       const value=await repository.saveProject({project,data:snapshot,previous:loaded??undefined,status:workflow,sourceFiles,replaceSourceDocuments},{signal:operation.signal,onProgress:p=>{if(current(operation.id))setNotice(p.stage==="save"?"Enregistrement en cours…":`Transfert ${p.label} · ${Math.round(100*p.completed/Math.max(p.total,1))} %`);}});
       if(!current(operation.id))return null;
       setLoaded(value);setData(value.data);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setConflict(false);setRemote(null);setNotice("Enregistré · révision "+value.project.revision);
@@ -205,6 +215,7 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
     {conflict&&<section className={styles.conflict} aria-label={t("izord.conflit_de_sauvegarde_55870f")}><h2>{t("izord.une_version_plus_recente_existe_97a83c")}</h2><p>{t("izord.votre_brouillon_est_conserve_aucun_ecrasemen_48480a")}</p><div className={styles.toolbar}><button disabled={!canExport} onClick={jsonDownload}>{t("izord.exporter_le_json_de_recuperation_c6d97e")}</button><button className={styles.quiet} onClick={async()=>{if(!loaded)return;const operation=begin();try{const value=await repository.loadProject(loaded.project.id,{signal:operation.signal});if(current(operation.id))setRemote(value);}catch(e){if(current(operation.id))setError(messageOf(e));}}}>{t("izord.comparer_a_la_version_partagee_d6423a")}</button>{loaded&&<button className={styles.quiet} onClick={()=>void open(loaded.project)}>{t("izord.recharger_la_version_partagee_dc8c85")}</button>}</div>{remote&&<details open><summary>{t("izord.version_partagee_fd7b16")}{" "}{remote.project.revision}{" "}{t("izord._votre_brouillon_reste_dans_le_formulaire_2337ff")}</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(remote.data.state,null,2)}</pre></details>}</section>}
     {data&&result&&<>
       {historicalRevision && <p role="status">{language === "en" ? "Historical revision (read only)" : "Révision historique (lecture seule)"} · r{historicalRevision}</p>}
+      {loaded && historicalRevision === null && !canEditLoadedProject(loaded) && <p role="status">{language === "en" ? "Read only: the photographs have not been loaded. Reopen the current revision before editing." : "Lecture seule : les photographies n’ont pas été chargées. Rouvrez la version actuelle avant de modifier le dossier."}{roleCanWrite && <button className={styles.quiet} disabled={busy} onClick={()=>void open(loaded.project)}>{t("izord.recharger_la_version_partagee_dc8c85")}</button>}</p>}
       <TaskSourceActions reference={loaded ? { type: "presentation", id: loaded.project.id } : undefined} saved={Boolean(loaded)} title={language === "en" ? "Review the presentation" : "Vérifier la présentation"} />
       {loaded && <TaskSourceActions reference={{ type: "presentation", id: loaded.project.id, context: { revision: String(loaded.project.revision) } }} title={language === "en" ? "Review this presentation revision" : "Vérifier cette révision de présentation"} />}
       <div className={styles.toolbar}>{canWrite&&<><button disabled={busy||(!dirty&&!!loaded)||loaded?.project.status==="approved"&&!canApprove} onClick={()=>void save()}>{t("izord.enregistrer_f7c8bc")}</button><button className={styles.quiet} disabled={busy||!canExport} onClick={jsonDownload}>{dirty?t("izord.exporter_le_json_de_recuperation_c6d97e"):t("izord.exporter_le_json_4be389")}</button><button disabled={busy||!canExport||financialErrors.length>0||loaded?.project.status==="approved"} onClick={()=>void exportPpt()}>{t("izord.generer_le_powerpoint_0577c8")}</button></>}{busy&&<button className={styles.quiet} onClick={()=>{controller.current?.abort();epoch.current++;setBusy(false);setNotice("Opération interrompue. Vérifiez l’état partagé et les transferts avant de reprendre.");}}>{t("izord.interrompre_f36bd2")}</button>}</div>

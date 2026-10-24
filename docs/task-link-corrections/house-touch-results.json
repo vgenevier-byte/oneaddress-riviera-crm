@@ -1,0 +1,23 @@
+{
+  "actualCRMComponents": true,
+  "actualLocalAuth": true,
+  "physicalDevice": false,
+  "emulatedTouch": true,
+  "isMobile": true,
+  "hasTouch": true,
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "taskWrites": 0,
+  "businessWrites": 0,
+  "results": [
+    {
+      "name": "390 px coarse-pointer touch: option tap, typing preserves ID, clear tap, All houses, toggle tap, cancel without save",
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "externalRequests": [],
+  "taskMutations": 0
+}

@@ -1,0 +1,16 @@
+{
+  "project": "jcmnwvlmysecrahupfkk",
+  "migration": {"name":"task_house_search_address","installedVersion":"20261024155213","source":"supabase/migrations/20261024153223_task_house_search_address.sql"},
+  "dataHashesBeforeAndAfterIdentical": {
+    "workspace":"1d926883f5866063cd44796cc8cf6f64",
+    "tasks":"77a096ba1eb8e4dad58b55f1de040f9d",
+    "projects":"d751713988987e9331980363e24189ce",
+    "versions":"d751713988987e9331980363e24189ce",
+    "assets":"d751713988987e9331980363e24189ce",
+    "grants":"43ab452815542b0b6b855ec53324329b"
+  },
+  "originalResolverPreserved":"7f81244023feb7608434d957d889fa59",
+  "newResolverBodyHash":"a3bec22d842d9d131961645668be6b40",
+  "privateHelperExecute":{"anon":false,"authenticated":false},
+  "authenticatedPhotoWorkflowInProduction":false
+}

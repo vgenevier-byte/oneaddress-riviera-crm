@@ -1,0 +1,16 @@
+{
+  "realAuth": true,
+  "realHTTPRPC": true,
+  "realPostgres": true,
+  "fictional": true,
+  "results": [
+    {
+      "name": "additive house search migration preserves workspace, canonical task rows and journal, and replays identically",
+      "passed": true
+    },
+    {
+      "name": "real authorized RPC pages include a house beyond page one with name/address/city and no restricted disclosure",
+      "passed": true
+    }
+  ]
+}

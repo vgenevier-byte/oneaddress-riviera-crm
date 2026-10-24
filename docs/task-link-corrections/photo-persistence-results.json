@@ -1,0 +1,44 @@
+{
+  "actualPostgres": true,
+  "freshAuthRead": true,
+  "actualStorage": true,
+  "hashMethod": "SHA256 of JSON with recursively sorted object keys; arrays preserve order",
+  "results": [
+    {
+      "name": "raw DB, fresh Auth and Storage persistence Présentation photos fictives A e42cfd98",
+      "passed": true,
+      "projectId": "d037dcad-8dce-49fd-a27c-a12fbd1b204e",
+      "revisionBefore": 3,
+      "revisionAfter": 4,
+      "beforePhotoStateHash": "b4adb2cb7ea2ff31b624e21cacef6c9b5365da99c6aee370ae6d47edabedb6fe",
+      "afterPhotoStateHash": "b4adb2cb7ea2ff31b624e21cacef6c9b5365da99c6aee370ae6d47edabedb6fe",
+      "beforeSlotsHash": "ccf1eb16eb2f50fae76e5235980818642145142b656e0bc4f7c8cc8ffac9adbc",
+      "afterSlotsHash": "ccf1eb16eb2f50fae76e5235980818642145142b656e0bc4f7c8cc8ffac9adbc",
+      "historicalVersionsUnchanged": true,
+      "assetRowsUnchanged": true,
+      "photoAssets": 6,
+      "sourceDocuments": 1,
+      "referenceSlots": 7,
+      "storageBytesUnchanged": true,
+      "onlyEditedField": "data.state.features"
+    },
+    {
+      "name": "raw DB, fresh Auth and Storage persistence Présentation photos fictives B ec6c7721",
+      "passed": true,
+      "projectId": "4910abb7-d193-49da-8e60-ce58653317b8",
+      "revisionBefore": 3,
+      "revisionAfter": 4,
+      "beforePhotoStateHash": "bda3a6d970db68969f73d59b539d58c40de8cd49386253c58d0c6b8e92525f35",
+      "afterPhotoStateHash": "bda3a6d970db68969f73d59b539d58c40de8cd49386253c58d0c6b8e92525f35",
+      "beforeSlotsHash": "57d17720c27316d846151ead010e6671383e44f6400acf41a620c9c2bfdb73eb",
+      "afterSlotsHash": "57d17720c27316d846151ead010e6671383e44f6400acf41a620c9c2bfdb73eb",
+      "historicalVersionsUnchanged": true,
+      "assetRowsUnchanged": true,
+      "photoAssets": 6,
+      "sourceDocuments": 1,
+      "referenceSlots": 7,
+      "storageBytesUnchanged": true,
+      "onlyEditedField": "data.state.features"
+    }
+  ]
+}

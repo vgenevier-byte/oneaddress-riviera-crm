@@ -8,6 +8,7 @@ export type GeneratorDraft = {
   draftId: string;
   data: ProjectData | null;
   loaded: LoadedProject | null;
+  historicalRevision: number | null;
   dirty: boolean;
   sourceFiles: File[];
   replaceSourceDocuments?: boolean;
@@ -39,6 +40,13 @@ export function resumeGeneratorDraft(recovery: DraftRecovery, userId: string, ro
   const draft = recovery.draft;
   if (draft.loaded && project?.id !== draft.loaded.project.id) return undefined;
   if (!draft.loaded && project) return undefined;
+  if (!draft.loaded && draft.historicalRevision !== null) return undefined;
+  if (draft.loaded && (draft.loaded.historicalRevision !== draft.historicalRevision
+    || !["complete", "omitted"].includes(draft.loaded.photoHydration)
+    || draft.historicalRevision !== null && draft.loaded.project.revision !== draft.historicalRevision)) return undefined;
+  // Historical/view markers remain part of the recovered snapshot. Recovery
+  // never upgrades an omitted-photo projection into an editable baseline.
+  if (draft.historicalRevision !== null) return { ...draft, loaded: draft.loaded ? { ...draft.loaded, assets: [] } : null };
   // The old CAS revision is deliberately retained. A remote save must conflict.
   // Official workflow and proposed decision are read anew, never revived as authority.
   const decision = (project?.payload as { data?: { state?: { decision?: unknown } } } | undefined)?.data?.state?.decision;

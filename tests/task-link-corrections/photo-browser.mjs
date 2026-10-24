@@ -1,0 +1,50 @@
+/** Actual presentation view on an isolated local production build. Writes only
+ * one text field on each newly created fictitious dossier. No photo/provider
+ * generation; historical/reader checks submit no business mutation. */
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {chromium} from '/Users/vg/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+const fixture=JSON.parse(readFileSync('/private/tmp/oar-task-link-corrections/photo-fixture.private.json','utf8'));
+const app='http://127.0.0.1:3198',api='http://127.0.0.1:55931',out='/private/tmp/oar-task-link-corrections';
+if(process.env.TASK_LINK_CORRECTIONS_ACK!=='TASK_LINK_CORRECTIONS_DISPOSABLE_LOCAL_ONLY'||fixture.api!==api)throw Error('Explicit isolated photo-regression bench required');
+mkdirSync(out,{recursive:true});
+const browser=await chromium.launch({headless:true,channel:'chrome'}),results=[],pageErrors=[],events=[];
+const photoHash=value=>createHash('sha256').update(Buffer.from(value.slice(value.indexOf(',')+1),'base64')).digest('hex');
+const currentTarget=id=>({type:'presentation',id});
+const historicUrl=project=>app+'/izord?crmTarget='+encodeURIComponent(JSON.stringify({...currentTarget(project.id),context:{revision:String(project.historicalRevision)}}));
+async function context(){const ctx=await browser.newContext({viewport:{width:1440,height:1100}});await ctx.route('**/*',route=>{const url=new URL(route.request().url());return [app,api].includes(url.origin)?route.continue():route.abort();});ctx.on('page',page=>{page.on('pageerror',e=>pageErrors.push(e.message));page.on('dialog',d=>d.accept());page.on('request',request=>{const url=new URL(request.url());if(url.origin===api&&request.method()!=='GET'&&/izord_save_generator|izord_register_generator_asset|izord_finalize_asset|\/storage\/v1\/object/.test(url.pathname))events.push({path:url.pathname,method:request.method()});});});return ctx;}
+async function login(page,who){await page.goto(app+'/izord');await page.locator('input[type=email]').fill(who.email);await page.locator('input[type=password]').fill(who.password);await page.locator('input[type=password]').press('Enter');await page.locator('[data-izord-generator]').waitFor({timeout:30000});await page.getByRole('button',{name:'Français — FR',exact:true}).first().click();}
+const status=page=>page.locator('[data-izord-generator] > [role=status]');
+async function waitCurrent(page,project,revision){await status(page).filter({hasText:new RegExp('Enregistré · révision '+revision+'$')}).waitFor({timeout:30000});assert.equal(await page.locator('#izord-project').inputValue(),project.title);await page.waitForFunction(()=>{const field=document.getElementById('izord-features');return field&&!field.disabled&&!field.closest('fieldset')?.disabled;},{},{timeout:15000});}
+async function openCurrent(page,project){const list=page.locator('details').filter({has:page.locator('summary').filter({hasText:/Dossiers accessibles/})});if(!await list.evaluate(el=>el.open))await list.locator('summary').click();await page.getByRole('button',{name:'Ouvrir '+project.title,exact:true}).click();await waitCurrent(page,project,project.currentRevision);const target=JSON.parse(new URL(page.url()).searchParams.get('crmTarget'));assert.deepEqual(target,currentTarget(project.id),'explicit current open persists exact current dossier in URL');}
+async function assertPhotos(page,project){const sources=await page.locator('[data-izord-generator] img').evaluateAll(images=>images.map(image=>image.getAttribute('src')||'').filter(src=>src.startsWith('data:image/jpeg;base64,')));const hashes=new Set(sources.map(photoHash));for(const asset of project.assets.filter(a=>a.kind==='photo'))assert(hashes.has(asset.sha256),'stored photo bytes not hydrated: '+asset.id);const selected=await page.locator('[data-izord-generator] select').evaluateAll(selects=>selects.filter(select=>(select.getAttribute('aria-label')||'').includes('Choisir dans')).map(select=>select.value));return{renderedImageHashes:[...hashes].sort(),originalPhotoHashes:project.assets.filter(a=>a.kind==='photo').map(a=>a.sha256).sort(),selected};}
+async function shot(page,name){const heading=page.getByRole('heading',{name:'Photographies de synthèse',exact:true});if(await heading.count())await heading.scrollIntoViewIfNeeded();await page.screenshot({path:out+'/'+name+'.png',fullPage:false});}
+async function test(name,fn){try{await fn();results.push({name,passed:true});console.log('PASS '+name);}catch(error){results.push({name,passed:false,error:error.message});console.log('FAIL '+name+' '+error.message);throw error;}}
+let failure,activePage;
+try{
+ const ownerContext=await context(),owner=await ownerContext.newPage();activePage=owner;await login(owner,fixture.owner);
+ for(const [index,project]of fixture.projects.entries()){
+  await test('historical revision is read-only before reopening current dossier '+(index+1),async()=>{await owner.goto(historicUrl(project));await owner.getByText('Révision historique (lecture seule)',{exact:false}).waitFor({timeout:30000});assert.equal(await owner.locator('#izord-features').inputValue(),project.baseline.versions.find(v=>v.revision===2).payload.data.state.features);assert.equal(await owner.locator('#izord-features').isEnabled(),false);assert.equal(await owner.getByRole('button',{name:'Enregistrer',exact:true}).count(),0);await shot(owner,'photo-'+(index+1)+'-historic-readonly');});
+  await test('historic to current, text-only save and native reload retain all real photo bytes in dossier '+(index+1),async()=>{
+   await openCurrent(owner,project);const before=await assertPhotos(owner,project);await shot(owner,'photo-'+(index+1)+'-current-before');const writesBefore=events.length;
+   await owner.locator('#izord-features').fill(project.editedText);await owner.getByRole('button',{name:'Enregistrer',exact:true}).click();await waitCurrent(owner,project,project.currentRevision+1);
+   assert.equal(events.length-writesBefore,1,'text save sends one save RPC and no photo upload/register/finalize');assert.equal(events.at(-1).path,'/rest/v1/rpc/izord_save_generator');
+   await owner.reload();await waitCurrent(owner,project,project.currentRevision+1);assert.equal(await owner.locator('#izord-features').inputValue(),project.editedText);const after=await assertPhotos(owner,project);assert.deepEqual(after.renderedImageHashes,before.renderedImageHashes);await shot(owner,'photo-'+(index+1)+'-reloaded-preserved');
+   writeFileSync(out+'/photo-ui-'+(index+1)+'-proof.json',JSON.stringify({projectId:project.id,before,after,revisionBefore:3,revisionAfter:4,textOnly:true,nativeReload:true,photoUploadsDuringSave:0},null,2));
+  });
+ }
+ await test('historical recovery after a bounded local access outage keeps revision2 read-only',async()=>{
+  const project=fixture.projects[0];await owner.goto(historicUrl(project));await owner.getByText('Révision historique (lecture seule)',{exact:false}).waitFor();const writesBefore=events.length;
+  const pattern=url=>url.origin===api&&url.pathname==='/rest/v1/app_memberships';let injected=0;
+  const fail=route=>{if(route.request().method()!=='GET')return route.continue();injected++;return route.fulfill({status:503,contentType:'application/json',body:'{"message":"Fictitious local access verification outage"}'});};
+  await owner.route(pattern,fail);await owner.evaluate(()=>window.dispatchEvent(new Event('focus')));await owner.getByRole('alert').filter({hasText:/indisponible/i}).waitFor({timeout:20000});assert.equal(await owner.locator('[data-izord-generator]').count(),0);
+  await owner.unroute(pattern,fail);await owner.evaluate(()=>window.dispatchEvent(new Event('focus')));await owner.locator('[data-izord-generator]').waitFor({timeout:20000});await owner.getByText('Révision historique (lecture seule)',{exact:false}).waitFor();assert.equal(await owner.locator('#izord-features').isEnabled(),false);assert.equal(await owner.getByRole('button',{name:'Enregistrer',exact:true}).count(),0);assert.equal(await owner.locator('#izord-features').inputValue(),project.baseline.versions.find(v=>v.revision===2).payload.data.state.features);assert(injected>0);assert.equal(events.length,writesBefore);await shot(owner,'photo-historic-recovery-readonly');
+ });
+ const readerContext=await context(),reader=await readerContext.newPage();activePage=reader;await login(reader,fixture.reader);
+ for(const [index,project]of fixture.projects.entries())await test('assigned reader can open current and historical dossier but cannot edit '+(index+1),async()=>{
+  const writesBefore=events.length;await reader.goto(app+'/izord?crmTarget='+encodeURIComponent(JSON.stringify(currentTarget(project.id))));await reader.locator('#izord-project').waitFor({timeout:30000});assert.equal(await reader.locator('#izord-project').inputValue(),project.title);assert.equal(await reader.locator('#izord-features').isEnabled(),false);assert.equal(await reader.getByRole('button',{name:'Enregistrer',exact:true}).count(),0);
+  await reader.goto(historicUrl(project));await reader.getByText('Révision historique (lecture seule)',{exact:false}).waitFor();assert.equal(await reader.locator('#izord-features').isEnabled(),false);assert.equal(await reader.getByRole('button',{name:'Enregistrer',exact:true}).count(),0);assert.equal(events.length,writesBefore);await shot(reader,'photo-reader-'+(index+1)+'-readonly');
+ });
+ assert.deepEqual(pageErrors,[]);
+}catch(error){failure=error.message;process.exitCode=1;if(activePage){await activePage.screenshot({path:out+'/photo-failure.png',fullPage:false});writeFileSync(out+'/photo-failure-text.txt',await activePage.locator('body').innerText());}}finally{writeFileSync(out+'/photo-browser-results.json',JSON.stringify({actualBusinessView:true,actualAuth:true,actualRpc:true,actualStorage:true,appMode:'production-local',loopbackOnly:true,paidGenerationCalls:0,instagramPublications:0,results,pageErrors,events,failure},null,2));await browser.close();}

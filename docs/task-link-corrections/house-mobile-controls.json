@@ -1,0 +1,36 @@
+[
+  {
+    "label": "Clear selection",
+    "rect": {
+      "x": 266,
+      "y": 568.28125,
+      "width": 32,
+      "height": 40
+    },
+    "computed": {
+      "width": "32px",
+      "minWidth": "32px",
+      "maxWidth": "32px",
+      "left": "213px",
+      "right": "39px",
+      "padding": "0px 7px"
+    }
+  },
+  {
+    "label": "Show suggestions",
+    "rect": {
+      "x": 302,
+      "y": 568.28125,
+      "width": 32,
+      "height": 40
+    },
+    "computed": {
+      "width": "32px",
+      "minWidth": "32px",
+      "maxWidth": "32px",
+      "left": "249px",
+      "right": "3px",
+      "padding": "0px 7px"
+    }
+  }
+]

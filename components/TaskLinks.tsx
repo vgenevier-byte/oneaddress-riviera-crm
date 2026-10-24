@@ -6,6 +6,8 @@ import { isCivilDate, taskTargetKey } from "@/lib/tasks/domain";
 import type { TaskApi, TaskLink, TaskLinkChanges, TaskTarget, TaskTargetRef } from "@/lib/tasks/types";
 import { getVendorInvoiceRemaining, getVendorInvoiceStatus } from "@/lib/vendorFinance";
 import { SearchMatchHint } from "./search/SearchMatchHint";
+import { SearchableSelect } from "./search/SearchableSelect";
+import { loadTaskHouses } from "@/lib/tasks/houseOptions";
 
 const names: Record<string, [string, string]> = {
   contact: ["Contact", "Contact"], lead: ["Demande client", "Enquiry"], quote: ["Devis client", "Customer quote"], booking: ["Réservation", "Booking"],
@@ -52,14 +54,6 @@ export function TaskLinksEditor({ api, links, changes = {}, onChange, onOpen, di
   const [additions, setAdditions] = useState<TaskTarget[]>([]);
   const [configuring, setConfiguring] = useState<TaskTarget | null>(null);
   const [contextError, setContextError] = useState("");
-  const [houses, setHouses] = useState<TaskTarget[]>([]);
-  const [houseQuery, setHouseQuery] = useState("");
-  useEffect(() => {
-    if (!configuring || !api.searchTargets) return;
-    let cancelled = false;
-    void api.searchTargets(houseQuery, "house", 0, 200).then(page => { if (!cancelled) setHouses(page.items); }).catch(() => { if (!cancelled) setHouses([]); });
-    return () => { cancelled = true; };
-  }, [api, Boolean(configuring), houseQuery]); // eslint-disable-line react-hooks/exhaustive-deps
   const searchEpoch = useRef(0), resolveEpoch = useRef(0);
   const additionKey = JSON.stringify(changes.add ?? []);
   useEffect(() => {
@@ -98,7 +92,7 @@ export function TaskLinksEditor({ api, links, changes = {}, onChange, onOpen, di
   }, [links, changes, additions]);
   const closeSearch = () => { setConfiguring(null); setContextError(""); setSearching(false); setPage({ items: [], hasMore: false }); setQuery(""); setError(""); };
   function choose(target: TaskTarget) {
-    if (["worker_period", "monthly_charges"].includes(target.ref.type)) { setConfiguring(target); setContextError(""); setHouses([]); setHouseQuery(""); }
+    if (["worker_period", "monthly_charges"].includes(target.ref.type)) { setConfiguring(target); setContextError(""); }
     else add(target);
   }
   function contextChange(key: string, value: string) {
@@ -137,11 +131,10 @@ export function TaskLinksEditor({ api, links, changes = {}, onChange, onOpen, di
       {busy && <p role="status">{en ? "Searching all authorized items…" : "Recherche dans tous les éléments autorisés…"}</p>}
       {error && <p role="alert">{error}</p>}
       {!busy && !error && !page.items.length && <p role="status">{en ? "No authorized matches" : "Aucun résultat autorisé"}</p>}
-      <div aria-label={en ? "CRM search results" : "Résultats CRM"}>{[...new Set(page.items.map(item => item.ref.type))].map(group => <section key={group}><h4>{taskTargetTypeLabel(group, language)}</h4>{page.items.filter(item => item.ref.type === group).map(item => <article className="task-link-result" key={taskTargetKey(item.ref)}><div><strong>{item.label}</strong>{item.detail && <p>{item.detail}</p>}{item.status && <small>{item.status}</small>}<SearchMatchHint approximate={item.approximate === true} /></div><button type="button" disabled={activeLinks.some(link => link.target && taskTargetKey(link.target) === taskTargetKey(item.ref))} onClick={() => choose(item)}>{en ? "Link item" : "Lier l’élément"}</button></article>)}</section>)}</div>
+      <div aria-label={en ? "CRM search results" : "Résultats CRM"}>{[...new Set(page.items.map(item => item.ref.type))].map(group => <section key={group}><h4>{taskTargetTypeLabel(group, language)}</h4>{page.items.filter(item => item.ref.type === group).map(item => <article className="task-link-result" key={taskTargetKey(item.ref)} data-task-target-key={taskTargetKey(item.ref)}><div><strong>{item.label}</strong>{item.detail && <p>{item.detail}</p>}{item.status && <small>{item.status}</small>}<SearchMatchHint approximate={item.approximate === true} /></div><button type="button" disabled={activeLinks.some(link => link.target && taskTargetKey(link.target) === taskTargetKey(item.ref))} onClick={() => choose(item)}>{en ? "Link item" : "Lier l’élément"}</button></article>)}</section>)}</div>
       {configuring && <section className="task-link-context" aria-label={en ? "Link context" : "Contexte du rattachement"}><h4>{configuring.label}</h4>
         {configuring.ref.type === "worker_period" ? <><p>{en ? "This work period is separate from the task deadline. No time entry is required to create this link." : "Cette période de travail est distincte de l’échéance de la tâche. Aucune ligne d’heures n’est nécessaire pour créer ce lien."}</p><label>{en ? "Work period start" : "Début de la période de travail"}<input type="date" value={configuring.ref.context?.startDate ?? ""} onChange={event => contextChange("startDate", event.target.value)} /></label><label>{en ? "Work period end" : "Fin de la période de travail"}<input type="date" value={configuring.ref.context?.endDate ?? ""} onChange={event => contextChange("endDate", event.target.value)} /></label></> : <label>{en ? "Charges month" : "Mois des charges"}<input type="month" value={configuring.ref.id} onChange={event => { const id = event.target.value; setConfiguring(previous => previous ? { ...previous, ref: { ...previous.ref, id } } : previous); }} /></label>}
-        {(configuring.ref.type === "worker_period" || configuring.ref.context?.source === "hours") && <><label>{en ? "Find a house (optional)" : "Rechercher une maison (facultatif)"}<input type="search" value={houseQuery} onChange={event => setHouseQuery(event.target.value)} placeholder={en ? "Name, city…" : "Nom, ville…"} /></label>
-        <label>{en ? "House" : "Maison"}<select value={configuring.ref.context?.houseId ?? ""} onChange={event => contextChange("houseId", event.target.value)}><option value="">{en ? "All houses" : "Toutes les maisons"}</option>{houses.map(house => <option value={house.ref.id} key={house.ref.id}>{house.label} · {house.detail}</option>)}{configuring.ref.context?.houseId && !houses.some(house => house.ref.id === configuring.ref.context?.houseId) && <option value={configuring.ref.context.houseId}>{en ? "Selected house · refine search to review" : "Maison sélectionnée · affinez la recherche pour la vérifier"}</option>}</select></label></>}
+        {(configuring.ref.type === "worker_period" || configuring.ref.context?.source === "hours") && <TaskHouseSelector key={scope} api={api} scope={scope} houseId={configuring.ref.context?.houseId ?? ""} onChange={houseId => contextChange("houseId", houseId)} disabled={disabled} />}
         {contextError && <p role="alert">{contextError}</p>}<div className="task-link-actions"><button type="button" onClick={addContext}>{en ? "Link this context" : "Lier ce contexte"}</button><button type="button" onClick={() => setConfiguring(null)}>{en ? "Cancel context" : "Annuler ce contexte"}</button></div>
       </section>}
       <div className="task-link-actions">{offset > 0 && <button type="button" disabled={busy} onClick={() => setOffset(value => Math.max(0, value - 40))}>{en ? "Previous page" : "Page précédente"}</button>}{page.hasMore && <button type="button" disabled={busy} onClick={() => setOffset(value => value + 40)}>{en ? "Next page" : "Page suivante"}</button>}<button type="button" onClick={closeSearch}>{en ? "Close search" : "Fermer la recherche"}</button></div>
@@ -149,6 +142,54 @@ export function TaskLinksEditor({ api, links, changes = {}, onChange, onOpen, di
   </fieldset>;
 }
 
+/** Selection and search are independent: typing cannot change houseId. Options
+ * remain complete while the common select filters its suggestions locally. */
+function TaskHouseSelector({ api, scope, houseId, onChange, disabled }: {
+  api: TaskApi; scope: string; houseId: string; onChange: (houseId: string) => void; disabled: boolean;
+}) {
+  const { language } = useI18n(); const en = language === "en";
+  const [snapshot, setSnapshot] = useState<{ scope: string; items: TaskTarget[]; status: "loading" | "ready" | "error" }>({ scope, items: [], status: "loading" });
+  const [retry, setRetry] = useState(0);
+  const epoch = useRef(0);
+  useEffect(() => {
+    let cancelled = false;
+    let pending: AbortController | undefined;
+    async function refresh() {
+      pending?.abort();
+      const controller = new AbortController(); pending = controller;
+      const ticket = ++epoch.current;
+      setSnapshot({ scope, items: [], status: "loading" });
+      try {
+        if (!api.searchTargets) throw new Error("Catalogue indisponible.");
+        const items = await loadTaskHouses(api.searchTargets, controller.signal);
+        if (!cancelled && ticket === epoch.current) setSnapshot({ scope, items, status: "ready" });
+      } catch {
+        if (!cancelled && ticket === epoch.current) setSnapshot({ scope, items: [], status: "error" });
+      }
+    }
+    void refresh();
+    const focus = () => { if (document.visibilityState === "visible") void refresh(); };
+    window.addEventListener("focus", focus);
+    const timer = window.setInterval(focus, 15000);
+    return () => { cancelled = true; pending?.abort(); window.removeEventListener("focus", focus); window.clearInterval(timer); };
+  }, [api, scope, retry]);
+  const houses = snapshot.scope === scope ? snapshot.items : [];
+  const status = snapshot.scope === scope ? snapshot.status : "loading";
+  const error = status === "error" ? en ? "Houses unavailable. Check your access and retry." : "Maisons indisponibles. Vérifiez vos droits et réessayez." : undefined;
+  return <div className="task-house-selector" data-task-house-status={status}>
+    <label>{en ? "House (optional)" : "Maison (facultatif)"}<SearchableSelect name="taskContextHouseId" aria-label={en ? "House (optional)" : "Maison (facultatif)"} value={houseId} loading={status === "loading"} error={error} disabled={disabled} placeholder={en ? "Name, address, city…" : "Nom, adresse, ville…"} onChange={event => {
+      const id = event.currentTarget.value;
+      if (!disabled && status === "ready" && (!id || houses.some(house => house.ref.id === id))) onChange(id);
+    }}><option value="">{en ? "All houses" : "Toutes les maisons"}</option>{houses.map(house => <option value={house.ref.id} key={house.ref.id} data-search={[house.label,house.detail,...(house.searchFields ?? [])].filter(Boolean).join(" ")} data-secondary={house.detail}>{house.label}</option>)}{houseId && !houses.some(house => house.ref.id === houseId) && <option value={houseId} disabled>{en ? "Selected house (details unavailable)" : "Maison sélectionnée (détails indisponibles)"}</option>}</SearchableSelect></label>
+    {status === "loading" && <p role="status">{en ? "Loading authorized houses…" : "Chargement des maisons autorisées…"}</p>}
+    {error && <><p role="alert">{error}</p><button type="button" disabled={disabled} onClick={() => setRetry(value => value + 1)}>{en ? "Retry houses" : "Réessayer les maisons"}</button></>}
+  </div>;
+}
+
 function TaskLinkStyles() { return <style jsx global>{`
 .task-links-cards{display:grid;gap:8px;min-width:0}.task-link-card,.task-link-result{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px;border:1px solid #dce1e7;border-radius:8px;background:#f8fafb;overflow-wrap:anywhere}.task-link-card>div:first-child,.task-link-result>div{flex:1 1 200px;min-width:0}.task-link-card strong{display:block;margin:4px 0}.task-link-card p,.task-link-result p{margin:4px 0;font-size:13px}.task-link-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.task-link-search{display:grid;gap:10px;margin-top:12px}.task-link-result{margin:6px 0}.task-links-editor>button{margin:10px 6px 0 0}.task-link-search h4{margin:14px 0 6px}.task-link-context{display:grid;gap:10px;padding:12px;border:1px solid #a5b9ce;border-radius:8px}.task-link-card small{color:#626d7c}.task-link-result button{flex:0 0 auto}
+/* The CRM mobile button rule uses width:100%; constrain only this selector’s inline controls. */
+.task-house-selector [data-searchable-select] > span:first-child > button{width:32px;min-width:32px;max-width:32px}
+.task-house-selector [data-searchable-select] > span:first-child > button:not(:last-child){right:39px}
+.task-house-selector input[role="combobox"]{padding-right:78px}
 `}</style>; }

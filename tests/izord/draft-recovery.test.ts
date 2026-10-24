@@ -7,7 +7,8 @@ function recovery(existing = true): DraftRecovery {
   const data = createProjectData(); data.state.acq = '612345'; data.state.decision = 'GO';
   return { userId: 'fixture-account-a', workspace: 'izord', role: 'contributor', draft: {
     draftId: 'fixture-draft', data, dirty: true, workflow: 'approved', conflict: false,
-    loaded: existing ? { project: { id: 'fixture-project', revision: 2, status: 'draft', payload: {} }, data, assets: [{id: 'old-asset'}], sourceDocuments: [] } as unknown as LoadedProject : null,
+    historicalRevision: null,
+    loaded: existing ? { photoHydration: 'complete', historicalRevision: null, project: { id: 'fixture-project', revision: 2, status: 'draft', payload: {} }, data, assets: [{id: 'old-asset'}], sourceDocuments: [] } as unknown as LoadedProject : null,
     sourceFiles: [new File(['fixture'], 'fixture.pdf')], reports: [], reportIndex: 0, reviewed: false, pdfFiles: [],
   }};
 }
@@ -49,4 +50,24 @@ test('target binds explicit draft, project and original revision, including unsa
   const held=recovery(); assert.equal(draftTarget(held.draft),'fixture-draft:fixture-project:2');
   assert.notEqual(draftTarget({...held.draft,draftId:'replacement'}),draftTarget(held.draft));
   assert.equal(draftTarget(recovery(false).draft),'fixture-draft:new:new');
+});
+
+test('historical recovery keeps its exact revision and remains read-only after a newer current revision', () => {
+  const held=recovery();held.draft.historicalRevision=2;held.draft.loaded={...held.draft.loaded!,historicalRevision:2,photoHydration:'omitted'};
+  const resumed=resumeGeneratorDraft(held,held.userId,held.role,project)!;
+  assert.equal(resumed.historicalRevision,2);assert.equal(resumed.loaded?.historicalRevision,2);assert.equal(resumed.loaded?.photoHydration,'omitted');
+  assert.equal(resumed.loaded?.project.revision,2);assert.equal(resumed.loaded?.project.status,'draft');assert.equal(resumed.data?.state.decision,'GO');
+});
+test('omitted current-view recovery retains its completeness marker and cannot become an editable baseline', () => {
+  const held=recovery();held.draft.loaded={...held.draft.loaded!,photoHydration:'omitted'};
+  const resumed=resumeGeneratorDraft(held,held.userId,held.role,project)!;
+  assert.equal(resumed.historicalRevision,null);assert.equal(resumed.loaded?.photoHydration,'omitted');
+});
+test('recovery refuses incoherent history, unknown completeness and historical context without a saved dossier', () => {
+  const inconsistent=recovery();inconsistent.draft.historicalRevision=2;
+  assert.equal(resumeGeneratorDraft(inconsistent,inconsistent.userId,inconsistent.role,project),undefined);
+  const unknown=recovery();delete (unknown.draft.loaded as unknown as {photoHydration?:string}).photoHydration;
+  assert.equal(resumeGeneratorDraft(unknown,unknown.userId,unknown.role,project),undefined);
+  const unsaved=recovery(false);unsaved.draft.historicalRevision=2;
+  assert.equal(resumeGeneratorDraft(unsaved,unsaved.userId,unsaved.role,null),undefined);
 });
