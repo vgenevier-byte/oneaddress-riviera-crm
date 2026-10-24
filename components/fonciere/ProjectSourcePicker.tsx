@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import type { ProjectData } from "@/lib/izord/model";
 import { createFonciereRepository, type FonciereProjectRecord, type LoadedFonciereProject } from "@/lib/fonciere/repository";
@@ -20,7 +21,8 @@ export default function ProjectSourcePicker({ data, sourceFiles, draftId, loadSo
   const [locale] = useFonciereLocale(), tr = (fr: string, en: string) => locale === "en" ? en : fr;
   const begin = useScopedOperations("izord");
   const [mode, setMode] = useState<"saved" | "direct">("saved");
-  const [projects, setProjects] = useState<FonciereProjectRecord[]>([]), [query, setQuery] = useState("");
+  const [projects, setProjects] = useState<FonciereProjectRecord[]>([]);
+  const [listLoading, setListLoading] = useState(true);
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const lifetime = useRef(0);
   const pendingProject = useRef<LoadedFonciereProject | null>(null);
@@ -31,8 +33,12 @@ export default function ProjectSourcePicker({ data, sourceFiles, draftId, loadSo
   useEffect(() => {
     const current = ++lifetime.current;
     void (async () => {
+      await Promise.resolve();
+      if (current !== lifetime.current || accessSignal.aborted) return;
+      setListLoading(true);
       try { const op = await begin(); const list = await op.run(() => createFonciereRepository(op.client).listProjects({ signal: AbortSignal.any([op.signal, accessSignal]) })); if (current === lifetime.current && !accessSignal.aborted) setProjects(list); }
       catch (error) { if (current === lifetime.current && !accessSignal.aborted && !isCancelled(error)) setMessage("list-unavailable"); }
+      finally { if (current === lifetime.current && !accessSignal.aborted) setListLoading(false); }
     })();
     return invalidate;
   }, [begin, accessSignal, draftId, invalidate]);
@@ -74,11 +80,15 @@ export default function ProjectSourcePicker({ data, sourceFiles, draftId, loadSo
     } catch (error) { if (current === lifetime.current && !isCancelled(error)) setMessage(error instanceof Error ? error.message : tr("Enregistrement non confirmé.", "Save not confirmed.")); }
     finally { if (current === lifetime.current) working(false); }
   }
-  const needle = normalize(query), filtered = projects.filter(item => item.status === "active" && normalize([item.title, item.payload.data.propertyAddress, item.payload.data.city, item.payload.data.agencyReference].join(" ")).includes(needle));
+  const eligibleProjects = projects.filter(item => item.status === "active");
   return <section className={styles.panel} aria-label={tr("Source du projet", "Project source")} data-project-source>
     <h2>{tr("Projet", "Project")}</h2>
     <div className={styles.toolbar}><button type="button" className={mode === "saved" ? undefined : styles.quiet} aria-pressed={mode === "saved"} onClick={() => setMode("saved")}>{tr("Choisir un projet enregistré", "Choose a saved project")}</button><button type="button" className={mode === "direct" ? undefined : styles.quiet} aria-pressed={mode === "direct"} onClick={() => setMode("direct")}>{tr("Importer directement une fiche d’agence", "Import an agency sheet directly")}</button></div>
-    {mode === "saved" ? <><label>{tr("Rechercher un projet", "Search projects")}<input value={query} onChange={event => setQuery(event.target.value)} placeholder={tr("Nom, adresse ou référence agence", "Name, address or agency reference")} /></label><ul className={styles.projects}>{filtered.map(project => <li key={project.id}><div><strong>{project.title}</strong><span>{[project.payload.data.propertyAddress, project.payload.data.city, project.payload.data.agencyReference].filter(Boolean).join(" · ")}</span></div><button type="button" disabled={disabled || busy || !canWrite} onClick={() => void select(project.id)}>{tr("Utiliser ce projet", "Use this project")}</button></li>)}</ul>{!filtered.length && <p>{tr("Aucun projet enregistré correspondant.", "No matching saved projects.")}</p>}</> : <><p>{tr("Créez une présentation sans enregistrer de projet au préalable. Vous pourrez la réutiliser ensuite.", "Create a presentation without saving a project first. You can save it for reuse afterwards.")}</p><button type="button" disabled={disabled || busy || !canWrite} onClick={onImport}>{tr("Importer une fiche d’agence", "Import an agency sheet")}</button></>}
+    {mode === "saved" ? <><label htmlFor="fonciere-source-project">{tr("Rechercher un projet", "Search projects")}</label><SearchableSelect id="fonciere-source-project" value={source?.id || ""} disabled={disabled || busy || !canWrite || listLoading} onChange={event => { if (eligibleProjects.some(project => project.id === event.target.value)) void select(event.target.value); }}>
+      <option value="" disabled>{tr("Choisir un projet enregistré", "Choose a saved project")}</option>
+      {source?.id && !eligibleProjects.some(project => project.id === source.id) && <option value={source.id} disabled>{tr("Projet source conservé", "Retained source project")}</option>}
+      {eligibleProjects.map(project => <option key={project.id} value={project.id} data-search={[project.title, project.payload.data.name, project.payload.data.propertyAddress, project.payload.data.city, project.payload.data.agencyReference].filter(Boolean).join(" ")} data-secondary={[project.payload.data.propertyAddress, project.payload.data.city, project.payload.data.agencyReference].filter(Boolean).join(" · ")}>{project.title}</option>)}
+    </SearchableSelect>{listLoading && <p role="status">{tr("Chargement des projets…", "Loading projects…")}</p>}</> : <><p>{tr("Créez une présentation sans enregistrer de projet au préalable. Vous pourrez la réutiliser ensuite.", "Create a presentation without saving a project first. You can save it for reuse afterwards.")}</p><button type="button" disabled={disabled || busy || !canWrite} onClick={onImport}>{tr("Importer une fiche d’agence", "Import an agency sheet")}</button></>}
     {source?.id && <p><a href={`/fonciere?project=${encodeURIComponent(source.id)}`} target="_blank" rel="noreferrer">{tr("Ouvrir le projet source", "Open source project")}</a> · {tr("Données reprises de la révision", "Snapshot from revision")} {source.revision} <button type="button" className={styles.quiet} disabled={disabled || busy || !canWrite} onClick={() => void select(source.id!, true)}>{tr("Reprendre les données actualisées", "Refresh from saved project")}</button></p>}
     {data && !source?.id && canWrite && <button type="button" className={styles.quiet} disabled={disabled || busy} onClick={() => void saveAsProject()}>{tr("Enregistrer dans Projets", "Save in Projects")}</button>}
     <p className={styles.muted}>{tr("Chaque présentation conserve son instantané. Les modifications d’une fiche projet ne changent pas les présentations existantes.", "Each presentation retains its own snapshot. Editing a project record does not change existing presentations.")}</p>

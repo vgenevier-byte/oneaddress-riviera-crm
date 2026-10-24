@@ -164,11 +164,31 @@ export function createGeneratorRepository(client: SupabaseClient) {
   }
   return {
     async listProjects(options: OperationOptions = {}): Promise<ProjectRecord[]> {
-      const { data, error } = await guarded(options.signal, () => client.from("izord_projects").select("*").order("updated_at", { ascending: false })); failure(error);
-      const rows: ProjectRecord[] = data || [];
+      const rows: ProjectRecord[] = [], pageSize = 250;
+      // Each page keeps the same RLS query; no readable candidate is discarded before search.
+      for (let offset = 0; ; offset += pageSize) {
+        const result = await guarded(options.signal, () => client.from("izord_projects").select("*").order("updated_at", { ascending: false }).order("id", { ascending: true }).range(offset, offset + pageSize - 1));
+        failure(result.error);
+        const page = (result.data || []) as ProjectRecord[];
+        rows.push(...page);
+        if (page.length < pageSize) break;
+      }
       if (!rows.length) return rows;
-      const versions = await guarded(options.signal, () => client.from("izord_project_versions").select("project_id,revision,author_id").in("project_id", rows.map(row => row.id))); failure(versions.error);
-      return rows.map(row => ({ ...row, author_id: versions.data?.find(version => version.project_id === row.id && version.revision === row.revision)?.author_id }));
+      const revisions = new Map(rows.map(row => [row.id, row.revision]));
+      const authors = new Map<string, string>();
+      // Bound URL length and paginate version history independently: a batch can have many revisions.
+      for (let start = 0; start < rows.length; start += 100) {
+        const ids = rows.slice(start, start + 100).map(row => row.id);
+        for (let offset = 0; ; offset += pageSize) {
+          const result = await guarded(options.signal, () => client.from("izord_project_versions").select("project_id,revision,author_id").in("project_id", ids).order("project_id", { ascending: true }).order("revision", { ascending: true }).range(offset, offset + pageSize - 1));
+          failure(result.error);
+          const page = (result.data || []) as Pick<VersionRecord, "project_id" | "revision" | "author_id">[];
+          for (const version of page) if (revisions.get(version.project_id) === version.revision) authors.set(version.project_id, version.author_id);
+          if (page.length < pageSize) break;
+        }
+      }
+      abortIfNeeded(options.signal);
+      return rows.map(row => ({ ...row, author_id: authors.get(row.id) }));
     },
     async createProject(title: string, options: OperationOptions = {}): Promise<ProjectRecord> {
       const created = await guarded(options.signal, () => client.rpc("izord_create_project", { p_title: title.trim() || "Nouveau projet" })); failure(created.error); return guarded(options.signal, () => readProject(String(created.data), options));

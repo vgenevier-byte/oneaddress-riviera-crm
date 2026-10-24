@@ -40,7 +40,7 @@ test("Dylan Charmillon direct fragments stay direct; requested typos appear only
   }
 });
 
-test("indexed direct search exactly preserves the established authorized field matcher", () => {
+test("indexed direct search preserves authorized direct matches and ranks rather than preserving input order", () => {
   const contacts = [dylan, { ...dylan, id: "clement-fictional", firstName: "Clément", name: "Minodier", companyName: "Société Àzur" }];
   const index = createContactSearchIndex(contacts);
   for (const query of [
@@ -50,8 +50,8 @@ test("indexed direct search exactly preserves the established authorized field m
     "cote", "fiable tres", "coordination 06400", "identifier-secret", "notes", "banking", "unrelated",
   ]) {
     const expected = contacts.filter(contact => matchesContactSearch(contact, query));
-    assert.deepEqual(searchDirectContacts(index, query), expected, query);
-    assert.deepEqual(searchContactSuggestions(index, query).direct, expected, query);
+    assert.deepEqual(ids(searchDirectContacts(index, query)).sort(), ids(expected).sort(), query);
+    assert.deepEqual(ids(searchContactSuggestions(index, query).direct).sort(), ids(expected).sort(), query);
   }
 });
 
@@ -136,8 +136,10 @@ test("email, telephone, URLs and punctuation retain literal direct matching with
   for (const query of ["chamillon dylan@example.invalie", "chamillon 06 42 00 00 02"]) {
     assert.deepEqual(searchContactSuggestions(index, query), { direct: [], close: [] }, query);
   }
-  const emailOnly = createContactSearchIndex([{ id: "email-only-fictional", email: "charmillon@example.invalid", city: "Charmillon" }]);
-  assert.deepEqual(searchContactSuggestions(emailOnly, "chamillon"), { direct: [], close: [] }, "Email username and city never supply approximate name words");
+  const emailOnly = createContactSearchIndex([{ id: "email-only-fictional", email: "charmillon@example.invalid" }]);
+  assert.deepEqual(searchContactSuggestions(emailOnly, "chamillon"), { direct: [], close: [] }, "Email usernames never supply approximate words");
+  const city = { id: "city-fictional", city: "Charmillon" };
+  assert.deepEqual(searchContactSuggestions(createContactSearchIndex([city]), "chamillon").close, [city], "Authorized city words now share the same typo tolerance as names");
 });
 
 test("ranking prefers fewer edits, then relative error, then whole words over equal-scoring prefixes", () => {

@@ -178,3 +178,23 @@ test("known creators retain their original rules and a stray manager field grant
   assert.equal(taskCapabilities(source, "manager-fictional", permissions).delete, false);
   assert.equal(taskManagementLabel(source), "");
 });
+
+test("task search ranks direct matches before word typos and combines authorized fields", () => {
+  const approximate = task({ id: "near", title: "Rendez-vous Clémant", notes: "Cannes" });
+  const direct = task({ id: "direct", title: "Rendez-vous Clément", notes: "Agence Riviera · Cannes" });
+  const foreign = task({ id: "foreign", title: "Rendez-vous Clément", notes: "Agence Riviera · Cannes", createdBy: "third-fictional" });
+  const filters = { relation: "related", status: "all", priority: "all", query: "clement" } as const;
+  assert.deepEqual(filterAndSortTasks([approximate, direct, foreign], "creator-fictional", filters).map(row => row.id), ["direct", "near"]);
+  assert.deepEqual(filterAndSortTasks([direct, foreign], "creator-fictional", { ...filters, query: "riviera clemnt cannse" }).map(row => row.id), ["direct"]);
+  assert.equal(filterAndSortTasks([direct], "creator-fictional", { ...filters, query: "cz" }).length, 0);
+  assert.equal(direct.title, "Rendez-vous Clément");
+});
+
+test("task search covers candidates beyond the first page and keeps numeric references literal", () => {
+  const sources = Array.from({ length: 2400 }, (_, index) => task({ id: `task-${index}`, title: `Dossier fictif ${index}`, notes: "Archive" }));
+  sources.push(task({ id: "last-fictional", title: "Intervention Clément", notes: "Facture REF-98765" }));
+  const filters = { relation: "related", status: "all", priority: "all", query: "clemnt" } as const;
+  assert.deepEqual(filterAndSortTasks(sources, "creator-fictional", filters).map(row => row.id), ["last-fictional"]);
+  assert.equal(filterAndSortTasks(sources, "creator-fictional", { ...filters, query: "98756" }).length, 0);
+  assert.deepEqual(filterAndSortTasks(sources, "creator-fictional", { ...filters, query: "REF-98765" }).map(row => row.id), ["last-fictional"]);
+});

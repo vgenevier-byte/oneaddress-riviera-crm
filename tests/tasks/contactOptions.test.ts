@@ -31,7 +31,7 @@ test("missing names and companies have truthful labels with no invented first na
   assert.equal(matchesTaskContact(surname, "dupont"), true);
   assert.equal(matchesTaskContact(firstName, "elo"), true);
   assert.equal(matchesTaskContact(company, "riviera societe"), true);
-  assert.equal(matchesTaskContact(unnamed, "existing"), false, "Email is a distinction, not a name search");
+  assert.equal(matchesTaskContact(unnamed, "existing"), true, "Email already present in the authorized projection is searchable");
   assert.equal(matchesTaskContact(unnamed, ""), true);
 });
 
@@ -65,8 +65,8 @@ test("homonyms keep distinct contact IDs and only already authorized distinction
 });
 
 test("reference mapping copies only authorized contact display fields and preserves ID/spelling", () => {
-  const input = { id: "safe-contact-fictional", firstName: "Clément", name: "Minodier", companyName: "Déjà autorisée", email: "fixture@example.invalid", phone: "excluded", bankAccounts: ["excluded"], ownerId: "excluded", label: "Surname-only legacy label" };
-  assert.deepEqual(taskContactOptions([input]), [{ id: input.id, firstName: input.firstName, name: input.name, company: input.companyName, email: input.email }]);
+  const input = { id: "safe-contact-fictional", firstName: "Clément", name: "Minodier", companyName: "Déjà autorisée", email: "fixture@example.invalid", phone: "+33 6 12 34 56 78", bankAccounts: ["excluded"], ownerId: "excluded", label: "Surname-only legacy label" };
+  assert.deepEqual(taskContactOptions([input]), [{ id: input.id, firstName: input.firstName, name: input.name, company: input.companyName, email: input.email, phone: input.phone }]);
   assert.equal(input.label, "Surname-only legacy label");
   assert.deepEqual(taskContactOptions([{ id: "limited-fictional", firstName: "Clément", name: "Minodier", companyName: "Autorisée" }]), [{ id: "limited-fictional", firstName: "Clément", name: "Minodier", company: "Autorisée" }]);
   assert.deepEqual(taskContactOptions([]), [], "No Contacts permission produces no options");
@@ -109,4 +109,18 @@ test("company search uses only companyName already present in the authorized pro
   assert.equal(matchesTaskContact(projected[1], "completed"), false);
   assert.equal("company" in projected[1], false);
   assert.deepEqual(taskContactOptions([]), [], "No Contacts permission creates no company option");
+});
+
+
+test("task search joins company IDs within the authorized projection and searches useful permitted fields", () => {
+  const company = { id: "canonical-company", entityType: "company", companyName: "Agence Riviera", city: "Cannes", postalAddress: "25 avenue des Fleurs" };
+  const person = { id: "canonical-person", entityType: "person", companyId: company.id, companyName: "Ancien libellé", firstName: "Clément", name: "Martin", email: "clement@example.invalid", phone: "06 12 34 56 78", organizationFunction: "Architecte" };
+  const rows = taskContactOptions([company, person]);
+  const option = rows.find(row => row.id === person.id)!;
+  assert.equal(option.company, company.companyName);
+  for (const query of ["clement", "clemnt", "martin clem", "riviera canne", "cannse", "architecte", "clement@example", "0612345678", "fleurs"]) assert.equal(matchesTaskContact(option, query), true, query);
+  assert.equal(matchesTaskContact(option, "0612345679"), false, "Phone digits never receive spelling correction");
+  const restricted = taskContactOptions([person])[0];
+  assert.equal(matchesTaskContact(restricted, "cannse"), false, "Missing company access cannot be completed from global records");
+  assert.equal("bankAccounts" in option, false);
 });

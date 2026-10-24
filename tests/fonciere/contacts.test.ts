@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createFonciereData } from "../../lib/fonciere/model";
-import { applyProjectContact, contactReplacementFields, duplicateProjectContacts, matchesProjectContact, type ProjectContact } from "../../lib/fonciere/contacts";
+import { applyProjectContact, contactCompanyMatches, contactReplacementFields, duplicateProjectContacts, matchesProjectContact, searchProjectContacts, type ProjectContact } from "../../lib/fonciere/contacts";
 const camille: ProjectContact = { id: "camille", entityType: "person", name: "Génévier", firstName: "Camille", companyName: "Agence Côte Azur", email: "camille@example.invalid", phone: "+33 6 12 34 56 78", city: "Nice", postalAddress: "Domicile personnel fictif" };
 const alex: ProjectContact = { ...camille, id: "alex", name: "Martin", firstName: "Alex", email: "alex@example.invalid", phone: "06 98 76 54 32" };
 const company: ProjectContact = { ...camille, id: "company", entityType: "company", name: "", firstName: "", email: "agence@example.invalid", phone: "04 93 00 00 00", postalAddress: "Adresse agence fictive" };
@@ -46,4 +46,33 @@ test("creation duplicate checks cover canonical company, person identity, email 
   assert.equal(duplicateProjectContacts([camille], { ...alex, email: "CAMILLE@example.invalid", phone: "" }).length, 1);
   assert.equal(duplicateProjectContacts([camille], { ...alex, email: "", phone: "06 12 34 56 78" }).length, 1);
   assert.equal(duplicateProjectContacts([company], { ...company, companyName: "agence cote azur", email: "", phone: "" }).length, 1);
+});
+
+
+test("project contact suggestions rank all candidates and canonical company context before presentation limits", () => {
+  const agency = { ...company, id: "agency-canonical", companyName: "Agence Riviera", city: "Cannes" };
+  const agent = { ...camille, id: "agent-canonical", companyId: agency.id, companyName: "Old agency label", city: "Nice" };
+  const filler = Array.from({ length: 1100 }, (_, index) => ({ ...alex, id: `filler-${index}`, companyName: "Other agency" }));
+  const rows = [...filler, agency, agent];
+  for (const query of ["riviera canne", "cannse cam", "genevier riviera", "genevir", "camille@example.invalid", "0612345678"]) assert.ok(searchProjectContacts(rows, query).some(row => row.id === agent.id), query);
+  assert.equal(searchProjectContacts([agent], "cannse").length, 0, "Canonical context never comes from inaccessible records");
+  assert.equal(searchProjectContacts(rows, "0612345679").some(row => row.id === agent.id), false);
+  assert.equal(agent.companyName, "Old agency label", "Search never rewrites the historical company value");
+});
+
+test("mixed text and formatted phone query preserves the contiguous number identity", () => {
+  const correct = { ...camille, id: "phone-correct", companyName: "Agence Riviera", phone: "06 12 34 56 78" };
+  const reordered = { ...correct, id: "phone-reordered", phone: "06 78 56 34 12" };
+  assert.deepEqual(searchProjectContacts([correct, reordered], "riviera 06 12 34 56 78").map(row => row.id), [correct.id]);
+  assert.deepEqual(searchProjectContacts([correct, reordered], "riviera 06.12.34.56.78").map(row => row.id), [correct.id]);
+});
+
+
+test("flexible punctuation and typos never broaden duplicate identity or agency-name guards", () => {
+  const existing = { ...company, companyName: "Agence, Riviera", email: "", phone: "" };
+  const input = { ...existing, companyName: "Agence Riviera" };
+  assert.equal(duplicateProjectContacts([existing], input).length, 0);
+  assert.equal(duplicateProjectContacts([existing], { ...input, companyName: "Agence, Rivirea" }).length, 0);
+  assert.equal(contactCompanyMatches(existing, "Agence Riviera"), false);
+  assert.equal(matchesProjectContact(existing, "agence riviera"), true);
 });

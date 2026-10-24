@@ -1,4 +1,7 @@
 "use client";
+import { SearchMatchHint } from "@/components/search/SearchMatchHint";
+import { createSearchIndex, searchIndex } from "@/lib/search";
+import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { sortSelectOptions } from "@/lib/selectOptions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 
@@ -335,24 +338,20 @@ export default function QuickRepliesView() {
   const [selectedId, setSelectedId] = useState(templates[0]?.id ?? "");
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const templateIndex=useMemo(()=>createSearchIndex(templates,template=>[template.title,t("modules.quickReplies.templateTitle."+template.id),template.situation,uiLabel(template.situation,"modules"),template.category,uiLabel(template.category,"modules"),template.channel,template.message],{getId:template=>template.id,getLabel:template=>t("modules.quickReplies.templateTitle."+template.id)}),[t,uiLabel]);
+  const templateResults=useMemo(()=>searchIndex(templateIndex,query),[templateIndex,query]);
+  const approximateTemplateIds=useMemo(()=>new Set(templateResults.filter(result=>result.approximate).map(result=>result.item.id)),[templateResults]);
   const filteredTemplates = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-
-    return templates.filter((template) => {
+    const candidates = templates.filter((template) => {
       const matchesSituation = situation === "Toutes" || template.situation === situation;
       const matchesCategory = category === "Toutes" || template.category === category;
       const matchesChannel = channel === "Tous" || template.channel === channel;
-      const matchesQuery = !needle || [
-        template.title,
-        template.situation,
-        template.category,
-        template.channel,
-        template.message
-      ].some((value) => value.toLowerCase().includes(needle));
-
-      return matchesSituation && matchesCategory && matchesChannel && matchesQuery;
+      return matchesSituation && matchesCategory && matchesChannel;
     });
-  }, [situation, category, channel, query]);
+    if (!query.trim()) return candidates;
+    const candidateIds=new Set(candidates.map(template=>template.id));
+    return templateResults.filter(result=>candidateIds.has(result.item.id)).map(result=>result.item);
+  }, [situation, category, channel, query,templateResults]);
 
   const selectedTemplate = useMemo(() => {
     return filteredTemplates.find((template) => template.id === selectedId) ?? filteredTemplates[0] ?? null;
@@ -384,19 +383,19 @@ export default function QuickRepliesView() {
 
         <div className="form-grid">
           <label>{t("modules.quickRepliesView.situation")}
-            <select value={situation} onChange={(event) => setSituation(event.target.value)}>
+            <SearchableSelect value={situation} onChange={(event) => setSituation(event.target.value)}>
               {sortSelectOptions(situations, item => uiLabel(item, "modules"), language, { first: item => item === "Toutes" }).map((item) => (
                 <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </label>
 
           <label>{t("modules.quickRepliesView.category")}
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            <SearchableSelect value={category} onChange={(event) => setCategory(event.target.value)}>
               {sortSelectOptions(categories, item => uiLabel(item, "modules"), language, { first: item => item === "Toutes" }).map((item) => (
                 <option key={item} value={item}>{uiLabel(item, "modules")}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </label>
 
           <label>{t("modules.quickRepliesView.channel")}
@@ -460,7 +459,7 @@ export default function QuickRepliesView() {
                     </p>
                     <strong style={{ display: "block", color: "#071f27", fontSize: 16 }}>
                       {t("modules.quickReplies.templateTitle." + template.id)}
-                    </strong>
+                    </strong><SearchMatchHint approximate={approximateTemplateIds.has(template.id)}/>
                     <span className="muted-line">{uiLabel(template.category, "modules")}</span>
                   </button>
                 );

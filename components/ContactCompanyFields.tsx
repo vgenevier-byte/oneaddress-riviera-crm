@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Contact } from "@/lib/types";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { getContactLabel } from "@/lib/contactIdentity";
 import { getCompanyPeople, getContactCompany } from "@/lib/contactCompany";
-import { matchesContactSearch } from "@/lib/contactSearch";
+import { createContactFieldResolver } from "@/lib/contactSearch";
+import { SearchableSelect } from "./search/SearchableSelect";
 import { sortSelectOptions } from "@/lib/selectOptions";
 import { useConfirmedForm, type FormSave, type FormSaveResult } from "@/lib/access/useConfirmedForm";
 import { BusinessButton, BusinessForm, BusinessLabel } from "./BusinessPermissions";
@@ -16,19 +17,18 @@ export type ContactBundleSave = (contact: Pick<Contact, "id"> & Partial<Contact>
 /** The affiliation is always an existing ID. Historical free text is preserved separately. */
 export function ContactCompanyPicker({ contact, contacts, onOpen, active = true }: { contact?: Partial<Contact>; contacts: Contact[]; onOpen?: (contact: Contact) => void; active?: boolean }) {
   const { t, language } = useI18n();
-  const [query, setQuery] = useState("");
+  const searchFields = useMemo(() => createContactFieldResolver(contacts), [contacts]);
   const [companyId, setCompanyId] = useState(contact?.companyId ?? "");
   const company = getContactCompany({ ...contact, companyId } as Contact, contacts);
   const lastPerson = Boolean(contact?.id && contact.companyId && getCompanyPeople(contact.companyId, contacts).length <= 1);
-  const companies = sortSelectOptions(contacts.filter(item => item.entityType === "company" && !item.mergedIntoCompanyId && (item.id === companyId || matchesContactSearch(item, query))), getContactLabel, language);
+  const companies = sortSelectOptions(contacts.filter(item => item.entityType === "company" && !item.mergedIntoCompanyId), getContactLabel, language);
   return <fieldset className={`full ${styles.section} ${styles.first}`} disabled={!active} data-contact-company-picker>
     {!active && <p className="muted-line">{t("crm.contacts.company.qualifyPerson")}</p>}
-    <BusinessLabel>{t("crm.contacts.identity.companyAffiliationOptional")}<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t("crm.contacts.company.searchCompany")} /></BusinessLabel>
-    <BusinessLabel>{t("crm.contacts.company.selectedCompany")}<select name="companyId" value={companyId} onChange={event => setCompanyId(event.target.value)}>
+    <BusinessLabel>{t("crm.contacts.identity.companyAffiliationOptional")}<SearchableSelect name="companyId" value={companyId} disabled={!active} onChange={event => setCompanyId(event.target.value)}>
       <option value="" disabled={lastPerson}>{t("crm.contacts.company.independent")}</option>
-      {companyId && !companies.some(item => item.id === companyId) && <option value={companyId}>{company ? getContactLabel(company) : t("crm.contacts.company.unavailable")}</option>}
-      {companies.map(item => <option key={item.id} value={item.id} disabled={lastPerson && item.id !== contact?.companyId}>{getContactLabel(item)}{item.city ? ` · ${item.city}` : ""}</option>)}
-    </select></BusinessLabel>
+      {companyId && !companies.some(item => item.id === companyId) && <option value={companyId} disabled>{company ? getContactLabel(company) : t("crm.contacts.company.unavailable")}</option>}
+      {companies.map(item => <option key={item.id} value={item.id} data-search={searchFields(item).filter(Boolean).join(" ")} data-secondary={[item.city, item.postalAddress, item.email, item.phone].filter(Boolean).join(" · ")} disabled={lastPerson && item.id !== contact?.companyId}>{getContactLabel(item)}</option>)}
+    </SearchableSelect></BusinessLabel>
     {lastPerson && <p className="muted-line">{t("crm.contacts.company.lastPerson")}</p>}
     {company && onOpen && <BusinessButton type="button" className="secondary-button" onClick={() => onOpen(company)}>{t("crm.contacts.company.openCompany")}</BusinessButton>}
     {contact?.companyName && <p className="muted-line">{t("crm.contacts.company.historicalAffiliation", { name: contact.companyName })}</p>}
@@ -39,9 +39,9 @@ export function ContactCompanyPicker({ contact, contacts, onOpen, active = true 
 export function FirstCompanyContactFields({ contacts, companyId, required = true, initialMode = "existing", active = true }: { contacts: Contact[]; companyId?: string; required?: boolean; initialMode?: string; active?: boolean }) {
   const { t, language } = useI18n();
   const [mode, setMode] = useState(initialMode);
-  const [query, setQuery] = useState("");
+  const searchFields = useMemo(() => createContactFieldResolver(contacts), [contacts]);
   const [personId, setPersonId] = useState("");
-  const people = sortSelectOptions(contacts.filter(person => person.entityType !== "company" && Boolean(person.name?.trim()) && (!person.companyId || person.companyId === companyId) && (person.id === personId || matchesContactSearch(person, query))), getContactLabel, language);
+  const people = sortSelectOptions(contacts.filter(person => person.entityType !== "company" && Boolean(person.name?.trim()) && (!person.companyId || person.companyId === companyId)), getContactLabel, language);
   return <fieldset className={`full ${styles.section} ${styles.first}`} disabled={!active} style={active ? undefined : { display: "none" }} data-first-company-contact>
     <h4>{t(companyId && getCompanyPeople(companyId, contacts).length ? "crm.contacts.company.newPerson" : "crm.contacts.company.firstPerson")}</h4>
     <p className="muted-line">{t("crm.contacts.company.atomicHint")}</p>
@@ -50,11 +50,10 @@ export function FirstCompanyContactFields({ contacts, companyId, required = true
       <option value="new">{t("crm.contacts.company.createPerson")}</option>
     </select></BusinessLabel>
     <div hidden={mode !== "existing"} className={styles.section}>
-      <BusinessLabel>{t("crm.contacts.company.searchPerson")}<input type="search" value={query} onChange={event => setQuery(event.target.value)} /></BusinessLabel>
-      <BusinessLabel>{t("crm.contacts.company.personRequired")}<select name="companyExistingPersonId" value={personId} onChange={event => setPersonId(event.target.value)} required={required && mode === "existing"} disabled={mode !== "existing"}>
+      <BusinessLabel>{t("crm.contacts.company.personRequired")}<SearchableSelect name="companyExistingPersonId" value={personId} onChange={event => setPersonId(event.target.value)} required={required && mode === "existing"} disabled={!active || mode !== "existing"}>
         <option value="">{t("crm.contacts.company.choosePerson")}</option>
-        {people.map(person => <option key={person.id} value={person.id}>{[getContactLabel(person), person.email, person.phone, person.entityType === undefined ? t("crm.contacts.company.legacyPerson") : ""].filter(Boolean).join(" · ")}</option>)}
-      </select></BusinessLabel>
+        {people.map(person => <option key={person.id} value={person.id} data-search={searchFields(person).filter(Boolean).join(" ")} data-secondary={[getContactCompany(person, contacts)?.companyName || person.companyName, person.city, person.email, person.phone, person.entityType === undefined ? t("crm.contacts.company.legacyPerson") : ""].filter(Boolean).join(" · ")}>{getContactLabel(person)}</option>)}
+      </SearchableSelect></BusinessLabel>
     </div>
     <div hidden={mode !== "new"} className={styles.grid}>
       <BusinessLabel>{t("crm.contacts.e325bf8f90")}<input name="companyPersonFirstName" disabled={mode !== "new"} /></BusinessLabel>

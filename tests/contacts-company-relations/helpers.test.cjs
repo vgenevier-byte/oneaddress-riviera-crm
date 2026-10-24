@@ -28,7 +28,8 @@ test('company search returns its people and company by authorized personal field
   assert.equal(matchesContactWithCompany(company,'Martin Alice',rows),true);
   assert.equal(matchesContactWithCompany(company,'06 12',rows),true);
   assert.equal(matchesContactWithCompany(company,'Bob',rows),false);
-  assert.equal(matchesContactWithCompany(person,'info@example.invalid',rows),false);
+  assert.equal(matchesContactWithCompany(person,'info@example.invalid',rows),true, 'The linked company email is already authorized and searchable');
+  assert.equal(matchesContactWithCompany(person,'info@example.invalid',[person]),false, 'An unavailable company projection cannot supply extra searchable fields');
   assert.equal(matchesContactWithCompany(company,'Alice',[company]),false);
 });
 

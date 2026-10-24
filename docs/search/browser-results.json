@@ -1,0 +1,286 @@
+{
+  "fictionalData": true,
+  "actualAuth": false,
+  "actualRPC": false,
+  "actualDatabase": false,
+  "persistence": "Browser-localStorage simulation across reload",
+  "physicalDevice": false,
+  "fixtureLayout": true,
+  "sourceManifest": "fixture-manifest.json",
+  "results": [
+    {
+      "session": "chromium-desktop",
+      "name": "company-multifield-fuzzy-explicit-selection-and-reload",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "bounded-options-show-more-and-last-record-on-full-catalogue",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "existing-person-single-input-reordered-words-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "clear-no-result-and-unavailable-retains-form-value",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "required-native-validation-and-reset",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "empty-loading-error-disabled-and-stale-keyboard-choice",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "free-text-and-native-setter-events",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "tasks-search-authorized-company-and-city-join",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "tasks-assignee-homonym-keyboard-escape-dialog-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "overflow-hidden-card-keeps-suggestions-visible-and-clickable",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "business-picker-retains-new-choice-when-original-default-disappears",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop",
+      "name": "fr-en-search-component-labels-and-layout",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "company-multifield-fuzzy-explicit-selection-and-reload",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "bounded-options-show-more-and-last-record-on-full-catalogue",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "existing-person-single-input-reordered-words-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "clear-no-result-and-unavailable-retains-form-value",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "required-native-validation-and-reset",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "empty-loading-error-disabled-and-stale-keyboard-choice",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "free-text-and-native-setter-events",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "tasks-search-authorized-company-and-city-join",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "tasks-assignee-homonym-keyboard-escape-dialog-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "overflow-hidden-card-keeps-suggestions-visible-and-clickable",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "business-picker-retains-new-choice-when-original-default-disappears",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile",
+      "name": "fr-en-search-component-labels-and-layout",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "company-multifield-fuzzy-explicit-selection-and-reload",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "bounded-options-show-more-and-last-record-on-full-catalogue",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "existing-person-single-input-reordered-words-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "clear-no-result-and-unavailable-retains-form-value",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "required-native-validation-and-reset",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "empty-loading-error-disabled-and-stale-keyboard-choice",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "free-text-and-native-setter-events",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "tasks-search-authorized-company-and-city-join",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "tasks-assignee-homonym-keyboard-escape-dialog-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "overflow-hidden-card-keeps-suggestions-visible-and-clickable",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "business-picker-retains-new-choice-when-original-default-disappears",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop",
+      "name": "fr-en-search-component-labels-and-layout",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "company-multifield-fuzzy-explicit-selection-and-reload",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "bounded-options-show-more-and-last-record-on-full-catalogue",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "existing-person-single-input-reordered-words-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "clear-no-result-and-unavailable-retains-form-value",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "required-native-validation-and-reset",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "empty-loading-error-disabled-and-stale-keyboard-choice",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "free-text-and-native-setter-events",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "tasks-search-authorized-company-and-city-join",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "tasks-assignee-homonym-keyboard-escape-dialog-and-screenshot",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "overflow-hidden-card-keeps-suggestions-visible-and-clickable",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "business-picker-retains-new-choice-when-original-default-disappears",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile",
+      "name": "fr-en-search-component-labels-and-layout",
+      "passed": true
+    }
+  ],
+  "sessions": [
+    {
+      "session": "chromium-desktop",
+      "width": 1360,
+      "mobileEmulation": false,
+      "engine": "chromium",
+      "consoleErrors": [],
+      "externalRequests": []
+    },
+    {
+      "session": "chromium-mobile",
+      "width": 390,
+      "mobileEmulation": true,
+      "engine": "chromium",
+      "consoleErrors": [],
+      "externalRequests": []
+    },
+    {
+      "session": "webkit-desktop",
+      "width": 1360,
+      "mobileEmulation": false,
+      "engine": "webkit",
+      "consoleErrors": [],
+      "externalRequests": []
+    },
+    {
+      "session": "webkit-mobile",
+      "width": 390,
+      "mobileEmulation": true,
+      "engine": "webkit",
+      "consoleErrors": [],
+      "externalRequests": []
+    }
+  ]
+}

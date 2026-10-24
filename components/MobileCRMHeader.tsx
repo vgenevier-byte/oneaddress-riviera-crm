@@ -1,4 +1,5 @@
 "use client";
+import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { sortSelectOptions } from "@/lib/selectOptions";
 
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -135,10 +136,10 @@ export default function MobileCRMHeader({
               <p className="mobile-session-line">{t("navigation.signedIn")} <strong>{sessionEmail}</strong></p>
               <label className="mobile-actor-field">
                 <span>{t("navigation.actionsBy")}</span>
-                <select value={activeActor} onChange={(event) => onActorChange(event.target.value)}>
+                <SearchableSelect value={activeActor} onChange={(event) => onActorChange(event.target.value)}>
                   <option value="">{t("navigation.unspecified")}</option>
                   {sortSelectOptions(actors, actor => actor, language).map((actor) => <option key={actor}>{actor}</option>)}
-                </select>
+                </SearchableSelect>
               </label>
               {actions.map((action) => (
                 <button

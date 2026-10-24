@@ -1,5 +1,7 @@
 import type { Contact } from "./types";
 import { getContactLabel, getContactPersonName } from "./contactIdentity";
+import { createContactFieldResolver, normalizeContactSearch } from "./contactSearch";
+import { createSearchIndex, searchIndex } from "./search";
 
 type SearchableVendorContact = Contact & {
   activity?: string;
@@ -8,11 +10,6 @@ type SearchableVendorContact = Contact & {
   prestations?: string[] | string;
   supplierService?: string;
   type?: string;
-};
-
-type RankedContact = {
-  contact: Contact;
-  rank: number;
 };
 
 function toSearchableContact(contact: Contact) {
@@ -25,12 +22,7 @@ function toValues(value?: string[] | string) {
 }
 
 export function normalizeVendorContactSearch(value?: string | number | null) {
-  return String(value ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return normalizeContactSearch(String(value ?? ""));
 }
 
 export function getVendorContactPersonName(contact: Contact) {
@@ -87,76 +79,26 @@ export function isEligibleVendorBankContact(contact: Contact) {
   return isEligibleVendorContact(contact) || Boolean(contact.supplierBankAccounts?.length);
 }
 
-function includesQuery(value: string | undefined, query: string) {
-  return normalizeVendorContactSearch(value).includes(query);
+/** Build linked-company context once for the same authorized picker projection. */
+export function createVendorContactFieldResolver(authorizedContacts: Contact[] = []) {
+  const fields = createContactFieldResolver(authorizedContacts);
+  return (contact: Contact) => {
+    const extra = toSearchableContact(contact);
+    return [...fields(contact), extra.profession, extra.supplierService, extra.activity,
+      ...toValues(extra.activities), ...toValues(extra.prestations), (contact as Contact & { searchText?: string }).searchText];
+  };
 }
 
-function phoneIncludesQuery(phone: string | undefined, query: string) {
-  if (includesQuery(phone, query)) return true;
-
-  const queryDigits = query.replace(/\D/g, "");
-  const phoneDigits = String(phone || "").replace(/\D/g, "");
-  return queryDigits.length >= 2 && phoneDigits.includes(queryDigits);
+export function vendorContactSearchFields(contact: Contact, authorizedContacts: Contact[] = []) {
+  return createVendorContactFieldResolver(authorizedContacts)(contact);
 }
 
 export function getVendorContactSearchRank(contact: Contact, rawQuery: string) {
-  const query = normalizeVendorContactSearch(rawQuery);
-  if (query.length < 2) return null;
-
-  const searchableContact = toSearchableContact(contact);
-  const companyName = normalizeVendorContactSearch(searchableContact.companyName);
-
-  if (companyName.startsWith(query)) return 0;
-  if (companyName.includes(query)) return 1;
-
-  const personFields = [
-    searchableContact.firstName,
-    searchableContact.name,
-    [searchableContact.firstName, searchableContact.name].filter(Boolean).join(" ")
-  ];
-
-  if (personFields.some((value) => includesQuery(value, query))) return 2;
-
-  const additionalFields = [
-    searchableContact.supplierCategory,
-    searchableContact.profession,
-    searchableContact.supplierService,
-    searchableContact.activity,
-    ...toValues(searchableContact.activities),
-    ...toValues(searchableContact.prestations),
-    searchableContact.email,
-    searchableContact.city
-  ];
-
-  if (
-    additionalFields.some((value) => includesQuery(value, query)) ||
-    phoneIncludesQuery(searchableContact.phone, query)
-  ) {
-    return 3;
-  }
-
-  return null;
+  const index = createSearchIndex([contact], row => vendorContactSearchFields(row), { getId: row => row.id, getLabel: getVendorBusinessName });
+  return searchIndex(index, rawQuery, { limit: 1 })[0]?.score ?? null;
 }
 
 export function searchVendorContacts(contacts: Contact[], rawQuery: string, limit = 10) {
-  const query = normalizeVendorContactSearch(rawQuery);
-  if (query.length < 2) return [];
-
-  return contacts
-    .reduce<RankedContact[]>((matches, contact) => {
-      const rank = getVendorContactSearchRank(contact, query);
-      if (rank !== null) matches.push({ contact, rank });
-      return matches;
-    }, [])
-    .sort(
-      (left, right) =>
-        left.rank - right.rank ||
-        getVendorBusinessName(left.contact).localeCompare(
-          getVendorBusinessName(right.contact),
-          "fr",
-          { sensitivity: "base" }
-        )
-    )
-    .slice(0, limit)
-    .map(({ contact }) => contact);
+  const index = createSearchIndex(contacts, createVendorContactFieldResolver(contacts), { getId: row => row.id, getLabel: getVendorBusinessName });
+  return searchIndex(index, rawQuery, { limit }).map(hit => hit.item);
 }

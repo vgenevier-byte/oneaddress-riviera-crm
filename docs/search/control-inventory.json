@@ -1,0 +1,852 @@
+{
+  "nativeControls": 72,
+  "searchableControls": 49,
+  "freeTextSuggestionControls": 7,
+  "unreviewed": [],
+  "native": [
+    {
+      "file": "components/AccessAdministration.tsx",
+      "line": 45,
+      "tag": "select",
+      "attributes": "aria-label={t(\"admin.levelFor\", { module: t(`navigation.module.${m.tab}`) })} value={g.level} onChange={e=>update({...edit,modules:{...edit.modules,[m.tab]:{level:e.target.value,sensitive:{}}}})}",
+      "justification": "Trois niveaux de droits fermés"
+    },
+    {
+      "file": "components/AccessAdministration.tsx",
+      "line": 46,
+      "tag": "select",
+      "attributes": "value={edit.izordRole??''} onChange={e=>update({...edit,izordRole:e.target.value||null})}",
+      "justification": "Rôles de permissions IZORD fermés"
+    },
+    {
+      "file": "components/BusinessPermissions.tsx",
+      "line": 16,
+      "tag": "select",
+      "attributes": "{...props} disabled={disabled||p?.write===false}",
+      "justification": "Primitive de permissions ; les deux usages restants sont des statuts fermés"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2285,
+      "tag": "BusinessSelect",
+      "attributes": "value={getQuoteStatus(quote.status)} onChange={(event) => updateQuoteStatus(quote.id, getQuoteStatus(event.target.value))} aria-label={t(\"crm.quotes.183ca7a2cf\")}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2359,
+      "tag": "select",
+      "attributes": "name={`unit${category}`} defaultValue=\"day\"",
+      "justification": "Trois unités de facturation fermées : jour, semaine, forfait"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2550,
+      "tag": "select",
+      "attributes": "name=\"quality\" defaultValue={editingSupplier?.quality ?? \"Standard\"}",
+      "justification": "Enum métier court et fermé : quality"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2557,
+      "tag": "select",
+      "attributes": "name=\"reliability\" defaultValue={editingSupplier?.reliability ?? \"À tester\"}",
+      "justification": "Enum métier court et fermé : reliability"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2574,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue={editingSupplier?.status ?? \"Actif\"}",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2768,
+      "tag": "select",
+      "attributes": "name=\"paymentStatus\" defaultValue={quote.paymentStatus || getPaymentStatus(quote)}",
+      "justification": "Enum métier court et fermé : paymentStatus"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2803,
+      "tag": "select",
+      "attributes": "name=\"bookingStatus\" defaultValue={quote.bookingStatus || \"À préparer\"}",
+      "justification": "Enum métier court et fermé : bookingStatus"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 3408,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue={editingDocument.status || \"À jour\"}",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 4194,
+      "tag": "select",
+      "attributes": "name=\"method\" defaultValue=\"Virement\"",
+      "justification": "Enum métier court et fermé : method"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 8864,
+      "tag": "select",
+      "attributes": "value={activeActor} onChange={(event) => setActiveActor(event.target.value as CRMActor)}",
+      "justification": "Acteur historique fermé : crmActors = [Vincent] ; ce champ ne sélectionne aucun compte Auth"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10484,
+      "tag": "select",
+      "attributes": "value={categoryFilter} onChange={(event) => { setCategoryFilter(event.target.value); setAssetFilter(\"Tous\"); }}",
+      "justification": "Filtre des quatre univers de planning et Tous"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10642,
+      "tag": "select",
+      "attributes": "name=\"type\" defaultValue={editingPlanningEntry?.type ?? (quickPlanningDate ? \"Autre\" : \"Intervention prestataire\")}",
+      "justification": "Enum métier court et fermé : type"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10649,
+      "tag": "select",
+      "attributes": "name=\"planningCategory\" defaultValue={editingPlanningCategory}",
+      "justification": "Enum métier court et fermé : planningCategory"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10656,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue={editingPlanningEntry ? getPlanningEntryStatus(editingPlanningEntry) : \"Prévu\"}",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10688,
+      "tag": "select",
+      "attributes": "name=\"blocksAvailability\" defaultValue={editingPlanningEntry?.blocksAvailability ? \"true\" : \"false\"}",
+      "justification": "Enum métier court et fermé : blocksAvailability"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10799,
+      "tag": "select",
+      "attributes": "value={planningViewMode} onChange={(event) => setPlanningViewMode(event.target.value as \"month\" | \"week\")}",
+      "justification": "Deux vues calendaires : mois et semaine"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 11754,
+      "tag": "select",
+      "attributes": "name=\"entityType\" value={entityType} onChange={event => onEntityTypeChange(event.target.value)} required={!contact?.id || contact.entityType !== undefined} aria-invalid={issue?.field === \"entityType\" || undefined} aria-describedby={issue?.field === \"entityType\" ? errorId(\"entityType\") : undefined} onInvalid={invalid(\"entityType\", \"contact_entity_type_invalid\")}",
+      "justification": "Enum métier court et fermé : entityType"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 11769,
+      "tag": "select",
+      "attributes": "name=\"civility\" defaultValue={contact?.civility ?? \"\"}",
+      "justification": "Enum métier court et fermé : civility"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12248,
+      "tag": "select",
+      "attributes": "name=\"kind\" value={newContactKind} onChange={(event) => setNewContactKind(event.target.value as ContactKind)}",
+      "justification": "Enum métier court et fermé : kind"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12262,
+      "tag": "select",
+      "attributes": "name=\"relationshipStatus\" defaultValue=\"Prospect\"",
+      "justification": "Enum métier court et fermé : relationshipStatus"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12272,
+      "tag": "select",
+      "attributes": "name=\"clientLevel\" defaultValue=\"Standard\"",
+      "justification": "Enum métier court et fermé : clientLevel"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12276,
+      "tag": "select",
+      "attributes": "name=\"preferredLanguage\" defaultValue=\"Français\"",
+      "justification": "Enum métier court et fermé : preferredLanguage"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12296,
+      "tag": "select",
+      "attributes": "name=\"supplierReliability\" defaultValue=\"À tester\"",
+      "justification": "Enum métier court et fermé : supplierReliability"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12304,
+      "tag": "select",
+      "attributes": "name=\"supplierStatus\" defaultValue=\"Actif\"",
+      "justification": "Enum métier court et fermé : supplierStatus"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12310,
+      "tag": "select",
+      "attributes": "name=\"supplierQuality\" defaultValue=\"Standard\"",
+      "justification": "Enum métier court et fermé : supplierQuality"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12432,
+      "tag": "select",
+      "attributes": "name=\"kind\" value={editingContactKind} onChange={(event) => setEditingContactKind(event.target.value as ContactKind)}",
+      "justification": "Enum métier court et fermé : kind"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12446,
+      "tag": "select",
+      "attributes": "name=\"relationshipStatus\" defaultValue={getContactRelationshipStatus(editingContact) === \"Prestataire\" ? \"Prospect\" : getContactRelationshipStatus(editingContact)}",
+      "justification": "Enum métier court et fermé : relationshipStatus"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12456,
+      "tag": "select",
+      "attributes": "name=\"clientLevel\" defaultValue={getContactClientLevel(editingContact)}",
+      "justification": "Enum métier court et fermé : clientLevel"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12460,
+      "tag": "select",
+      "attributes": "name=\"preferredLanguage\" defaultValue={getContactPreferredLanguage(editingContact)}",
+      "justification": "Enum métier court et fermé : preferredLanguage"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12481,
+      "tag": "select",
+      "attributes": "name=\"supplierReliability\" defaultValue={editingContact.supplierReliability || \"À tester\"}",
+      "justification": "Enum métier court et fermé : supplierReliability"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12488,
+      "tag": "select",
+      "attributes": "name=\"supplierStatus\" defaultValue={editingContact.supplierStatus || \"Actif\"}",
+      "justification": "Enum métier court et fermé : supplierStatus"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12494,
+      "tag": "select",
+      "attributes": "name=\"supplierQuality\" defaultValue={editingContact.supplierQuality || \"Standard\"}",
+      "justification": "Enum métier court et fermé : supplierQuality"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12699,
+      "tag": "select",
+      "attributes": "name=\"category\" defaultValue=\"Villa\"",
+      "justification": "Quatre univers métier fermés de demande client"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12736,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue=\"Nouveau\"",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12751,
+      "tag": "select",
+      "attributes": "name=\"priority\" defaultValue=\"Moyenne\"",
+      "justification": "Enum métier court et fermé : priority"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12781,
+      "tag": "select",
+      "attributes": "value={leadCategoryFilter} onChange={(event) => setLeadCategoryFilter(event.target.value as \"Toutes\" | Lead[\"category\"])}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12790,
+      "tag": "select",
+      "attributes": "value={leadStatusFilter} onChange={(event) => setLeadStatusFilter(event.target.value as \"Tous\" | LeadStatus)}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12801,
+      "tag": "select",
+      "attributes": "value={leadPriorityFilter} onChange={(event) => setLeadPriorityFilter(event.target.value as \"Toutes\" | Lead[\"priority\"])}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12880,
+      "tag": "BusinessSelect",
+      "attributes": "value={lead.status} onChange={(event) => onStatusChange(lead.id, event.target.value as LeadStatus)}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13006,
+      "tag": "select",
+      "attributes": "name=\"category\" defaultValue={editingLead.category}",
+      "justification": "Quatre univers métier fermés de demande client"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13028,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue={editingLead.status}",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13035,
+      "tag": "select",
+      "attributes": "name=\"priority\" defaultValue={editingLead.priority}",
+      "justification": "Enum métier court et fermé : priority"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13141,
+      "tag": "select",
+      "attributes": "value={propertyStatusFilter} onChange={(event) => setPropertyStatusFilter(event.target.value as \"Tous\" | PropertyStatus)}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13210,
+      "tag": "select",
+      "attributes": "name=\"status\"",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13278,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue={editingProperty.status}",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13375,
+      "tag": "select",
+      "attributes": "value={vehicleStatusFilter} onChange={(event) => setVehicleStatusFilter(event.target.value as \"Tous\" | VehicleStatus)}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13440,
+      "tag": "select",
+      "attributes": "name=\"status\"",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13512,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue={editingVehicle.status}",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13608,
+      "tag": "select",
+      "attributes": "value={boatStatusFilter} onChange={(event) => setBoatStatusFilter(event.target.value as \"Tous\" | BoatStatus)}",
+      "justification": "Filtre ou statut métier court et fermé ; ordre métier conservé"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13672,
+      "tag": "select",
+      "attributes": "name=\"status\"",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13742,
+      "tag": "select",
+      "attributes": "name=\"status\" defaultValue={editingBoat.status}",
+      "justification": "Enum métier court et fermé : status"
+    },
+    {
+      "file": "components/ContactCompanyFields.tsx",
+      "line": 48,
+      "tag": "select",
+      "attributes": "name=\"companyPersonMode\" value={mode} onChange={event => setMode(event.target.value)}",
+      "justification": "Deux modes fermés : rattacher ou créer"
+    },
+    {
+      "file": "components/ContactDocuments.tsx",
+      "line": 148,
+      "tag": "select",
+      "attributes": "aria-label={t(\"modules.documents.typeTitle\", {title: item.file.name})} value={item.type} onChange={event=>updateQueue(rows=>rows.map(row=>row.operationId===item.operationId?{...row,type:event.target.value as ContactDocumentType}:row))}",
+      "justification": "Six classifications documentaires fermées"
+    },
+    {
+      "file": "components/QuickRepliesView.tsx",
+      "line": 402,
+      "tag": "select",
+      "attributes": "value={channel} onChange={(event) => setChannel(event.target.value as typeof channel)}",
+      "justification": "Trois canaux fermés : Tous, WhatsApp, Email"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 295,
+      "tag": "select",
+      "attributes": "value={filters.relation} onChange={event => setFilters(previous => ({ ...previous, relation: event.target.value as TaskFilters[\"relation\"] }))}",
+      "justification": "Trois valeurs de relation, statut ou priorité ; Tous dans les filtres"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 296,
+      "tag": "select",
+      "attributes": "value={filters.status} onChange={event => setFilters(previous => ({ ...previous, status: event.target.value as TaskFilters[\"status\"] }))}",
+      "justification": "Trois valeurs de relation, statut ou priorité ; Tous dans les filtres"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 297,
+      "tag": "select",
+      "attributes": "value={filters.priority} onChange={event => setFilters(previous => ({ ...previous, priority: event.target.value as TaskFilters[\"priority\"] }))}",
+      "justification": "Trois valeurs de relation, statut ou priorité ; Tous dans les filtres"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 318,
+      "tag": "select",
+      "attributes": "aria-label={t(\"modules.tasks.statusOf\", {title: task.title})} value={task.status} disabled={!capability.progress || busy} onChange={event => void mutate(requests.current.prepare(task.id, task.revision, { status: event.target.value as Task[\"status\"] }))}",
+      "justification": "Trois valeurs de relation, statut ou priorité ; Tous dans les filtres"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 343,
+      "tag": "select",
+      "attributes": "name=\"priority\" value={currentEditor.draft.priority} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft(\"priority\", event.target.value as TaskDraft[\"priority\"])}",
+      "justification": "Trois valeurs de relation, statut ou priorité ; Tous dans les filtres"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 344,
+      "tag": "select",
+      "attributes": "name=\"status\" value={currentEditor.draft.status} disabled={editorBusy || !editorCapabilities.progress} onChange={event => changeDraft(\"status\", event.target.value as TaskDraft[\"status\"])}",
+      "justification": "Trois valeurs de relation, statut ou priorité ; Tous dans les filtres"
+    },
+    {
+      "file": "components/fonciere/GuidedProjectField.tsx",
+      "line": 86,
+      "tag": "select",
+      "attributes": "id={`${rowId}-grade`} value={row.grade || \"\"} onChange={event => updateRow(option.value, { grade: event.target.value || undefined })}",
+      "justification": "Échelle DPE/GES fermée, A à G dans cet ordre"
+    },
+    {
+      "file": "components/izord/IzordGenerator.tsx",
+      "line": 159,
+      "tag": "select",
+      "attributes": "id={`izord-${key}`} value={String(value??\"\")} onChange={e=>field(spec.key,e.target.value)}",
+      "justification": "Schéma vérifié : cinq listes métier fermées de deux à cinq valeurs"
+    },
+    {
+      "file": "components/izord/IzordGenerator.tsx",
+      "line": 204,
+      "tag": "select",
+      "attributes": "disabled={busy||loaded?.project.status===\"approved\"&&!canApprove} value={workflow} onChange={e=>{setWorkflow(e.target.value as ProjectStatus);setDirty(true);}}",
+      "justification": "Trois étapes de validation fermées"
+    },
+    {
+      "file": "components/monthlyCharges/MonthlyChargesWorkspace.tsx",
+      "line": 313,
+      "tag": "select",
+      "attributes": "value={source} onChange={event => setSource(event.target.value as ViewSource)}",
+      "justification": "Trois sources fermées"
+    },
+    {
+      "file": "components/monthlyCharges/MonthlyChargesWorkspace.tsx",
+      "line": 315,
+      "tag": "select",
+      "attributes": "aria-label={t(\"charges.mois_affiche_5a1b7f\")} value={monthIndex} onChange={event => setMonthIndex(Number(event.target.value))}",
+      "justification": "Contrôle calendaire : douze mois dans l’ordre chronologique"
+    },
+    {
+      "file": "components/monthlyCharges/MonthlyChargesWorkspace.tsx",
+      "line": 323,
+      "tag": "select",
+      "attributes": "aria-label={t(\"charges.selectExpense\",{title:entry.title})} value={mode} onChange={event => setException(entry, event.target.value, event.target.value === \"exclude\" ? exception?.reason : undefined)}",
+      "justification": "Trois règles fermées : auto, inclure, exclure"
+    },
+    {
+      "file": "components/monthlyCharges/MonthlyChargesWorkspace.tsx",
+      "line": 323,
+      "tag": "select",
+      "attributes": "value={draft.mode} onChange={event => updateAttachment({ mode: event.target.value as AttachmentDraft[\"mode\"] })}",
+      "justification": "Trois modes fermés de rattachement comptable"
+    },
+    {
+      "file": "components/publisher/PublisherPage.tsx",
+      "line": 394,
+      "tag": "select",
+      "attributes": "id=\"publisher-car-type\" value={carType} aria-describedby=\"publisher-car-type-hint\" onChange={event => changeCarSelection({ carType: event.target.value as CarType })}",
+      "justification": "Huit types automobiles fermés ; marques et modèles utilisent la recherche"
+    },
+    {
+      "file": "components/search/SearchableSelect.tsx",
+      "line": 129,
+      "tag": "select",
+      "attributes": "{...nativeProps} ref={nativeRef} id={`${inputId}-native`} tabIndex={-1} aria-hidden=\"true\" className={styles.native} disabled={disabled} required={required} value={selectedValue} onInvalid={event => { event.preventDefault(); setInvalid(true); inputRef.current?.focus(); onInvalid?.(event); }} onChange={event => { setLocalValue(event.currentTarget.value); onChange?.(event); // Some recipient controls explicitly reset currentTarget.value after adding an entry. setLocalValue(event.currentTarget.value); }}",
+      "justification": "Transport natif invisible : valeur, validation et FormData du sélecteur avec recherche"
+    }
+  ],
+  "searchable": [
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2481,
+      "tag": "SearchableSelect",
+      "attributes": "value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2531,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"category\" defaultValue={editingSupplier?.category ?? \"Autre\"}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2795,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"assignedContactId\" defaultValue={quote.assignedContactId || \"\"}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 3257,
+      "tag": "SearchableSelect",
+      "attributes": "value={currentFolderId} onChange={event => { setCurrentFolderId(event.target.value); setDocumentSearch(\"\"); }}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 3989,
+      "tag": "SearchableSelect",
+      "attributes": "value={houseFilter} onChange={(event) => setHouseFilter(event.target.value)}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 3998,
+      "tag": "SearchableSelect",
+      "attributes": "aria-label={t(\"crm.house.d282bc2490\")} value={workerFilter} onChange={event => setWorkerFilter(event.target.value)}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 4101,
+      "tag": "SearchableSelect",
+      "attributes": "value={hourDraft.houseId} onChange={(event) => setHourDraft((current) => ({ ...current, houseId: event.target.value }))}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 4106,
+      "tag": "SearchableSelect",
+      "attributes": "value={hourDraft.workerId} onChange={(event) => { const worker = activeWorkers.find((item) => item.id === event.target.value); setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: houseHourlyRateInput(worker) })); }}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 4182,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"houseId\" defaultValue={houses[0]?.id || \"\"}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 4187,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"workerId\" defaultValue={initialActiveWorker?.id || \"\"}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 4269,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"contactId\" required defaultValue=\"\""
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 5022,
+      "tag": "SearchableBusinessContactPicker",
+      "attributes": "contacts={selectableContacts} defaultContact={findContactForVendorInvoice(editingInvoice)} defaultContactId={getResolvedVendorInvoiceContactId(editingInvoice)} fallbackContactName={getHistoricalVendorInvoiceContactName(editingInvoice)} fallbackContactPersonName={editingInvoice?.contactPersonName || \"\"} fallbackProfession={editingInvoice?.category || \"\"}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10494,
+      "tag": "SearchableSelect",
+      "attributes": "value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10668,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"assetKey\" defaultValue={editingPlanningAssetKey}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12098,
+      "tag": "SearchableSelect",
+      "attributes": "value={supplierCategoryFilter} onChange={(event) => setSupplierCategoryFilter(event.target.value)}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12289,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"supplierCategory\" defaultValue=\"\""
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12473,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"supplierCategory\" defaultValue={editingContact.supplierCategory || \"\"}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12709,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"assetKey\" defaultValue=\"\""
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13015,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"assetKey\" defaultValue={editingLead.assetType && editingLead.assetId ? `${editingLead.assetType}:${editingLead.assetId}` : \"\"}"
+    },
+    {
+      "file": "components/ContactCompanyFields.tsx",
+      "line": 27,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"companyId\" value={companyId} disabled={!active} onChange={event => setCompanyId(event.target.value)}"
+    },
+    {
+      "file": "components/ContactCompanyFields.tsx",
+      "line": 53,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"companyExistingPersonId\" value={personId} onChange={event => setPersonId(event.target.value)} required={required && mode === \"existing\"} disabled={!active || mode !== \"existing\"}"
+    },
+    {
+      "file": "components/ContactDocuments.tsx",
+      "line": 88,
+      "tag": "SearchableSelect",
+      "attributes": "value={recipient} onChange={event=>setRecipient(event.target.value)}"
+    },
+    {
+      "file": "components/MobileCRMHeader.tsx",
+      "line": 139,
+      "tag": "SearchableSelect",
+      "attributes": "value={activeActor} onChange={(event) => onActorChange(event.target.value)}"
+    },
+    {
+      "file": "components/QuickRepliesView.tsx",
+      "line": 386,
+      "tag": "SearchableSelect",
+      "attributes": "value={situation} onChange={(event) => setSituation(event.target.value)}"
+    },
+    {
+      "file": "components/QuickRepliesView.tsx",
+      "line": 394,
+      "tag": "SearchableSelect",
+      "attributes": "value={category} onChange={(event) => setCategory(event.target.value)}"
+    },
+    {
+      "file": "components/ScopedDocuments.tsx",
+      "line": 49,
+      "tag": "SearchableSelect",
+      "attributes": "value={folder} onChange={e=>setFolder(e.target.value)}"
+    },
+    {
+      "file": "components/ScopedDocuments.tsx",
+      "line": 51,
+      "tag": "SearchableSelect",
+      "attributes": "required value={collection} onChange={async e=>{const id=++selection.current;const c=eligible.find(c=>c.collection===e.target.value);setCollection(c?.collection??'');setBank(false);setRecord('');setRows([]);if(c)try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_reference_options',{p_module:c.module}));if(r.error)throw r.error;if(id===selection.current)setRows(r.data[c.collection]);}catch(e){fail(e);}}}"
+    },
+    {
+      "file": "components/ScopedDocuments.tsx",
+      "line": 51,
+      "tag": "SearchableSelect",
+      "attributes": "required value={record} onChange={e=>setRecord(e.target.value)}"
+    },
+    {
+      "file": "components/ScopedInvoicePayments.tsx",
+      "line": 15,
+      "tag": "SearchableSelect",
+      "attributes": "value={invoice} onChange={async e=>{const turn=++selection.current;const id=e.target.value;setInvoice(id);setAccount('');setAccounts([]);try{const op=await begin();const r=await op.run(()=>op.client.rpc('crm_read_module',{p_module:'contacts'}));if(r.error)throw r.error;const supplier=(r.data.collections.contacts as Contact[]).find(c=>c.id===invoices.find(i=>i.id===id)?.contactId);if(turn!==selection.current)return;setAccounts(supplier?.supplierBankAccounts?.filter(a=>a.status==='Vérifié')??[]);}catch(e){if(!isCancelled(e))setMessage('Comptes bancaires non accessibles.');}}}"
+    },
+    {
+      "file": "components/ScopedInvoicePayments.tsx",
+      "line": 15,
+      "tag": "SearchableSelect",
+      "attributes": "value={account} onChange={e=>setAccount(e.target.value)}"
+    },
+    {
+      "file": "components/TaskContactPicker.tsx",
+      "line": 17,
+      "tag": "SearchableSelect",
+      "attributes": "id={inputId} value={contactId} disabled={disabled} onChange={event => { const id = event.target.value; if (!id || options.some(contact => contact.id === id)) onChange(id); }}"
+    },
+    {
+      "file": "components/TaskIdentityAdministration.tsx",
+      "line": 131,
+      "tag": "SearchableSelect",
+      "attributes": "value={selected} loading={!directory} disabled={busy} onChange={e => { const a = directory?.accounts.find(a => a.userId === e.target.value); setSelected(e.target.value); setLabel(a?.label || \"\"); setContact(a?.contactId || \"\"); setOwner(a?.verifiedOwner || false); dirty(); }}"
+    },
+    {
+      "file": "components/TaskIdentityAdministration.tsx",
+      "line": 137,
+      "tag": "SearchableSelect",
+      "attributes": "value={contact} onChange={e => { setContact(e.target.value); dirty(); }}"
+    },
+    {
+      "file": "components/TaskIdentityAdministration.tsx",
+      "line": 145,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"managerId\" value={manager} onChange={e => { setManager(e.target.value); recoveryDirty(); }}"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 350,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"recipientToAdd\" aria-label={t(\"modules.tasksWorkspace.selectAnAssignee\")} className=\"taskws-add-recipient\" value=\"\" loading={directory.status === \"loading\"} error={directory.status === \"error\" ? t(\"modules.tasksWorkspace.directoryUnavailableYourInputAndSelectionsAreRetainedRetryToRefreshEligible\") : undefined} disabled={directory.status === \"loading\" || !availableRecipients.length} onKeyDown={event => { if (event.key === \"Enter\") event.preventDefault(); }} onChange={event => { addRecipient(event.currentTarget.value); }}"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 360,
+      "tag": "SearchableSelect",
+      "attributes": "name=\"leadId\" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft(\"leadId\", event.target.value)}"
+    },
+    {
+      "file": "components/TasksWorkspace.tsx",
+      "line": 361,
+      "tag": "TaskContactPicker",
+      "attributes": "key={currentEditor.id} options={contactOptions} contactId={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={id => changeDraft(\"contactId\", id)}"
+    },
+    {
+      "file": "components/VendorBanking.tsx",
+      "line": 151,
+      "tag": "SearchableSelect",
+      "attributes": "value={selected} onChange={e => setSelected(e.target.value)}"
+    },
+    {
+      "file": "components/VendorQuotesView.tsx",
+      "line": 483,
+      "tag": "SearchableBusinessContactPicker",
+      "attributes": "contacts={selectableContacts} defaultContact={contacts.find((contact) => contact.id === editingQuote?.contactId)} defaultContactId={editingQuote?.contactId || \"\"} fallbackContactName={editingQuote?.contactName || \"\"} fallbackContactPersonName={editingQuote?.contactPersonName || \"\"} fallbackProfession={editingQuote?.category || \"\"} required"
+    },
+    {
+      "file": "components/address/AddressField.tsx",
+      "line": 298,
+      "tag": "SearchableSelect",
+      "attributes": "aria-label={copy.reuse} disabled={disabled} value={reuseIndex} onChange={event => setReuseIndex(event.target.value)}"
+    },
+    {
+      "file": "components/fonciere/GuidedProjectField.tsx",
+      "line": 42,
+      "tag": "SearchableSelect",
+      "attributes": "id={id} value={value} onChange={event => onChange(event.target.value)}"
+    },
+    {
+      "file": "components/fonciere/ProjectContacts.tsx",
+      "line": 116,
+      "tag": "SearchableBusinessContactPicker",
+      "attributes": "contacts={rows.map(asPickerContact)} value={id} queryValue={search.query} fallbackContactName={id ? role === \"agency\" ? data.agencyName : data.agentName : \"\"} selectedRecord={canReadContacts && linked[id] ? asPickerContact(linked[id]) : null} onSelect={row => select(role, row ? asProjectContact(row) : null)} searchMode=\"all\" name={`${role}ContactId`} disabled={disabled || !canReadContacts || creating} loading={search.loading} onQueryChange={query => setter(previous => ({ ...previous, query, rows: [], error: \"\", loading: false }))} onOpenContact={openContact} resultLabel={row => projectContactLabel(asProjectContact(row))} label={role === \"agency\" ? t(\"Agence / entreprise du CRM\", \"CRM agency / company\") : t(\"Agent immobilier / interlocuteur du CRM\", \"CRM estate agent / contact\")} labels={{ placeholder: t(\"Entreprise, prénom, nom, email ou téléphone…\", \"Company, first or last name, email or phone…\"), empty: t(\"Aucun contact correspondant\", \"No matching contacts\"), change: t(\"Changer\", \"Change\"), clear: t(\"Retirer le lien\", \"Unlink\"), open: t(\"Ouvrir le contact\", \"Open contact\"), loading: t(\"Recherche des contacts autorisés…\", \"Searching authorized contacts…\"), unavailable: t(\"Contact lié — chargement indisponible\", \"Linked contact — loading unavailable\") }}"
+    },
+    {
+      "file": "components/fonciere/ProjectSourcePicker.tsx",
+      "line": 87,
+      "tag": "SearchableSelect",
+      "attributes": "id=\"fonciere-source-project\" value={source?.id || \"\"} disabled={disabled || busy || !canWrite || listLoading} onChange={event => { if (eligibleProjects.some(project => project.id === event.target.value)) void select(event.target.value); }}"
+    },
+    {
+      "file": "components/izord/IzordGenerator.tsx",
+      "line": 192,
+      "tag": "SearchableSelect",
+      "attributes": "value={data.photoGalleryRoles[photoRole]??\"\"} onChange={e=>{if(e.target.value!==\"\")void setPhoto(photoRole,Number(e.target.value));}}"
+    },
+    {
+      "file": "components/izord/IzordGenerator.tsx",
+      "line": 212,
+      "tag": "SearchableSelect",
+      "attributes": "value={reportIndex} onChange={e=>{setReportIndex(Number(e.target.value));setReviewed(false);}}"
+    },
+    {
+      "file": "components/izord/IzordGenerator.tsx",
+      "line": 213,
+      "tag": "SearchableSelect",
+      "attributes": "value={report.roles[photoRole]} onChange={e=>{setReviewed(false);setReports(values=>values.map((item,i)=>i===reportIndex?{...item,roles:{...item.roles,[photoRole]:Number(e.target.value)}}:item));}}"
+    },
+    {
+      "file": "components/monthlyCharges/MonthlyChargesWorkspace.tsx",
+      "line": 313,
+      "tag": "SearchableSelect",
+      "attributes": "value={houseId} onChange={event => setHouseId(event.target.value)}"
+    },
+    {
+      "file": "components/publisher/PublisherPage.tsx",
+      "line": 400,
+      "tag": "SearchableSelect",
+      "attributes": "id=\"publisher-car-brand\" value={carBrand} onChange={event => changeCarSelection({ carBrand: event.target.value as CarBrandId })}"
+    },
+    {
+      "file": "components/publisher/PublisherPage.tsx",
+      "line": 406,
+      "tag": "SearchableSelect",
+      "attributes": "id=\"publisher-car-model\" value={carModel} disabled={carBrand === 'auto'} aria-describedby={`publisher-car-model-hint${selectedModel ? ' publisher-car-selected-model' : ''}`} onChange={event => changeCarSelection({ carModel: event.target.value })}"
+    }
+  ],
+  "free": [
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 2321,
+      "tag": "SearchableInput",
+      "attributes": "name=\"clientName\" required placeholder={t(\"crm.quotes.11ab79048c\")} options={clientContactOptions}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 10663,
+      "tag": "SearchableInput",
+      "attributes": "name=\"contactName\" defaultValue={editingPlanningEntry?.contactName ?? \"\"} placeholder={t(\"crm.planning.c10669d9f2\")} options={planningContactOptions}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 12704,
+      "tag": "SearchableInput",
+      "attributes": "name=\"contactName\" defaultValue={preselectedContactName || \"\"} placeholder={t(\"crm.leads.84c00400a6\")} options={leadContactOptions}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13011,
+      "tag": "SearchableInput",
+      "attributes": "name=\"contactName\" defaultValue={editingLead.contactName} required options={leadContactOptions}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13147,
+      "tag": "SearchableInput",
+      "attributes": "options={Array.from(new Set(properties.map(item => item.city))).filter(Boolean)} value={propertyCityFilter} onChange={(event) => setPropertyCityFilter(event.target.value)} placeholder={t(\"crm.properties.4664cdd74b\")}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13381,
+      "tag": "SearchableInput",
+      "attributes": "options={Array.from(new Set(vehicles.map(item => item.city))).filter(Boolean)} value={vehicleCityFilter} onChange={(event) => setVehicleCityFilter(event.target.value)} placeholder={t(\"crm.vehicles.897ebccda8\")}"
+    },
+    {
+      "file": "components/CRMApp.tsx",
+      "line": 13614,
+      "tag": "SearchableInput",
+      "attributes": "options={Array.from(new Set(boats.map(item => item.port))).filter(Boolean)} value={boatPortFilter} onChange={(event) => setBoatPortFilter(event.target.value)} placeholder={t(\"crm.boats.d892911e3f\")}"
+    }
+  ]
+}

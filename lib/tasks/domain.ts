@@ -1,3 +1,4 @@
+import { createSearchIndex, searchIndex, type SearchIndex } from "../search";
 import { taskPriorities, taskStatuses, type Task, type TaskDraft, type TaskMutation, type TaskPatch, type TaskPermissions, type TaskPriority } from "./types";
 
 export const TASK_NOTE_LIMIT = 10_000;
@@ -66,17 +67,29 @@ export function taskManagementLabel(task: Task): string {
 
 export type TaskFilters = { relation: "related" | "created" | "assigned"; status: "all" | Task["status"]; priority: "all" | TaskPriority; query?: string };
 
-export function filterAndSortTasks(tasks: Task[], userId: string, filters: TaskFilters, today = parisCivilDate()): Task[] {
+export const taskSearchFields = (task: Task) => [task.title, task.notes, task.createdByLabel, task.managerLabel, ...task.assignees.flatMap(value => [value.label, value.email, value.detail])];
+const taskIndexes = new WeakMap<Task[], SearchIndex<Task>>();
+function taskIndex(tasks: Task[]): SearchIndex<Task> {
+  let index = taskIndexes.get(tasks);
+  if (!index) { index = createSearchIndex(tasks, taskSearchFields, { getId: task => task.id, getLabel: task => task.title }); taskIndexes.set(tasks, index); }
+  return index;
+}
+
+export function filterAndSortTasks(tasks: Task[], userId: string, filters: TaskFilters, today = parisCivilDate(), index?: SearchIndex<Task>): Task[] {
   const ranks: Record<TaskPriority, number> = { urgent: 0, important: 1, normal: 2 };
-  const query = filters.query?.trim().toLocaleLowerCase("fr-FR") ?? "";
-  return tasks.filter(task => {
+  const query = filters.query?.trim() ?? "";
+  const eligible = tasks.filter(task => {
     const creator = Boolean(task.createdBy && task.createdBy === userId);
     const assigned = task.assignees.some(value => value.userId === userId && value.active);
     return (filters.relation === "created" ? creator : filters.relation === "assigned" ? assigned : creator || assigned)
       && (filters.status === "all" || task.status === filters.status)
-      && (filters.priority === "all" || task.priority === filters.priority)
-      && (!query || [task.title, task.notes, task.createdByLabel, ...task.assignees.map(value => value.label)].join(" ").toLocaleLowerCase("fr-FR").includes(query));
-  }).sort((a, b) => {
+      && (filters.priority === "all" || task.priority === filters.priority);
+  });
+  if (query) {
+    const eligibleIds = new Set(eligible.map(task => task.id));
+    return searchIndex(index ?? taskIndex(tasks), query).filter(result => eligibleIds.has(result.item.id)).map(result => result.item);
+  }
+  return eligible.sort((a, b) => {
     const aState = taskDueState(a.dueDate, today), bState = taskDueState(b.dueDate, today);
     const bucket = (state: string) => state === "late" ? 0 : state === "today" || state === "upcoming" ? 1 : 2;
     return bucket(aState) - bucket(bState)

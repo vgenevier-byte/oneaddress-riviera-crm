@@ -1,0 +1,52 @@
+{
+  "targetedTests": {
+    "passed": 211,
+    "failed": 0,
+    "log": "Local command log /private/tmp/oar-search-all-targeted-tests.log"
+  },
+  "browser": {
+    "passed": 48,
+    "failed": 0,
+    "engines": [
+      "Chromium",
+      "WebKit"
+    ],
+    "viewports": [
+      "desktop",
+      "mobile emulation"
+    ],
+    "languages": [
+      "fr",
+      "en"
+    ],
+    "actualAuth": false,
+    "actualRPC": false,
+    "actualDatabase": false,
+    "externalRequests": 0,
+    "consoleErrors": 0,
+    "fixtureSourcesMatch": true
+  },
+  "typescript": "passed --noEmit --incremental false",
+  "lint": {
+    "passed": true,
+    "errors": 0,
+    "preExistingWarnings": 2
+  },
+  "build": {
+    "passed": true,
+    "command": "next build --webpack",
+    "environment": "Fictional public Supabase values for local compilation only"
+  },
+  "diffCheck": "passed",
+  "coverage": {
+    "nativeControlsJustified": 72,
+    "searchableSelectorUsages": 49,
+    "freeTextSuggestionUsages": 7,
+    "unreviewedControls": 0
+  },
+  "originalCheckout": {
+    "preExistingFilesPreserved": 149,
+    "modifiedByThisTask": 0
+  },
+  "sourceBase": "55f69dd304433255bf1db4b136ac534fdab9c8ed"
+}

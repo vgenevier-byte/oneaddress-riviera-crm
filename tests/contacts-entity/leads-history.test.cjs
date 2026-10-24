@@ -4,9 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const ts = require('typescript');
-const { renderToStaticMarkup } = require('react-dom/server');
 const { getContactLabel } = require('../../lib/contactIdentity.ts');
-const { translate } = require('../../lib/i18n/engine.ts');
 const source = fs.readFileSync('components/CRMApp.tsx', 'utf8');
 const ast = ts.createSourceFile('CRMApp.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const view = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'LeadsView');
@@ -15,50 +13,33 @@ function compile(code, name, bindings) {
   const js = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   return new Function('require', 'exports', ...Object.keys(bindings), `${js}; return ${name};`)(require, {}, ...Object.values(bindings));
 }
-const variables = view.body.statements.filter(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(d => ['editingContactName', 'preserveEditingContact'].includes(d.name.getText(ast))));
 let selector;
 function findSelector(node) {
-  if (ts.isJsxElement(node) && node.openingElement.tagName.getText(ast) === 'select' && node.openingElement.attributes.properties.some(p => p.name?.text === 'defaultValue' && p.initializer?.getText(ast) === '{editingLead.contactName}')) selector = node;
+  if (ts.isJsxSelfClosingElement(node) && node.tagName.getText(ast) === 'SearchableInput' && node.attributes.properties.some(p => p.name?.text === 'defaultValue' && p.initializer?.getText(ast) === '{editingLead.contactName}')) selector = node;
   ts.forEachChild(node, findSelector);
 }
 findSelector(view); assert(selector);
 const handler = view.body.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === 'submitEdit');
 assert(handler);
 const alice = {id:'alice', firstName:'Alice', name:'Dupont', companyName:'Azur Exemple'};
-function render(contactName, contacts = [alice], language = 'fr') {
-  const fn = compile(`function renderSelector() { ${variables.map(v => v.getText(ast)).join('\n')} return (${selector.getText(ast)}); }`, 'renderSelector', {
-    editingLead:{contactName}, contacts, getContactLabel, t:(key,values)=>translate(key,language,values),
+function selectorProps(contactName, contacts = [alice]) {
+  const fn = compile(`function renderSelector() { return (${selector.getText(ast)}); }`, 'renderSelector', {
+    editingLead:{contactName},contacts,leadContactOptions:contacts.map(contact=>({value:getContactLabel(contact),secondary:contact.companyName})),SearchableInput:()=>null,
   });
-  return renderToStaticMarkup(fn());
+  return fn().props;
 }
 for (const language of ['fr','en']) {
-  test(`historical surname is an explicit retained option, without relinking (${language})`,()=>{
-    const html=render('Dupont',[alice],language);
-    assert.match(html,/<option value="Dupont" selected="">/);
-    assert(html.includes(translate('crm.leads.historicalContact',language,{name:'Dupont'})));
-    assert.match(html,/<option value="Alice Dupont">Alice Dupont<\/option>/);
-  });
-  test(`absent/civility labels remain exact and escaped, without directory disclosure (${language})`,()=>{
-    for (const name of ['Mme Alice Dupont','Ancien contact hors annuaire','  Dupont\u00a0','Ancien <contact> & privé']) {
-      const html=render(name,[],language);
-      assert(html.includes(translate('crm.leads.historicalContact',language,{name}).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')));
-      assert.equal((html.match(/<option /g)||[]).length,2);
+  test(`historical contact text remains exact, independent of current suggestions (${language})`,()=>{
+    for(const name of ['Dupont','Mme Alice Dupont','Ancien contact hors annuaire','  Dupont\u00a0','Ancien <contact> & privé']) {
+      const props=selectorProps(name,[]);assert.equal(props.defaultValue,name);assert.equal(props.name,'contactName');assert.equal(props.required,true);assert.deepEqual(props.options,[]);
     }
   });
 }
-test('an existing unique full label keeps the normal option; homonyms remain distinct and retain an explicit current value',()=>{
-  assert(!render('Alice Dupont').includes('Contact historique conservé'));
-  const html=render('Alice Dupont',[alice,{...alice,id:'alice-homonym'}]);
-  assert(html.includes('Contact historique conservé : Alice Dupont'));
-  assert.equal((html.match(/value="Alice Dupont"/g)||[]).length,3);
-});
-test('company options use the company as title, with no false surname or inferred historical relinking',()=>{
-  const contacts=[{id:'business',entityType:'company',companyName:'Entreprise seule',name:''},{id:'guillaume',entityType:'company',companyName:'Entreprise Guillaume',firstName:'Guillaume',name:''}];
-  const html=render('Guillaume',contacts);
-  assert.match(html,/<option value="Entreprise seule">Entreprise seule<\/option>/);
-  assert.match(html,/<option value="Entreprise Guillaume">Entreprise Guillaume<\/option>/);
-  assert.match(html,/<option value="Guillaume" selected="">Contact historique conservé : Guillaume<\/option>/);
-  assert.deepEqual(contacts.map(c=>c.name),['','']);
+test('free-text snapshot suggestions do not infer canonical links from homonyms or company titles',()=>{
+  const contacts=[alice,{...alice,id:'alice-homonym'},{id:'business',entityType:'company',companyName:'Entreprise seule',name:''},{id:'guillaume',entityType:'company',companyName:'Entreprise Guillaume',firstName:'Guillaume',name:''}];
+  const props=selectorProps('Guillaume',contacts);
+  assert.equal(props.defaultValue,'Guillaume');assert.deepEqual(props.options.map(option=>option.value),['Alice Dupont','Alice Dupont','Entreprise seule','Entreprise Guillaume']);
+  assert(!('contactId' in props));assert.equal(contacts[2].name,'');assert.equal(contacts[3].name,'');
 });
 function submit(contactName, values = {}, omitContact = false, result) {
   const original = {id:'historical-lead',contactName,category:'Villa',status:'Nouveau',priority:'Moyenne',dueDate:'2026-11-01',nextAction:'Rappeler',value:123,history:[{id:'retained'}]};

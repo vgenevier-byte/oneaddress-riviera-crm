@@ -1,5 +1,9 @@
 "use client";
 
+import { SearchableSelect } from "./search/SearchableSelect";
+import { SearchableInput } from "./search/SearchableInput";
+import { createSearchIndex, searchIndex } from "@/lib/search";
+import { createContactFieldResolver } from "@/lib/contactSearch";
 import { sortSelectOptions } from "@/lib/selectOptions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { Variables } from "@/lib/i18n/types";
@@ -101,7 +105,7 @@ import { AddressMapLink } from "./address/AddressMapLink";
 import { normalizeAddressValue, readAddressForm } from "@/lib/address";
 import ContactDocuments, { ContactDocumentLibrary } from "./ContactDocuments";
 import { ContactCompanyPicker, FirstCompanyContactFields, CompanyPeople, readFirstCompanyContact, type ContactBundleSave } from "./ContactCompanyFields";
-import { getContactCompany, getCompanyPeople, matchesContactWithCompany, getCompanyContactStatus } from "@/lib/contactCompany";
+import { getContactCompany, getCompanyPeople, getCompanyContactStatus } from "@/lib/contactCompany";
 import { getContactFormUpdate, mergeContactUpdate, readPostalAddress } from "@/lib/contactEditing";
 import { getContactLabel, getContactPersonName, getContactSecondaryLabel, getContactIdentityValidationError, validateContactIdentity, type ContactIdentityValidation } from "@/lib/contactIdentity";
 import type { ContactCreateIntent, ContactCreateReturn } from "@/lib/contacts/createIntent";
@@ -182,7 +186,6 @@ import {
   isQuarterHourTime,
   isHouseTrackingWorkerActive,
   permanentlyDeleteHouseTrackingWorker,
-  QUARTER_HOUR_TIME_OPTIONS,
   parseHouseHourlyRate,
   parseHouseExpenseAmount,
   houseHourlyRateInput,
@@ -1948,7 +1951,10 @@ function writeQuoteFormFields(quote: QuoteRequest) {
       field instanceof HTMLSelectElement ||
       field instanceof HTMLTextAreaElement
     ) {
-      field.value = String(value ?? "");
+      const prototype = field instanceof HTMLInputElement ? HTMLInputElement.prototype : field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLTextAreaElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(field, String(value ?? ""));
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
     }
   }
 
@@ -2007,6 +2013,7 @@ function QuotesView({
 }) {
   const { t, label, screen, dialogT, language } = useCRMDisplay();
 
+  const clientContactOptions = useMemo(() => crmContactTextOptions(contacts.filter(contact => !isSupplierContact(contact)), contacts), [contacts]);
   const business = useBusinessPermissions();
   const confirmation = useConfirmedForm(business?.markDirty);
   function setQuotes(update: QuoteRequest[] | ((current: QuoteRequest[]) => QuoteRequest[])) {
@@ -2078,7 +2085,10 @@ function QuotesView({
         field instanceof HTMLSelectElement ||
         field instanceof HTMLTextAreaElement
       ) {
-        field.value = String(value ?? "");
+        const prototype = field instanceof HTMLInputElement ? HTMLInputElement.prototype : field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLTextAreaElement.prototype;
+      Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(field, String(value ?? ""));
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+      field.dispatchEvent(new Event("change", { bubbles: true }));
       }
     }
 
@@ -2308,23 +2318,9 @@ function QuotesView({
         <BusinessForm className="form-grid" data-quote-form="true" onSubmit={addQuote} onChangeCapture={confirmation.changed} pending={confirmation.saving}>
           <ConfirmedFormMessage message={confirmation.message} />
           <input type="hidden" name="leadId" />
-          <BusinessLabel>{t("crm.quotes.0c77fe09ab")}<input
-              name="clientName"
-              list="quote-client-options"
-              required
-              placeholder={t("crm.quotes.11ab79048c")}
-              autoComplete="off"
-            />
-            <datalist id="quote-client-options">
-              {sortSelectOptions(contacts.filter((contact) => !isSupplierContact(contact)), contact => getContactLabel(contact, "Client sans nom"), language).map((contact) => (
-                <option
-                  key={contact.id}
-                  value={getContactLabel(contact, "Client sans nom")}
-                >
-                  {[contact.companyName, contact.email, contact.phone, contact.city].filter(Boolean).join(" · ")}
-                </option>
-              ))}
-            </datalist>
+          <BusinessLabel>{t("crm.quotes.0c77fe09ab")}<SearchableInput
+              name="clientName" required placeholder={t("crm.quotes.11ab79048c")}
+              options={clientContactOptions} />
             <small className="quote-client-helper">{t("crm.quotes.96ba956293")}</small>
           </BusinessLabel>
 
@@ -2482,18 +2478,9 @@ function SuppliersView({
           <p className="muted-line">{t("crm.suppliers.69a5cb2881")}</p>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 22 }}>
-          {categories.map((category) => (
-            <button
-              key={category}
-              type="button"
-              className={categoryFilter === category ? "primary-button" : "secondary-button"}
-              onClick={() => setCategoryFilter(category)}
-            >
-              {screen.category(category)}
-            </button>
-          ))}
-        </div>
+        <label>{t("crm.suppliers.68a5341fc6")}<SearchableSelect value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)}>
+          {Array.from(new Set([...categories, ...suppliers.map(supplier => supplier.category)])).map(category => <option key={category} value={category}>{screen.category(category)}</option>)}
+        </SearchableSelect></label>
 
         {visibleSuppliers.length === 0 ? (<p className="muted-line">{t("crm.suppliers.86ff6ee587")}</p>) : (<div className="list-stack oar-contact-list-stack">
             {visibleSuppliers.map((supplier) => (
@@ -2541,11 +2528,11 @@ function SuppliersView({
           <label>{t("crm.suppliers.4e41070c90")}<input name="name" defaultValue={editingSupplier?.name ?? ""} placeholder={t("crm.suppliers.b8ce4eb0fd")} />
           </label>
 
-          <label>{t("crm.suppliers.68a5341fc6")}<select name="category" defaultValue={editingSupplier?.category ?? "Autre"}>
+          <label>{t("crm.suppliers.68a5341fc6")}<SearchableSelect name="category" defaultValue={editingSupplier?.category ?? "Autre"}>
               {sortSelectOptions(Array.from(new Set([...categories.filter(category => category !== "Tous"), ...suppliers.map(supplier => supplier.category)])), screen.category, language, { last: category => category === "Autre" }).map((category) => (
                 <option key={category} value={category}>{screen.category(category)}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </label>
 
           <label>{t("crm.suppliers.2b5c3d2672")}<input name="contactName" defaultValue={editingSupplier?.contactName ?? ""} placeholder={t("crm.suppliers.67f8a52b44")} />
@@ -2617,6 +2604,7 @@ function BookingsView({
 }) {
   const { t, label, screen, dialogT, language } = useCRMDisplay();
 
+  const providerSearchOptions = useMemo(() => new Map(crmContactTextOptions(contacts, contacts).map(option => [option.id, option])), [contacts]);
   const business = useBusinessPermissions();
   const confirmedQuotes = quotes.filter((quote) => getQuoteStatus(quote.status) === "Accepted");
   const providerContacts = contacts.filter(isSupplierContact);
@@ -2804,14 +2792,12 @@ function BookingsView({
                     <BusinessLabel>{t("crm.bookings.0eb206a1fc")}<textarea name="paymentNotes" defaultValue={quote.paymentNotes || ""} placeholder={t("crm.bookings.7cc7fe9c1c")} />
                     </BusinessLabel>
 
-                    <BusinessLabel>{t("crm.bookings.a4f049df6c")}<select name="assignedContactId" defaultValue={quote.assignedContactId || ""}>
+                    <BusinessLabel>{t("crm.bookings.a4f049df6c")}<SearchableSelect name="assignedContactId" defaultValue={quote.assignedContactId || ""}>
                         <option value="">{t("crm.bookings.a95639476f")}</option>
                         {sortSelectOptions(providerContacts, contact => `${getContactLabel(contact)} · ${screen.category(getContactSupplierCategory(contact))}${getContactSupplierZone(contact) ? t("crm.bookings.f6b53f9c8a", { value1: displayValue(getContactSupplierZone(contact)) }) : ""}`, language).map((contact) => (
-                          <option key={contact.id} value={contact.id}>
-                            {getContactLabel(contact)} · {screen.category(getContactSupplierCategory(contact))}{getContactSupplierZone(contact) ? t("crm.bookings.f6b53f9c8a", { value1: displayValue(getContactSupplierZone(contact)) }) : ""}
-                          </option>
+                          <option key={contact.id} value={contact.id} data-search={providerSearchOptions.get(contact.id)?.searchText} data-secondary={providerSearchOptions.get(contact.id)?.secondary}>{getContactLabel(contact)}</option>
                         ))}
-                      </select>
+                      </SearchableSelect>
                     </BusinessLabel>
 
                     <BusinessLabel>{t("crm.bookings.1cbd4b19c8")}<select name="bookingStatus" defaultValue={quote.bookingStatus || "À préparer"}>
@@ -2898,8 +2884,12 @@ function DocumentsView({
   canTrash: boolean;
   sessionUserId: string;
 }) {
-  const { t, label, screen, screenText, dialogText, dialogT } = useCRMDisplay();
+  const { t, label, screen, screenText, dialogText, dialogT, language } = useCRMDisplay();
 
+  const [documentSearch, setDocumentSearch] = useState("");
+  const documentSearchIndex = useMemo(() => createSearchIndex(documents, document => [document.title, document.fileName, document.location, document.category], { getLabel: document => document.title }), [documents]);
+  const documentResults = useMemo(() => searchIndex(documentSearchIndex, documentSearch), [documentSearchIndex, documentSearch]);
+  const approximateDocumentIds = new Set(documentResults.filter(result => result.approximate).map(result => result.item.id));
   const [currentFolderId, setCurrentFolderId] = useState("");
   const [folderName, setFolderName] = useState("");
   const [editingDocument, setEditingDocument] = useState<CRMDocument | null>(null);
@@ -2961,13 +2951,12 @@ function DocumentsView({
     return path;
   })();
 
-  const visibleFolders = folders
-    .filter((folder) => (folder.folderId || folder.parentFolderId || "") === currentFolderId)
-    .sort((a, b) => a.title.localeCompare(b.title, "fr"));
-
-  const visibleDocuments = files
-    .filter((crmDocument) => (crmDocument.folderId || crmDocument.parentFolderId || "") === currentFolderId)
-    .sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
+  const visibleFolders = documentSearch.trim()
+    ? documentResults.map(result => result.item).filter(document => document.isFolder)
+    : folders.filter(folder => (folder.folderId || folder.parentFolderId || "") === currentFolderId).sort((a, b) => a.title.localeCompare(b.title, "fr"));
+  const visibleDocuments = documentSearch.trim()
+    ? documentResults.map(result => result.item).filter(document => !document.isFolder)
+    : files.filter(document => (document.folderId || document.parentFolderId || "") === currentFolderId).sort((a, b) => new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime());
 
   const documentsToCheck = files.filter((crmDocument) =>
     crmDocument.status === "Expiré" || crmDocument.status === "À vérifier"
@@ -3263,6 +3252,13 @@ function DocumentsView({
           </div>
         </div>
 
+        <div className="form-grid">
+          <label>{language === "en" ? "Search all authorized documents" : "Rechercher dans tous les documents autorisés"}<input type="search" value={documentSearch} onChange={event => setDocumentSearch(event.target.value)} /></label>
+          <label>{language === "en" ? "Folder" : "Dossier"}<SearchableSelect value={currentFolderId} onChange={event => { setCurrentFolderId(event.target.value); setDocumentSearch(""); }}>
+            <option value="">{t("crm.documents.35c762079d")}</option>
+            {folders.map(folder => <option key={folder.id} value={folder.id} data-search={folder.location} data-secondary={folder.location}>{folder.title}</option>)}
+          </SearchableSelect></label>
+        </div>
         <div className="document-breadcrumbs">
           <button type="button" className={!currentFolderId ? "primary-button" : "secondary-button"} onClick={() => setCurrentFolderId("")}>{t("crm.documents.35c762079d")}</button>
           {folderPath.map((folder) => (
@@ -3308,7 +3304,7 @@ function DocumentsView({
               >
                 <div>
                   <p className="eyebrow" data-semantic-text={"Dossier"}>{t("crm.documents.2cdf175d11")}</p>
-                  <h3>📁 {folder.title}</h3>
+                  <h3>📁 {folder.title}</h3>{approximateDocumentIds.has(folder.id) && <small>{language === "en" ? "Close match" : "Correspondance approchée"}</small>}
                   <p className="muted-line">{t("crm.documents.f85f2ec2af")}</p>
                 </div>
                 <div className="item-actions contact-row-actions oar-contact-actions">
@@ -3327,7 +3323,7 @@ function DocumentsView({
                 <article className={`item-card document-card document-file-card ${needsCheck ? "document-card-warning" : ""}`} key={crmDocument.id} id={`document-${crmDocument.id}`}>
                   <div>
                     <p className="eyebrow" data-semantic-text={crmDocument.status}>{t("crm.documents.d8027b2582")}{" "}{label(crmDocument.status, "crm")}</p>
-                    <h3>{crmDocument.title}</h3>
+                    <h3>{crmDocument.title}</h3>{approximateDocumentIds.has(crmDocument.id) && <small>{language === "en" ? "Close match" : "Correspondance approchée"}</small>}
                     <p className="muted-line">{t("crm.documents.2b276cb139")}{" "}{screen.date(crmDocument.addedAt)}{" "}{t("crm.documents.c9d9d2c4be")}{" "}{crmDocument.addedBy}
                     </p>
                     {crmDocument.expiryDate && (
@@ -3504,6 +3500,7 @@ function HouseTrackingView({
 }) {
   const { t, label, screen, screenText, dialogT } = useCRMDisplay();
 
+  const houseContactSearchOptions = useMemo(() => new Map(crmContactTextOptions(contacts, contacts).map(option => [option.id, option])), [contacts]);
   const business = useBusinessPermissions();
   const canEditTimeExpenses = access ? access.fullAccess || access.modules.houseTracking?.level === "contribute" : business?.write !== false;
   const { language } = useI18n();
@@ -3640,57 +3637,13 @@ function HouseTrackingView({
     return true;
   }
 
-  function normalizeContactSearchValue(value: string) {
-    return value
-      .trim()
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/\s+/g, " ");
-  }
-
   function getHouseContactDisplayName(contact: Contact) {
     return contact.entityType === "company"
       ? getContactLabel(contact, "Contact")
       : [contact.civility, contact.firstName, contact.name].filter(Boolean).join(" ").trim() || contact.name || contact.companyName || "Contact";
   }
 
-  function getHouseContactSearchLabel(contact: Contact) {
-    const displayName = getHouseContactDisplayName(contact);
-    const secondary = getContactSecondaryLabel(contact);
-    const company = secondary ? ` · ${secondary}` : "";
-    const email = contact.email ? ` · ${contact.email}` : "";
-
-    return `${displayName}${company} · ${contact.kind}${email}`;
-  }
-
-  function getHouseTrackingContactSearchValues(contact: Contact) {
-    return [
-      contact.id,
-      getHouseContactDisplayName(contact),
-      getHouseContactSearchLabel(contact),
-      contact.name,
-      [contact.firstName, contact.name].filter(Boolean).join(" "),
-      contact.companyName || "",
-      contact.organizationFunction || "",
-      contact.email || "",
-      contact.phone || ""
-    ].map((value) => normalizeContactSearchValue(String(value || "")));
-  }
-
-  function findHouseTrackingContact(input: string) {
-    const normalizedInput = normalizeContactSearchValue(input);
-
-    if (!normalizedInput) return undefined;
-
-    const exactMatch = contacts.find((contact) => getHouseTrackingContactSearchValues(contact).some((value) => value === normalizedInput));
-
-    if (exactMatch) return exactMatch;
-
-    return contacts.find((contact) => getHouseTrackingContactSearchValues(contact).some((value) => value.includes(normalizedInput)));
-  }
-
-  const sortedHouseContacts = sortSelectOptions(contacts, getHouseContactSearchLabel, language);
+  const sortedHouseContacts = sortSelectOptions(contacts, getHouseContactDisplayName, language);
 
   const filteredEntries = timeEntries.filter((entry) => {
     const matchesDate = isDateInSelectedRange(entry.date);
@@ -3712,11 +3665,8 @@ function HouseTrackingView({
   const selectedArchivedWorkerHistory = selectedArchivedWorker
     ? getHouseTrackingWorkerHistorySummary(selectedArchivedWorker.id, timeEntries, payments)
     : null;
-  const normalizedArchivedWorkerSearch = normalizeContactSearchValue(archivedWorkerSearch);
-  const visibleArchivedWorkers = archivedWorkers.filter((worker) => (
-    !normalizedArchivedWorkerSearch
-    || normalizeContactSearchValue(`${worker.contactName} ${worker.role}`).includes(normalizedArchivedWorkerSearch)
-  ));
+  const archivedWorkerIndex = useMemo(() => createSearchIndex(archivedWorkers, worker => [worker.contactName, worker.role]), [archivedWorkers]);
+  const visibleArchivedWorkers = useMemo(() => searchIndex(archivedWorkerIndex, archivedWorkerSearch).map(result => result.item), [archivedWorkerIndex, archivedWorkerSearch]);
 
   function getAutoAllocatedPaidForSelectedEntries(targetEntries: typeof filteredEntries) {
     const selectedIds = new Set(targetEntries.map((entry) => entry.id));
@@ -3851,8 +3801,9 @@ function HouseTrackingView({
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const contactInput = String(form.get("contactSearch") ?? "").trim();
-    const contact = findHouseTrackingContact(contactInput);
+    // Only an explicit, still-authorized ID choice may create this link.
+    const contactId = String(form.get("contactId") ?? "");
+    const contact = contacts.find(contact => contact.id === contactId);
 
     if (!contact) return window.alert(dialogT("crm.house.596f0a21b5"));
 
@@ -4035,34 +3986,19 @@ function HouseTrackingView({
             />
           </BusinessLabel>
 
-          <BusinessLabel>{t("crm.house.686e3f21c3")}<select value={houseFilter} onChange={(event) => setHouseFilter(event.target.value)}>
+          <BusinessLabel>{t("crm.house.686e3f21c3")}<SearchableSelect value={houseFilter} onChange={(event) => setHouseFilter(event.target.value)}>
               <option value="Tous">{t("crm.house.0fd6f75852")}</option>
-              {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
-            </select>
+              {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id} data-search={house.address} data-secondary={house.address}>{house.name}</option>)}
+            </SearchableSelect>
           </BusinessLabel>
 
           <div className="house-worker-filter">
             <span className="house-worker-filter-label">{t("crm.house.d282bc2490")}</span>
             <div className="house-worker-filter-controls">
-              <div className="house-worker-filter-scroll" role="group" aria-label={t("crm.house.4d1145f1f0")}>
-                <BusinessButton
-                  className={workerFilter === "Tous" ? "house-worker-filter-button active" : "house-worker-filter-button"}
-                  type="button"
-                  aria-pressed={workerFilter === "Tous"}
-                  onClick={() => setWorkerFilter("Tous")}
-                >{t("crm.house.2ff5998143")}</BusinessButton>
-                {activeWorkers.map((worker) => (
-                  <BusinessButton
-                    className={workerFilter === worker.id ? "house-worker-filter-button active" : "house-worker-filter-button"}
-                    key={worker.id}
-                    type="button"
-                    aria-pressed={workerFilter === worker.id}
-                    onClick={() => setWorkerFilter(worker.id)}
-                  >
-                    {worker.contactName}
-                  </BusinessButton>
-                ))}
-              </div>
+              <SearchableSelect aria-label={t("crm.house.d282bc2490")} value={workerFilter} onChange={event => setWorkerFilter(event.target.value)}>
+                <option value="Tous">{t("crm.house.2ff5998143")}</option>
+                {(selectedArchivedWorker ? [...activeWorkers, selectedArchivedWorker] : activeWorkers).map(worker => <option key={worker.id} value={worker.id} data-search={worker.role} data-secondary={worker.role}>{worker.contactName}</option>)}
+              </SearchableSelect>
               {houseSection !== "today" && (
                 <BusinessButton
                   className="secondary-button house-archive-trigger"
@@ -4162,26 +4098,22 @@ function HouseTrackingView({
             <BusinessForm className="form-grid house-compact-form" onSubmit={submitTimeEntry} pending={hourConfirmation.saving} onChange={hourConfirmation.changed}>
               <BusinessLabel>{t("crm.house.99c40ab405")}<input type="date" value={hourDraft.date} onChange={(event) => setHourDraft((current) => ({ ...current, date: event.target.value }))} />
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.686e3f21c3")}<select value={hourDraft.houseId} onChange={(event) => setHourDraft((current) => ({ ...current, houseId: event.target.value }))}>
+              <BusinessLabel>{t("crm.house.686e3f21c3")}<SearchableSelect value={hourDraft.houseId} onChange={(event) => setHourDraft((current) => ({ ...current, houseId: event.target.value }))}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
-                </select>
+                  {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id} data-search={house.address} data-secondary={house.address}>{house.name}</option>)}
+                </SearchableSelect>
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.d282bc2490")}<select value={hourDraft.workerId} onChange={(event) => {
+              <BusinessLabel>{t("crm.house.d282bc2490")}<SearchableSelect value={hourDraft.workerId} onChange={(event) => {
                   const worker = activeWorkers.find((item) => item.id === event.target.value);
                   setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: houseHourlyRateInput(worker) }));
                 }}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
-                </select>
+                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id} data-search={worker.role} data-secondary={worker.role}>{worker.contactName}</option>)}
+                </SearchableSelect>
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.3c48aa2bdf")}<select value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))}>
-                  {QUARTER_HOUR_TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
-                </select>
+              <BusinessLabel>{t("crm.house.3c48aa2bdf")}<input type="time" step="900" required value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))} />
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.5a2af601e7")}<select value={hourDraft.endTime} onChange={(event) => setHourDraft((current) => ({ ...current, endTime: event.target.value }))}>
-                  {QUARTER_HOUR_TIME_OPTIONS.map((time) => <option key={time} value={time}>{time}</option>)}
-                </select>
+              <BusinessLabel>{t("crm.house.5a2af601e7")}<input type="time" step="900" required value={hourDraft.endTime} onChange={(event) => setHourDraft((current) => ({ ...current, endTime: event.target.value }))} />
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.286518b073")}<input type="number" min="0" value={hourDraft.breakMinutes} onChange={(event) => setHourDraft((current) => ({ ...current, breakMinutes: event.target.value }))} />
               </BusinessLabel>
@@ -4247,15 +4179,15 @@ function HouseTrackingView({
             <BusinessForm className="form-grid house-compact-form" onSubmit={submitPayment}>
               <BusinessLabel>{t("crm.house.99c40ab405")}<input name="date" type="date" defaultValue={today} />
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.686e3f21c3")}<select name="houseId" defaultValue={houses[0]?.id || ""}>
+              <BusinessLabel>{t("crm.house.686e3f21c3")}<SearchableSelect name="houseId" defaultValue={houses[0]?.id || ""}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
-                </select>
+                  {sortSelectOptions(houses, house => house.name, language).map((house) => <option key={house.id} value={house.id} data-search={house.address} data-secondary={house.address}>{house.name}</option>)}
+                </SearchableSelect>
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.d282bc2490")}<select name="workerId" defaultValue={initialActiveWorker?.id || ""}>
+              <BusinessLabel>{t("crm.house.d282bc2490")}<SearchableSelect name="workerId" defaultValue={initialActiveWorker?.id || ""}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id}>{worker.contactName}</option>)}
-                </select>
+                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id} data-search={worker.role} data-secondary={worker.role}>{worker.contactName}</option>)}
+                </SearchableSelect>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.947cc07e2b")}<input name="amount" type="text" inputMode="decimal" min="0" step="1" placeholder={t("crm.house.3b23fa9915")} />
               </BusinessLabel>
@@ -4334,10 +4266,11 @@ function HouseTrackingView({
             <p className="eyebrow" data-semantic-text={"Réglages"}>{t("crm.house.4ed117e09c")}</p>
             <h3>{t("crm.house.8e72b6ff33")}</h3>
             <BusinessForm className="form-grid house-compact-form" onSubmit={submitWorker}>
-              <BusinessLabel>{t("crm.house.424439cbf0")}<input name="contactSearch" list="house-contact-options" placeholder={t("crm.house.2c2872e46b")} autoComplete="off" />
-                <datalist id="house-contact-options">
-                  {sortedHouseContacts.map((contact) => <option key={contact.id} value={getHouseContactSearchLabel(contact)} />)}
-                </datalist>
+              <BusinessLabel>{t("crm.house.424439cbf0")}<SearchableSelect name="contactId" required defaultValue="">
+                  <option value="">{t("crm.house.2c2872e46b")}</option>
+                  {sortedHouseContacts.map(contact => <option key={contact.id} value={contact.id}
+                    data-search={houseContactSearchOptions.get(contact.id)?.searchText} data-secondary={houseContactSearchOptions.get(contact.id)?.secondary}>{getHouseContactDisplayName(contact)}</option>)}
+                </SearchableSelect>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.18e4968684")}<input name="hourlyRate" type="text" inputMode="decimal" required placeholder={t("crm.house.b9e2dc644a")} />
               </BusinessLabel>
@@ -5596,7 +5529,7 @@ function DashboardQuickTile({
 export {createQuickEntryRecords, promptQuickEntryText};
 
 export default function CRMApp({ access, initialTab = "dashboard", initialContactId, externalNavigation, contactCreateIntent, onContactCreateReturn, sourceFocus, onExternalNavigate, sessionUserId, sessionAccessToken, sessionEmail, onLogout, onUnsavedChange }: { access: AccessSnapshot; initialTab?: Tab; initialContactId?: string; externalNavigation?: { tab: Tab; revision: number }; contactCreateIntent?: ContactCreateIntent; onContactCreateReturn?: ContactCreateReturn; sourceFocus?: { module: "vendorInvoices" | "houseTracking"; id: string }; onExternalNavigate: (tab: UnifiedTab) => boolean | void; sessionUserId: string; sessionAccessToken: string; sessionEmail: string; onLogout: () => void; onUnsavedChange?: (dirty: boolean) => void }) {
-  const { t, label, locale, screen, screenText, dialogText, dialogT } = useCRMDisplay();
+  const { t, label, locale, language, screen, screenText, dialogText, dialogT } = useCRMDisplay();
 
   const beginHouseOperation = useScopedOperations("houseTracking");
   const beginContactOperation = useScopedOperations("contacts");
@@ -5725,6 +5658,11 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
     }
   });
   const [data, setDataState] = useState<CRMData>(initialLocalState.data);
+  const canReadTaskContacts = readable(access, "contacts");
+  const taskLinks = useMemo(() => ({
+    leads: data.leads.map(lead => ({ id: lead.id, label: `${lead.category} · ${lead.contactName}` })),
+    contacts: taskContactOptions(canReadTaskContacts ? data.contacts : [])
+  }), [data.leads, data.contacts, canReadTaskContacts]);
   const setData = useCallback((update: SetStateAction<CRMData>) => {
     setDataState(current => {
       const next = typeof update === "function" ? update(current) : update;
@@ -6462,21 +6400,19 @@ const toneRank: Record<ActionNotification["tone"], number> = {
       .slice(0, 20);
   }, [data, visibleTasks, t, screen]);
 
-  const filteredLeads = useMemo(() => {
-    return data.leads.filter((lead) => searchMatch(query, [lead.category, lead.contactName, lead.status, lead.nextAction, lead.rentalStartDate, lead.rentalEndDate]));
-  }, [data.leads, query]);
-
-  const filteredProperties = useMemo(() => {
-    return data.properties.filter((property) => searchMatch(query, [property.name, property.city, property.type, property.owner, property.status]));
-  }, [data.properties, query]);
-
-  const filteredVehicles = useMemo(() => {
-    return (data.vehicles ?? []).filter((vehicle) => searchMatch(query, [vehicle.name, vehicle.brand, vehicle.model, vehicle.city, vehicle.owner, vehicle.status]));
-  }, [data.vehicles, query]);
-
-  const filteredBoats = useMemo(() => {
-    return (data.boats ?? []).filter((boat) => searchMatch(query, [boat.name, boat.port, boat.type, boat.owner, boat.status]));
-  }, [data.boats, query]);
+  const leadSearchIndex = useMemo(() => createSearchIndex(data.leads, lead => [lead.id, lead.category, lead.contactName, lead.status, lead.nextAction, lead.rentalStartDate, lead.rentalEndDate], { getLabel: lead => lead.contactName }), [data.leads]);
+  const propertySearchIndex = useMemo(() => createSearchIndex(data.properties, property => [property.id, property.name, property.city, property.type, property.owner, property.status], { getLabel: property => property.name }), [data.properties]);
+  const vehicleSearchIndex = useMemo(() => createSearchIndex(data.vehicles ?? [], vehicle => [vehicle.id, vehicle.name, vehicle.brand, vehicle.model, vehicle.city, vehicle.owner, vehicle.status], { getLabel: vehicle => vehicle.name }), [data.vehicles]);
+  const boatSearchIndex = useMemo(() => createSearchIndex(data.boats ?? [], boat => [boat.id, boat.name, boat.port, boat.type, boat.owner, boat.status], { getLabel: boat => boat.name }), [data.boats]);
+  const leadSearchResults = useMemo(() => searchIndex(leadSearchIndex, query), [leadSearchIndex, query]);
+  const propertySearchResults = useMemo(() => searchIndex(propertySearchIndex, query), [propertySearchIndex, query]);
+  const vehicleSearchResults = useMemo(() => searchIndex(vehicleSearchIndex, query), [vehicleSearchIndex, query]);
+  const boatSearchResults = useMemo(() => searchIndex(boatSearchIndex, query), [boatSearchIndex, query]);
+  const filteredLeads = leadSearchResults.map(result => result.item);
+  const filteredProperties = propertySearchResults.map(result => result.item);
+  const filteredVehicles = vehicleSearchResults.map(result => result.item);
+  const filteredBoats = boatSearchResults.map(result => result.item);
+  const hasApproximateResults = ({ leads: leadSearchResults, properties: propertySearchResults, vehicles: vehicleSearchResults, boats: boatSearchResults }[activeTab as "leads"] ?? []).some(result => result.approximate);
 
   function handleNotificationAction(notification?: ActionNotification) {
     const target = notification ?? actionNotifications[0];
@@ -8946,6 +8882,7 @@ function createQuoteDraftFromLead(lead: Lead) {
             </details>
           </div>
         </header>
+        {hasApproximateResults && <p className="muted-line" role="status">{language === "en" ? "Close matches appear after direct matches." : "Les correspondances approchées suivent les résultats directs."}</p>}
 
         <section className={`shared-db-status-panel shared-db-status-desktop ${sharedWorkspaceStatus}`} data-semantic-text={sharedWorkspaceStatus === "connected" ? "Connectée" : sharedWorkspaceStatus === "error" ? "Erreur" : "Nouveau"}>
           <div>
@@ -9214,7 +9151,7 @@ function createQuoteDraftFromLead(lead: Lead) {
         )}
 
         {activeTab === "tasks" && (
-          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={{ leads: data.leads.map(lead => ({ id: lead.id, label: `${lead.category} · ${lead.contactName}` })), contacts: taskContactOptions(readable(access, "contacts") ? data.contacts : []) }} />
+          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={taskLinks} />
         )}
       </section>
 
@@ -9223,12 +9160,24 @@ function createQuoteDraftFromLead(lead: Lead) {
   );
 }
 
-function searchMatch(query: string, fields: Array<string | number>) {
-  const needle = query.trim().toLowerCase();
-  if (!needle) return true;
-  return fields.some((field) => String(field).toLowerCase().includes(needle));
+/** Options are built only from each module's already authorized Contacts projection. */
+function crmContactTextOptions(contacts: readonly Contact[], authorized: readonly Contact[]) {
+  const fields = createContactFieldResolver(authorized);
+  const companies = new Map(authorized.filter(contact => contact.entityType === "company").map(contact => [contact.id, contact]));
+  return contacts.map(contact => {
+    const seen = new Set<string>();
+    let company = companies.get(contact.entityType === "company" ? contact.id : contact.companyId || "");
+    while (company?.mergedIntoCompanyId) {
+      if (seen.has(company.id)) { company = undefined; break; }
+      seen.add(company.id); company = companies.get(company.mergedIntoCompanyId);
+    }
+    const label = getContactLabel(contact);
+    const companyLabel = contact.entityType === "company" ? getContactPersonName(contact) : company?.companyName || getContactSecondaryLabel(contact);
+    return { id: contact.id, value: label, label,
+      searchText: fields(contact).filter(Boolean).join(" "),
+      secondary: [companyLabel, contact.city || company?.city, contact.email || contact.phone].filter(Boolean).join(" · ") };
+  });
 }
-
 
 type PlanningAsset = {
   id: string;
@@ -9734,6 +9683,7 @@ function PlanningView({
 }) {
   const { t, label, locale, screen, dialogT, language } = useCRMDisplay();
 
+  const planningContactOptions = useMemo(() => crmContactTextOptions(contacts, contacts), [contacts]);
   const business = useBusinessPermissions();
   const [categoryFilter, setCategoryFilter] = useState("Tous");
   const [assetFilter, setAssetFilter] = useState("Tous");
@@ -9873,34 +9823,12 @@ function PlanningView({
     return assets.map((asset) => ({
       key: `${asset.type}:${asset.id}`,
       label: `${asset.label} · ${label(getAssetPlanningCategory(asset) || asset.category, "crm")}`,
-      planningCategory: getAssetPlanningCategory(asset)
+      planningCategory: getAssetPlanningCategory(asset),
+      searchText: [asset.id, asset.location, asset.category].join(" "),
+      secondary: asset.location
     }));
   }, [assets, label]);
 
-
-  function getPlanningContactDisplayName(contact: Contact) {
-    return getContactLabel(contact);
-  }
-
-  const planningContactOptions = useMemo(() => {
-    return contacts
-      .map((contact) => {
-        const displayName = getPlanningContactDisplayName(contact);
-        const meta = [
-          label(contact.kind, "crm"),
-          contact.supplierCategory ? screen.category(contact.supplierCategory) : "",
-          contact.companyName && contact.companyName !== displayName ? contact.companyName : "",
-          contact.email,
-          contact.phone
-        ].filter(Boolean).join(" · ");
-
-        return {
-          id: contact.id,
-          value: displayName,
-          label: meta ? `${displayName} · ${meta}` : displayName
-        };
-      });
-  }, [contacts, label, screen]);
 
   const confirmedBookings = useMemo(() => {
     return leads
@@ -10563,12 +10491,12 @@ function PlanningView({
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>{t("crm.planning.ed605ab50c")}<select value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}>
+          <BusinessLabel>{t("crm.planning.ed605ab50c")}<SearchableSelect value={assetFilter} onChange={(event) => setAssetFilter(event.target.value)}>
               <option value="Tous">{t("crm.planning.204aa09406")}</option>
               {sortSelectOptions(assetFilterOptions, asset => asset.label, language).map((asset) => (
-                <option key={asset.key} value={asset.key}>{asset.label}</option>
+                <option key={asset.key} value={asset.key} data-search={asset.searchText} data-secondary={asset.secondary}>{asset.label}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </BusinessLabel>
 
           <BusinessLabel>{t("crm.planning.f12d68908f")}<input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
@@ -10732,26 +10660,17 @@ function PlanningView({
             </select>
           </BusinessLabel>
 
-          <BusinessLabel>{t("crm.planning.16a7ec6358")}<input
-              name="contactName"
-              list="planning-contact-options"
-              defaultValue={editingPlanningEntry?.contactName ?? ""}
-              placeholder={t("crm.planning.c10669d9f2")}
-              autoComplete="off"
-            />
-            <datalist id="planning-contact-options">
-              {sortSelectOptions(planningContactOptions, contact => contact.label, language).map((contact) => (
-                <option key={contact.id} value={contact.value}>{contact.label}</option>
-              ))}
-            </datalist>
+          <BusinessLabel>{t("crm.planning.16a7ec6358")}<SearchableInput
+              name="contactName" defaultValue={editingPlanningEntry?.contactName ?? ""}
+              placeholder={t("crm.planning.c10669d9f2")} options={planningContactOptions} />
           </BusinessLabel>
 
-          <BusinessLabel>{t("crm.planning.833fcb6f22")}<select name="assetKey" defaultValue={editingPlanningAssetKey}>
+          <BusinessLabel>{t("crm.planning.833fcb6f22")}<SearchableSelect name="assetKey" defaultValue={editingPlanningAssetKey}>
               <option value="">{t("crm.planning.1ceb66fe96")}</option>
               {sortSelectOptions(visibleAssetOptions, asset => asset.label, language).map((asset) => (
-                <option key={asset.key} value={asset.key}>{asset.label}</option>
+                <option key={asset.key} value={asset.key} data-search={asset.searchText} data-secondary={asset.secondary}>{asset.label}</option>
               ))}
-            </select>
+            </SearchableSelect>
           </BusinessLabel>
 
           <BusinessLabel>{t("crm.planning.f12d68908f")}<input type="date" name="startDate" defaultValue={editingPlanningEntry?.startDate ?? quickPlanningDate} required />
@@ -12044,20 +11963,11 @@ function ContactsViewBody({
 
     return matchesType && (contactFilter === "Prestataires" ? matchesSupplierCategory : true);
   }), [contacts, contactFilter, supplierCategoryFilter]);
-  const contactSearchIndex = useMemo(() => createContactSearchIndex(filteredByCategory), [filteredByCategory]);
-  const { direct: visibleContacts, close: closeContacts } = useMemo(() => {
-    const results = searchContactSuggestions(contactSearchIndex, query);
-    const directIds = new Set(results.direct.map(contact => contact.id));
-    const direct = filteredByCategory.filter(contact => directIds.has(contact.id) || matchesContactWithCompany(contact, query, contacts));
-    const ids = new Set(direct.map(contact => contact.id));
-    return { direct: sortSelectOptions(direct, getContactLabel, language), close: results.close.filter(contact => !ids.has(contact.id)) };
-  }, [contactSearchIndex, query, filteredByCategory, contacts, language]);
+  const contactSearchIndex = useMemo(() => createContactSearchIndex(filteredByCategory, contacts), [filteredByCategory, contacts]);
+  const { direct: visibleContacts, close: closeContacts } = useMemo(() => searchContactSuggestions(contactSearchIndex, query), [contactSearchIndex, query]);
   const searching = Boolean(normalizeContactSearch(query));
   const allContactSearchIndex = useMemo(() => createContactSearchIndex(contacts), [contacts]);
-  const searchedContacts = useMemo(() => {
-    const ids = new Set(searchDirectContacts(allContactSearchIndex, query).map(contact => contact.id));
-    return contacts.filter(contact => ids.has(contact.id) || matchesContactWithCompany(contact, query, contacts));
-  }, [allContactSearchIndex, query, contacts]);
+  const searchedContacts = useMemo(() => searchDirectContacts(allContactSearchIndex, query), [allContactSearchIndex, query]);
 
   const clientCount = searchedContacts.filter((contact) => contact.kind === "Client" && !isSupplierContact(contact)).length;
   const supplierCount = searchedContacts.filter(isSupplierContact).length;
@@ -12185,12 +12095,12 @@ function ContactsViewBody({
 
         {contactFilter === "Prestataires" && (
           <div className="contacts-toolbar-stable-supplier-filter">
-            <BusinessLabel>{t("crm.contacts.306854f806")}<select value={supplierCategoryFilter} onChange={(event) => setSupplierCategoryFilter(event.target.value)}>
+            <BusinessLabel>{t("crm.contacts.306854f806")}<SearchableSelect value={supplierCategoryFilter} onChange={(event) => setSupplierCategoryFilter(event.target.value)}>
                 <option value="Toutes">{t("crm.contacts.42623b97b4")}</option>
                 {supplierProfessionOptions.map((category) => (
                   <option key={category} value={category}>{screen.category(category)}</option>
                 ))}
-              </select>
+              </SearchableSelect>
             </BusinessLabel>
           </div>
         )}
@@ -12376,10 +12286,10 @@ function ContactsViewBody({
 
             {newContactKind === "Prestataire" && (
               <>
-                <BusinessLabel>{t("crm.contacts.306854f806")}<select name="supplierCategory" defaultValue="">
+                <BusinessLabel>{t("crm.contacts.306854f806")}<SearchableSelect name="supplierCategory" defaultValue="">
                     <option value="">—</option>
                     {supplierProfessionOptions.map((category) => <option key={category} value={category}>{screen.category(category)}</option>)}
-                  </select>
+                  </SearchableSelect>
                 </BusinessLabel>
                 <BusinessLabel>{t("crm.contacts.89dd598794")}<input name="supplierCategoryCustom" placeholder={t("crm.contacts.84329bc858")} />
                 </BusinessLabel>
@@ -12560,10 +12470,10 @@ function ContactsViewBody({
 
               {editingContactKind === "Prestataire" && (
                 <>
-                  <BusinessLabel>{t("crm.contacts.306854f806")}<select name="supplierCategory" defaultValue={editingContact.supplierCategory || ""}>
+                  <BusinessLabel>{t("crm.contacts.306854f806")}<SearchableSelect name="supplierCategory" defaultValue={editingContact.supplierCategory || ""}>
                       <option value="">—</option>
                       {supplierProfessionOptions.map((category) => <option key={category} value={category}>{screen.category(category)}</option>)}
-                    </select>
+                    </SearchableSelect>
                   </BusinessLabel>
                   <BusinessLabel>{t("crm.contacts.89dd598794")}<input name="supplierCategoryCustom" placeholder={t("crm.contacts.ebe3278935")} />
                   </BusinessLabel>
@@ -12642,6 +12552,7 @@ function LeadsView({
 }) {
   const { t, label, screen, dialogT, language } = useCRMDisplay();
 
+  const leadContactOptions = useMemo(() => crmContactTextOptions(contacts, contacts), [contacts]);
   const business = useBusinessPermissions();
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -12651,25 +12562,24 @@ function LeadsView({
   const [leadDueFilter, setLeadDueFilter] = useState<"Tous" | "En retard" | "Aujourd'hui" | "À venir" | "Sans échéance">("Tous");
   const [leadActionFilter, setLeadActionFilter] = useState<"Tous" | "Sans prochaine action">("Tous");
 
-  const editingContactName = editingLead?.contactName ?? "";
-  const preserveEditingContact = editingContactName !== "" &&
-    contacts.filter((contact) => getContactLabel(contact) === editingContactName).length !== 1;
-
   const assetOptions = [
     ...properties.map((property) => ({
       id: property.id,
       type: "Property" as const,
-      label: `Villa / Bien • ${getPropertyDisplayName(property)}`
+      label: `Villa / Bien • ${getPropertyDisplayName(property)}`,
+      searchText: [property.id, property.city, property.owner, property.type].join(" "), secondary: property.city
     })),
     ...vehicles.map((vehicle) => ({
       id: vehicle.id,
       type: "Vehicle" as const,
-      label: `Voiture • ${vehicle.name}`
+      label: `Voiture • ${vehicle.name}`,
+      searchText: [vehicle.id, vehicle.brand, vehicle.model, vehicle.city, vehicle.owner].join(" "), secondary: [vehicle.brand, vehicle.model, vehicle.city].filter(Boolean).join(" · ")
     })),
     ...boats.map((boat) => ({
       id: boat.id,
       type: "Boat" as const,
-      label: `Bateau • ${boat.name}`
+      label: `Bateau • ${boat.name}`,
+      searchText: [boat.id, boat.port, boat.type, boat.owner].join(" "), secondary: boat.port
     }))
   ];
 
@@ -12791,28 +12701,19 @@ const visibleLeads = leads.filter((lead) => {
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>{t("crm.leads.2b5c3d2672")}<input
-                name="contactName"
-                list="lead-contact-options"
-                defaultValue={preselectedContactName || ""}
-                placeholder={t("crm.leads.84c00400a6")}
-              />
-              <datalist id="lead-contact-options">
-                {sortSelectOptions(contacts, contact => getContactSecondaryLabel(contact) ? t("crm.leads.7c639bc99b", { value1: displayValue(getContactLabel(contact)), value2: displayValue(getContactSecondaryLabel(contact)) }) : getContactLabel(contact), language).map((contact) => {
-                  const label = getContactLabel(contact);
-                  return <option key={contact.id} value={label}>{getContactSecondaryLabel(contact) ? t("crm.leads.7c639bc99b", { value1: displayValue(label), value2: displayValue(getContactSecondaryLabel(contact)) }) : label}</option>;
-                })}
-              </datalist>
+            <BusinessLabel>{t("crm.leads.2b5c3d2672")}<SearchableInput
+                name="contactName" defaultValue={preselectedContactName || ""}
+                placeholder={t("crm.leads.84c00400a6")} options={leadContactOptions} />
             </BusinessLabel>
 
-            <BusinessLabel>{t("crm.leads.0ad9d4fa0c")}<select name="assetKey" defaultValue="">
+            <BusinessLabel>{t("crm.leads.0ad9d4fa0c")}<SearchableSelect name="assetKey" defaultValue="">
                 <option value="">{t("crm.leads.1ceb66fe96")}</option>
                 {sortSelectOptions(assetOptions, asset => asset.label, language).map((asset) => (
-                  <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`}>
+                  <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`} data-search={asset.searchText} data-secondary={asset.secondary}>
                     {asset.label}
                   </option>
                 ))}
-              </select>
+              </SearchableSelect>
             </BusinessLabel>
           </fieldset>
 
@@ -13107,26 +13008,21 @@ const visibleLeads = leads.filter((lead) => {
                 </select>
               </BusinessLabel>
 
-              <BusinessLabel>{t("crm.leads.2b5c3d2672")}<select name="contactName" defaultValue={editingLead.contactName} required>
-                  <option value="">{t("crm.leads.09a3bda6ca")}</option>
-                  {sortSelectOptions([
-                    ...(preserveEditingContact ? [{ id: "historical-contact", value: editingContactName, text: t("crm.leads.historicalContact", { name: editingContactName }) }] : []),
-                    ...contacts.map(contact => ({ id: contact.id, value: getContactLabel(contact), text: getContactLabel(contact) })),
-                  ], option => option.text, language).map(option => <option key={option.id} value={option.value}>{option.text}</option>)}
-                </select>
+              <BusinessLabel>{t("crm.leads.2b5c3d2672")}<SearchableInput name="contactName" defaultValue={editingLead.contactName} required
+                  options={leadContactOptions} />
               </BusinessLabel>
 
-              <BusinessLabel>{t("crm.leads.0ad9d4fa0c")}<select
+              <BusinessLabel>{t("crm.leads.0ad9d4fa0c")}<SearchableSelect
                   name="assetKey"
                   defaultValue={editingLead.assetType && editingLead.assetId ? `${editingLead.assetType}:${editingLead.assetId}` : ""}
                 >
                   <option value="">{t("crm.leads.1ceb66fe96")}</option>
                   {sortSelectOptions(assetOptions, asset => asset.label, language).map((asset) => (
-                    <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`}>
+                    <option key={`${asset.type}:${asset.id}`} value={`${asset.type}:${asset.id}`} data-search={asset.searchText} data-secondary={asset.secondary}>
                       {asset.label}
                     </option>
                   ))}
-                </select>
+                </SearchableSelect>
               </BusinessLabel>
 
               <BusinessLabel>{t("crm.leads.dee377cfd8")}<select name="status" defaultValue={editingLead.status}>
@@ -13188,11 +13084,9 @@ function PropertiesView({
   const [propertyStatusFilter, setPropertyStatusFilter] = useState<"Tous" | PropertyStatus>("Tous");
   const [propertyCityFilter, setPropertyCityFilter] = useState("");
 
-  const visibleProperties = properties.filter((property) => {
-    const statusMatches = propertyStatusFilter === "Tous" || property.status === propertyStatusFilter;
-    const cityMatches = property.city.toLowerCase().includes(propertyCityFilter.toLowerCase().trim());
-    return statusMatches && cityMatches;
-  });
+  const propertyLocationIndex = useMemo(() => createSearchIndex(properties, property => [property.city], { getLabel: property => property.city }), [properties]);
+  const visibleProperties = (propertyCityFilter.trim() ? searchIndex(propertyLocationIndex, propertyCityFilter).map(result => result.item) : properties)
+    .filter(property => propertyStatusFilter === "Tous" || property.status === propertyStatusFilter);
 
   function getPropertyLeads(property: Property) {
     return leads.filter((lead) => lead.assetType === "Property" && lead.assetId === property.id);
@@ -13250,7 +13144,7 @@ function PropertiesView({
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>{t("crm.properties.0ebd25a341")}<input value={propertyCityFilter} onChange={(event) => setPropertyCityFilter(event.target.value)} placeholder={t("crm.properties.4664cdd74b")} />
+            <BusinessLabel>{t("crm.properties.0ebd25a341")}<SearchableInput options={Array.from(new Set(properties.map(item => item.city))).filter(Boolean)} value={propertyCityFilter} onChange={(event) => setPropertyCityFilter(event.target.value)} placeholder={t("crm.properties.4664cdd74b")} />
             </BusinessLabel>
           </div>
         </div>
@@ -13426,11 +13320,9 @@ function VehiclesView({
   const [vehicleStatusFilter, setVehicleStatusFilter] = useState<"Tous" | VehicleStatus>("Tous");
   const [vehicleCityFilter, setVehicleCityFilter] = useState("");
 
-  const visibleVehicles = vehicles.filter((vehicle) => {
-    const statusMatches = vehicleStatusFilter === "Tous" || vehicle.status === vehicleStatusFilter;
-    const cityMatches = vehicle.city.toLowerCase().includes(vehicleCityFilter.toLowerCase().trim());
-    return statusMatches && cityMatches;
-  });
+  const vehicleLocationIndex = useMemo(() => createSearchIndex(vehicles, vehicle => [vehicle.city], { getLabel: vehicle => vehicle.city }), [vehicles]);
+  const visibleVehicles = (vehicleCityFilter.trim() ? searchIndex(vehicleLocationIndex, vehicleCityFilter).map(result => result.item) : vehicles)
+    .filter(vehicle => vehicleStatusFilter === "Tous" || vehicle.status === vehicleStatusFilter);
 
   function getVehicleLeads(vehicle: Vehicle) {
     return leads.filter((lead) => lead.assetType === "Vehicle" && lead.assetId === vehicle.id);
@@ -13486,7 +13378,7 @@ function VehiclesView({
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>{t("crm.vehicles.0ebd25a341")}<input value={vehicleCityFilter} onChange={(event) => setVehicleCityFilter(event.target.value)} placeholder={t("crm.vehicles.897ebccda8")} />
+            <BusinessLabel>{t("crm.vehicles.0ebd25a341")}<SearchableInput options={Array.from(new Set(vehicles.map(item => item.city))).filter(Boolean)} value={vehicleCityFilter} onChange={(event) => setVehicleCityFilter(event.target.value)} placeholder={t("crm.vehicles.897ebccda8")} />
             </BusinessLabel>
           </div>
         </div>
@@ -13662,11 +13554,9 @@ function BoatsView({
   const [boatStatusFilter, setBoatStatusFilter] = useState<"Tous" | BoatStatus>("Tous");
   const [boatPortFilter, setBoatPortFilter] = useState("");
 
-  const visibleBoats = boats.filter((boat) => {
-    const statusMatches = boatStatusFilter === "Tous" || boat.status === boatStatusFilter;
-    const portMatches = boat.port.toLowerCase().includes(boatPortFilter.toLowerCase().trim());
-    return statusMatches && portMatches;
-  });
+  const boatLocationIndex = useMemo(() => createSearchIndex(boats, boat => [boat.port], { getLabel: boat => boat.port }), [boats]);
+  const visibleBoats = (boatPortFilter.trim() ? searchIndex(boatLocationIndex, boatPortFilter).map(result => result.item) : boats)
+    .filter(boat => boatStatusFilter === "Tous" || boat.status === boatStatusFilter);
 
   function getBoatLeads(boat: Boat) {
     return leads.filter((lead) => lead.assetType === "Boat" && lead.assetId === boat.id);
@@ -13721,7 +13611,7 @@ function BoatsView({
               </select>
             </BusinessLabel>
 
-            <BusinessLabel>{t("crm.boats.72e9a59f5a")}<input value={boatPortFilter} onChange={(event) => setBoatPortFilter(event.target.value)} placeholder={t("crm.boats.d892911e3f")} />
+            <BusinessLabel>{t("crm.boats.72e9a59f5a")}<SearchableInput options={Array.from(new Set(boats.map(item => item.port))).filter(Boolean)} value={boatPortFilter} onChange={(event) => setBoatPortFilter(event.target.value)} placeholder={t("crm.boats.d892911e3f")} />
             </BusinessLabel>
           </div>
         </div>

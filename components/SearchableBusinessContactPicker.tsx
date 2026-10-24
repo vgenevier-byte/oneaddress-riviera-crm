@@ -4,13 +4,14 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { Contact } from "@/lib/types";
-import { sortSelectOptions } from "@/lib/selectOptions";
+import { createSearchIndex, searchIndex } from "@/lib/search";
+import { useSearchDismissal } from "./search/useSearchDismissal";
 import {
   getVendorBusinessName,
   getVendorContactPersonName,
   getVendorContactProfession,
   normalizeVendorContactSearch,
-  searchVendorContacts
+  createVendorContactFieldResolver
 } from "@/lib/vendorContacts";
 
 type Props = {
@@ -49,7 +50,7 @@ export default function SearchableBusinessContactPicker({
   label = "Prestataire",
   name = "contactId",
   required = false,
-  value, onSelect, onQueryChange, queryValue, selectedRecord, searchMode = "vendor",
+  value, onSelect, onQueryChange, queryValue, selectedRecord,
   loading = false, disabled = false, onOpenContact, resultLabel, labels
 }: Props) {
   const {t, language} = useI18n();
@@ -91,20 +92,16 @@ export default function SearchableBusinessContactPicker({
   const [previousQueryValue, setPreviousQueryValue] = useState(queryValue);
   if (previousQueryValue !== queryValue) {
     setPreviousQueryValue(queryValue);
-    setIsOpen(Boolean(queryValue && normalizedQuery.length >= 2));
+    setIsOpen(Boolean(queryValue && normalizedQuery.length >= 1));
     setActiveContactId("");
   }
-  const results = useMemo(
-    () => searchMode === "all"
-      ? sortSelectOptions(contacts, resultLabel || getVendorBusinessName, language).slice(0, 50)
-      : searchVendorContacts(contacts, normalizedQuery, 10),
-    [contacts, language, normalizedQuery, resultLabel, searchMode]
-  );
+  const index = useMemo(() => createSearchIndex(contacts, createVendorContactFieldResolver(contacts), { getId: contact => contact.id, getLabel: resultLabel || getVendorBusinessName }), [contacts, resultLabel]);
+  const hits = useMemo(() => searchIndex(index, normalizedQuery, { limit: 50 }), [index, normalizedQuery]);
+  const results = hits.map(hit => hit.item);
   const activeIndex = results.findIndex(contact => contact.id === activeContactId);
   if (
     previousDefaults.defaultContactId !== defaultContactId ||
-    previousDefaults.fallbackContactName !== fallbackContactName ||
-    previousDefaults.hasDefaultContact !== hasDefaultContact
+    previousDefaults.fallbackContactName !== fallbackContactName
   ) {
     setPreviousDefaults({ defaultContactId, fallbackContactName, hasDefaultContact });
     setSelectedContactId(defaultContactId);
@@ -113,6 +110,11 @@ export default function SearchableBusinessContactPicker({
     setQuery("");
     setIsOpen(false);
     setActiveContactId("");
+  }
+
+  if (previousDefaults.hasDefaultContact !== hasDefaultContact) {
+    setPreviousDefaults({ defaultContactId, fallbackContactName, hasDefaultContact });
+    if (selectedContactId === defaultContactId) setPreserveFallback(Boolean(fallbackContactName && !hasDefaultContact));
   }
 
   useEffect(() => {
@@ -132,19 +134,7 @@ export default function SearchableBusinessContactPicker({
     return () => form.removeEventListener("reset", resetPicker);
   }, [defaultContactId, fallbackContactName, hasDefaultContact]);
 
-  useEffect(() => {
-    function closeOnOutsideClick(event: MouseEvent) {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-
-    // Controlled consumers may display results in the document flow. Closing
-    // after click prevents the outside target from moving before mouseup.
-    const eventName = controlled ? "click" : "mousedown";
-    document.addEventListener(eventName, closeOnOutsideClick);
-    return () => document.removeEventListener(eventName, closeOnOutsideClick);
-  }, [controlled]);
+  const dismissSearch = useSearchDismissal(containerRef, isOpen, () => { setIsOpen(false); setActiveContactId(""); });
 
   function focusSearch() {
     window.requestAnimationFrame(() => inputRef.current?.focus());
@@ -152,9 +142,7 @@ export default function SearchableBusinessContactPicker({
 
   function startChanging() {
     if (disabled) return;
-    if (!controlled) setSelectedContactId("");
     setChanging(true);
-    setPreserveFallback(false);
     setQuery("");
     onQueryChange?.("");
     setIsOpen(false);
@@ -173,7 +161,7 @@ export default function SearchableBusinessContactPicker({
   }
 
   function selectContact(contact: Contact) {
-    if (disabled || onSelect?.(contact) === false) return;
+    if (disabled || loading || !contacts.some(row => row.id === contact.id) || onSelect?.(contact) === false) return;
     setChanging(false);
     setSelectedContactId(contact.id);
     setPreserveFallback(false);
@@ -183,6 +171,7 @@ export default function SearchableBusinessContactPicker({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown" && results.length > 0) {
       event.preventDefault();
       setIsOpen(true);
@@ -197,18 +186,25 @@ export default function SearchableBusinessContactPicker({
       return;
     }
 
-    if (event.key === "Enter" && isOpen && results[activeIndex]) {
-      event.preventDefault();
-      selectContact(results[activeIndex]);
+    if (event.key === "Enter") {
+      event.preventDefault(); event.stopPropagation();
+      if (isOpen && results[activeIndex]) selectContact(results[activeIndex]);
       return;
     }
 
     if (event.key === "Escape") {
+      event.preventDefault(); event.stopPropagation();
       setIsOpen(false);
     }
   }
 
-  const unresolvedSelection = Boolean(controlled && effectiveId && !selectedContact);
+  useEffect(() => {
+    inputRef.current?.setCustomValidity(required && !effectiveId && !preserveFallback ? (language === "en" ? "Choose a contact from the suggestions." : "Choisissez un contact dans les suggestions.") : "");
+  }, [effectiveId, preserveFallback, required, changing, language]);
+  useEffect(() => {
+    if (isOpen && activeIndex >= 0) document.getElementById(`${listboxId}-option-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [isOpen, activeIndex, listboxId]);
+  const unresolvedSelection = Boolean(effectiveId && !selectedContact);
   const showSelectedCard = !changing && Boolean(selectedContact || unresolvedSelection || (preserveFallback && fallbackContactName));
   const selectedBusinessName = selectedContact
     ? getVendorBusinessName(selectedContact)
@@ -222,7 +218,7 @@ export default function SearchableBusinessContactPicker({
   const selectedPhone = selectedContact ? selectedContact.phone : fallbackPhone;
 
   return (
-    <div className="business-contact-picker-field" ref={containerRef}>
+    <div className="business-contact-picker-field" ref={containerRef} onKeyDownCapture={event => { if (event.key === "Escape" && isOpen && !event.nativeEvent.isComposing) { event.preventDefault(); event.stopPropagation(); setIsOpen(false); setActiveContactId(""); } }} onBlur={dismissSearch}>
       <label className="business-contact-picker-label" htmlFor={inputId}>
         {label === "Prestataire" ? t("modules.moduleWorkspace.supplier") : label}
       </label>
@@ -258,13 +254,14 @@ export default function SearchableBusinessContactPicker({
         </div>
       ) : (
         <div className="business-contact-picker-combobox">
+          {changing && effectiveId && <small>{language === "en" ? "Current link retained until you choose a replacement." : "Lien actuel conservé jusqu’au choix d’un remplacement."}</small>}
           <input
             id={inputId}
             ref={inputRef}
             type="search"
             role="combobox"
             aria-autocomplete="list"
-            aria-expanded={isOpen && normalizedQuery.length >= 2}
+            aria-expanded={isOpen}
             aria-controls={listboxId}
             aria-activedescendant={
               isOpen && results[activeIndex]
@@ -272,23 +269,25 @@ export default function SearchableBusinessContactPicker({
                 : undefined
             }
             aria-required={required}
+            required={required && !effectiveId && !preserveFallback}
             autoComplete="off"
             value={queryValue ?? query}
             disabled={disabled}
             placeholder={labels?.placeholder || t("modules.searchableBusinessContactPicker.searchForACompanyOrContact")}
             onChange={(event) => {
               const nextQuery = event.target.value;
+              event.currentTarget.setCustomValidity(required && !effectiveId && !preserveFallback ? (language === "en" ? "Choose a contact from the suggestions." : "Choisissez un contact dans les suggestions.") : "");
               setQuery(nextQuery);
               onQueryChange?.(nextQuery);
-              setIsOpen(normalizeVendorContactSearch(nextQuery).length >= 2);
+              setIsOpen(normalizeVendorContactSearch(nextQuery).length >= 1);
               setActiveContactId("");
             }}
-            onFocus={() => setIsOpen(normalizedQuery.length >= 2)}
+            onFocus={() => setIsOpen(true)}
             onKeyDown={handleKeyDown}
           />
 
-          {isOpen && normalizedQuery.length >= 2 ? (
-            <div className="business-contact-picker-results" id={listboxId} role="listbox">
+          {isOpen ? (
+            <div className="business-contact-picker-results" id={listboxId} role="listbox" style={{ maxHeight: "min(300px, 45vh)", overflowY: "auto" }} aria-busy={loading}>
               {results.length > 0 ? (
                 results.map((contact, index) => {
                   const businessName = getVendorBusinessName(contact);
@@ -296,7 +295,8 @@ export default function SearchableBusinessContactPicker({
                   const profession = getVendorContactProfession(contact);
                   const secondaryParts = contact.companyName
                     ? [
-                        personName ? t("modules.vendors.supplierPerson", {name: personName}) : "",
+                        contact.companyName !== businessName ? contact.companyName : "",
+                        personName && personName !== businessName ? t("modules.vendors.supplierPerson", {name: personName}) : "",
                         profession,
                         contact.city
                       ]
@@ -310,8 +310,10 @@ export default function SearchableBusinessContactPicker({
                       type="button"
                       role="option"
                       aria-selected={index === activeIndex}
-                      disabled={disabled}
+                      disabled={disabled || loading}
                       className={`business-contact-picker-result${index === activeIndex ? " is-active" : ""}`}
+                      tabIndex={-1}
+                      onMouseDown={event => event.preventDefault()}
                       onMouseEnter={() => setActiveContactId(contact.id)}
                       onClick={() => selectContact(contact)}
                     >
@@ -320,6 +322,7 @@ export default function SearchableBusinessContactPicker({
                         <span>{secondaryParts.filter(Boolean).join(" · ")}</span>
                       ) : null}
                       {contactDetails ? <small>{contactDetails}</small> : null}
+                      {hits[index]?.approximate && <small>{language === "en" ? "Close match" : "Correspondance approchée"}</small>}
                     </button>
                   );
                 })

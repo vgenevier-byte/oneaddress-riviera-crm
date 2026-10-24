@@ -28,12 +28,11 @@ export function getCompanyContactStatus(company: CompanyContact, contacts: reado
 
 /** The caller supplies its authorized projection; this never loads more data. */
 export function matchesContactWithCompany(contact: CompanyContact, query: string, contacts: readonly CompanyContact[]): boolean {
-  if (matchesContactSearch(contact, query)) return true;
+  if (matchesContactSearch(contact, query, contacts)) return true;
   const company = getContactCompany(contact, contacts);
-  if (company && matchesContactSearch({ ...contact, companyName: company.companyName }, query)) return true;
   if (contact.entityType === "company") {
     return getCompanyPeople(company?.id || contact.id, contacts).some(person =>
-      matchesContactSearch({ ...person, companyName: company?.companyName || contact.companyName }, query));
+      matchesContactSearch(person, query, contacts));
   }
   return false;
 }

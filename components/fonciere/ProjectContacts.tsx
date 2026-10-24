@@ -17,7 +17,7 @@ import styles from "./ProjectContacts.module.css";
 type Props = { data: FonciereData; onChange: (data: FonciereData) => void; canReadContacts: boolean; canWriteContacts: boolean; disabled?: boolean; accessSignal?: AbortSignal; onOpenContact?: (id: string) => void; onPendingChange?: (pending: boolean) => void; onCreateContact?: (intent: ContactCreateIntent) => boolean; contactReturn?: ProjectContactReturn; onContactReturnHandled?: () => void };
 type SearchState = { query: string; rows: ProjectContact[]; loading: boolean; error: string };
 const asPickerContact = (row: ProjectContact): Contact => ({ ...row, kind: "Client", budget: 0, source: "", notes: "", createdAt: "" });
-const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entityType: row.entityType, companyId: row.companyId, primaryContactId: row.primaryContactId, mergedIntoCompanyId: row.mergedIntoCompanyId, name: row.name, firstName: row.firstName || "", companyName: row.companyName || "", email: row.email, phone: row.phone, city: row.city, postalAddress: row.postalAddress, postalAddressDetails: row.postalAddressDetails });
+const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entityType: row.entityType, companyId: row.companyId, primaryContactId: row.primaryContactId, mergedIntoCompanyId: row.mergedIntoCompanyId, name: row.name, firstName: row.firstName || "", companyName: row.companyName || "", email: row.email, phone: row.phone, city: row.city, postalAddress: row.postalAddress, postalAddressDetails: row.postalAddressDetails, organizationFunction: row.organizationFunction, supplierCategory: row.supplierCategory, searchText: (row as Contact & { searchText?: string }).searchText });
 const blankSearch = (query = ""): SearchState => ({ query, rows: [], loading: false, error: "" });
 
 export default function ProjectContacts({ data, onChange, canReadContacts, canWriteContacts, disabled = false, accessSignal, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
@@ -61,7 +61,7 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
     const local = new AbortController();
     const tasks = ([['agency', agencySearch.query], ['agent', agentSearch.query]] as const).map(([role, query]) => {
       const setter = role === "agency" ? setAgencySearch : setAgentSearch;
-      if (!canReadContacts || query.trim().length < 2 || accessSignal?.aborted) return;
+      if (!canReadContacts || query.trim().length < 1 || accessSignal?.aborted) return;
       return window.setTimeout(() => { setter(previous => ({ ...previous, loading: true, error: "" })); void (async () => {
         const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]);
         const rows = await op.run(() => createFonciereRepository(op.client).searchContacts(query, { signal })); signal.throwIfAborted();

@@ -1,5 +1,6 @@
 "use client";
 import { sortSelectOptions } from "@/lib/selectOptions";
+import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { specialistMessage } from "@/lib/i18n/catalogs/specialist";
 import { useEffect, useRef, useState } from 'react';
@@ -396,17 +397,17 @@ function CreativeSelector({ mode, direction, onDirectionChange, onCreate }: {
         </select>
         <p id="publisher-car-type-hint">{t('publisher.car.selectionHint')}</p>
         <label htmlFor="publisher-car-brand">{t('publisher.car.brandLabel')}</label>
-        <select id="publisher-car-brand" value={carBrand}
+        <SearchableSelect id="publisher-car-brand" value={carBrand}
           onChange={event => changeCarSelection({ carBrand: event.target.value as CarBrandId })}>
           <option value="auto">{t('publisher.car.anyBrand')}</option>
           {sortSelectOptions(brands, brand => brand.label, language).map(brand => <option key={brand.id} value={brand.id}>{brand.label}</option>)}
-        </select>
+        </SearchableSelect>
         <label htmlFor="publisher-car-model">{t('publisher.car.modelLabel')}</label>
-        <select id="publisher-car-model" value={carModel} disabled={carBrand === 'auto'} aria-describedby={`publisher-car-model-hint${selectedModel ? ' publisher-car-selected-model' : ''}`}
+        <SearchableSelect id="publisher-car-model" value={carModel} disabled={carBrand === 'auto'} aria-describedby={`publisher-car-model-hint${selectedModel ? ' publisher-car-selected-model' : ''}`}
           onChange={event => changeCarSelection({ carModel: event.target.value })}>
           <option value="auto">{t('publisher.car.anyModel')}</option>
-          {sortSelectOptions(models, model => t(`publisher.car.model.${model.id}`), language).map(model => <option key={model.id} value={model.id}>{t(`publisher.car.model.${model.id}`)}</option>)}
-        </select>
+          {sortSelectOptions(models, model => t(`publisher.car.model.${model.id}`), language).map(model => <option key={model.id} value={model.id} data-search={[model.id, t(`publisher.car.model.${model.id}`), model.manufacturer, model.model, model.variant, model.generation].join(" ")}>{t(`publisher.car.model.${model.id}`)}</option>)}
+        </SearchableSelect>
         {selectedModel && <p id="publisher-car-selected-model">{t(`publisher.car.model.${selectedModel.id}`)}</p>}
         <p id="publisher-car-model-hint">{t(carBrand === 'auto' ? 'publisher.car.modelDisabledHint' : 'publisher.car.modelHint')}</p>
         <p role="status" aria-live="polite" aria-atomic="true">{selectionReset ? t(`publisher.car.reset.${selectionReset}`) : ''}</p>

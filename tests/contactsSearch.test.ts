@@ -105,7 +105,6 @@ test("search fields stay explicitly bounded to the caller's authorized contact p
     preferences: "preferences-secret-fictional",
     source: "source-secret-fictional",
     createdBy: "creator-secret-fictional",
-    supplierContactName: "supplier-person-secret-fictional",
     supplierPriceNotes: "price-secret-fictional",
     supplierCommissionNotes: "commission-secret-fictional",
     supplierBankAccounts: [{ iban: "banking-secret-fictional", driveFileName: "rib-secret-fictional" }],
@@ -116,12 +115,13 @@ test("search fields stay explicitly bounded to the caller's authorized contact p
   const projected = { firstName: "Clément", name: "Minodier", ...excluded } as unknown as Contact;
   for (const query of [
     "identifier-secret", "notes-secret", "important-secret", "preferences-secret",
-    "source-secret", "creator-secret", "supplier-person-secret", "price-secret",
+    "source-secret", "creator-secret", "price-secret",
     "commission-secret", "banking-secret", "rib-secret", "document-secret", "linked-secret", "owner-secret",
   ]) {
     assert.equal(matchesContactSearch(projected, query), false, query);
   }
   assert.equal(matchesContactSearch(projected, "clement minodier"), true);
+  assert.equal(matchesContactSearch({ ...projected, supplierContactName: "Interlocuteur autorisé" }, "interlocuteur autorise"), true);
   assert.equal(matchesContactSearch(projected, "azur"), false, "Missing fields are never completed from another record");
 });
 
@@ -133,7 +133,8 @@ test("field matching uses conjunction across all tokens and normalizes both side
   assert.equal(matchesContactSearchFields("azur unknown clement", fields), false);
   assert.equal(matchesContactSearchFields("", []), true);
   assert.equal(matchesContactSearchFields("clement", []), false);
-  assert.equal(matchesContactSearch({ ...clement, firstName: "Clément", name: "Minodier", email: "fiction@example.invalid" }, "klement"), false, "No phonetic search");
+  assert.equal(matchesContactSearch({ ...clement, firstName: "Clément", name: "Minodier", email: "fiction@example.invalid" }, "klement"), true, "One substituted letter is an approximate suggestion");
+  assert.equal(matchesContactSearch({ ...clement, firstName: "Clément", name: "Minodier", email: "fiction@example.invalid" }, "klymant"), false, "Unrelated or excessive approximations remain excluded");
 });
 
 test("search only compares values and leaves spelling, whitespace, IDs and hidden values intact", () => {
@@ -156,7 +157,7 @@ test("task linked-contact search still uses first name, surname and authorized c
     assert.equal(matchesTaskContact(option, query), true, query);
   }
   assert.equal(matchesTaskContact(option, "azur dupont"), false);
-  assert.equal(matchesTaskContact(option, "fixture@example.invalid"), false, "Task name search keeps its original field boundary");
+  assert.equal(matchesTaskContact(option, "fixture@example.invalid"), true, "Task search includes email already present in the authorized projection");
   assert.equal(taskContactLabel(option), "Clément Minodier");
   assert.deepEqual(option, before);
 });

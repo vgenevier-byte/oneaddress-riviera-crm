@@ -39,8 +39,8 @@ function harness(block?: string) {
       const query = {
         select: () => query, eq: () => query,
         single: () => step(`select:${table}`, rows[0]),
-        order: () => step(`select:${table}`, rows),
-        in: () => step(`select:${table}`, rows),
+        order: () => query, in: () => query, range: () => query,
+        then: (resolve: (value: Reply) => unknown, reject: (reason: unknown) => unknown) => step(`select:${table}`, rows).then(resolve, reject),
       };
       return query;
     },

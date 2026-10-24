@@ -26,7 +26,7 @@ function evaluate(code, result, bindings = {}) {
 function compile(ast, name, bindings) { return evaluate(declaration(ast, name).getText(ast), name, bindings); }
 function house(contacts) {
   const bindings = {...identity, contacts};
-  for (const name of ['normalizeContactSearchValue','getHouseContactDisplayName','getHouseContactSearchLabel','getHouseTrackingContactSearchValues','findHouseTrackingContact']) {
+  for (const name of ['getHouseContactDisplayName']) {
     bindings[name] = compile(crm, name, bindings);
   }
   return bindings;
@@ -34,30 +34,34 @@ function house(contacts) {
 const alice = {id:'fictional-alice',entityType:'person',firstName:'Alice',name:'Dupont',companyName:'Azur Exemple',kind:'Prestataire',email:''};
 const company = {id:'fictional-company',entityType:'company',firstName:'Guillaume',name:'',companyName:'Entreprise Exemple',kind:'Prestataire',email:''};
 
-test('house picker keeps historical civility distinct in real JSX and selects the chosen ID', async () => {
+test('house picker keeps historical civility, exposes explicit IDs, and never resolves typed text', async () => {
   const contacts = [{...alice,id:'fictional-m',entityType:undefined,civility:'M'}, {...alice,id:'fictional-mme',entityType:undefined,civility:'MME'}];
   const bindings = house(contacts);
-  const picker = find(declaration(crm,'HouseTrackingView'), node => ts.isJsxElement(node) && node.openingElement.tagName.getText(crm) === 'datalist'
-    && node.openingElement.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.text === 'id' && attribute.initializer?.text === 'house-contact-options'));
-  const render = evaluate(`const render = () => (${picker.getText(crm)});`, 'render', {...bindings, sortedHouseContacts:contacts});
+  const picker = find(declaration(crm,'HouseTrackingView'), node => ts.isJsxElement(node) && node.openingElement.tagName.getText(crm) === 'SearchableSelect'
+    && node.openingElement.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.text === 'name' && attribute.initializer?.text === 'contactId'));
+  const render = evaluate(`const render = () => (${picker.getText(crm)});`, 'render', {...bindings, sortedHouseContacts:contacts, t:key=>key,
+    houseContactSearchOptions:new Map(),SearchableSelect:({children,...props})=>require('react').createElement('select',props,children)});
   const html = renderToStaticMarkup(render());
-  for (const contact of contacts) assert(html.includes(`value="${bindings.getHouseContactSearchLabel(contact)}"`));
-  assert.notEqual(bindings.getHouseContactSearchLabel(contacts[0]), bindings.getHouseContactSearchLabel(contacts[1]));
-  const form = new FormData(); form.set('contactSearch',bindings.getHouseContactSearchLabel(contacts[1])); form.set('hourlyRate','20');
-  let saved;
-  await compile(crm,'submitWorker',{...bindings,FormData:class {constructor(){return form;}},parseHouseHourlyRate:Number,makeId:()=> 'worker-fictional',onAddWorker:row=>{saved=row;}})({preventDefault(){},currentTarget:{reset(){}}});
-  assert.equal(saved.contactId,contacts[1].id);
-  assert.equal(saved.contactName,'MME Alice Dupont');
+  for (const contact of contacts) assert(html.includes(`value="${contact.id}"`));
+  assert(html.includes('M Alice Dupont'));assert(html.includes('MME Alice Dupont'));
+  async function submit(values) {
+    const form = new FormData();for(const [key,value] of Object.entries(values))form.set(key,value);form.set('hourlyRate','20');
+    let saved;const alerts=[];
+    await compile(crm,'submitWorker',{...bindings,FormData:class {constructor(){return form;}},parseHouseHourlyRate:Number,makeId:()=> 'worker-fictional',
+      dialogT:key=>key,window:{alert:value=>alerts.push(value)},onAddWorker:row=>{saved=row;}})({preventDefault(){},currentTarget:{reset(){}}});
+    return {saved,alerts};
+  }
+  const selected=await submit({contactId:contacts[1].id});assert.equal(selected.saved.contactId,contacts[1].id);assert.equal(selected.saved.contactName,'MME Alice Dupont');
+  for(const values of [{contactSearch:'Alice'},{contactSearch:'MME Alice Dupont'},{contactId:'revoked-id'}]){
+    const rejected=await submit(values);assert.equal(rejected.saved,undefined);assert.equal(rejected.alerts.length,1);
+  }
 });
 
-test('house company title and optional Guillaume stay selectable without inventing a surname', () => {
+test('house company title keeps the recorded company identity without inventing a surname', () => {
   const contacts = [{...company,firstName:''}, {...company,id:'fictional-company-guillaume'}];
   const bindings = house(contacts);
-  assert.equal(bindings.getHouseContactDisplayName(company),'Entreprise Exemple');
-  assert.equal(bindings.getHouseContactSearchLabel(contacts[0]),'Entreprise Exemple · Prestataire');
-  assert.equal(bindings.getHouseContactSearchLabel(contacts[1]),'Entreprise Exemple · Guillaume · Prestataire');
-  assert.equal(bindings.findHouseTrackingContact(bindings.getHouseContactSearchLabel(contacts[1])).id,contacts[1].id);
-  assert.equal(company.name,'');
+  for(const contact of contacts)assert.equal(bindings.getHouseContactDisplayName(contact),'Entreprise Exemple');
+  assert.equal(company.name,'');assert.notEqual(contacts[0].id,contacts[1].id);
 });
 
 test('house update handler and actual editor submit never rebuild contact identity', async () => {

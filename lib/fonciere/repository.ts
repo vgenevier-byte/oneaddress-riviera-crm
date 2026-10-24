@@ -1,10 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeAddressValue } from "../address";
 import { getContactCompany } from "../contactCompany";
+import { createContactFieldResolver } from "../contactSearch";
 import { createProjectData, LIMITS, PHOTO_ROLES } from "../izord/model";
 import { assertEncodedImageBudget, assertImageByteBudget, encodedJpegLength } from "../izord/image-budget";
 import { photoDataToBlob, validateUploadBlob, type OperationOptions } from "../izord/repository";
-import { matchesProjectContact, duplicateProjectContacts, type ProjectContact, type ContactCreateInput } from "./contacts";
+import { searchProjectContacts, duplicateProjectContacts, type ProjectContact, type ContactCreateInput } from "./contacts";
 import { FONCIERE_DOCUMENT_LIMIT, FONCIERE_SCHEMA, validateFonciereData, type FonciereData } from "./model";
 
 export type FonciereProjectRecord = { id: string; owner_id: string; title: string; revision: number; status: "active" | "archived"; payload: StoredFoncierePayload; created_at: string; updated_at: string };
@@ -37,7 +38,7 @@ async function blobData(blob: Blob, options: OperationOptions) {
 }
 function contactOption(row: Record<string, unknown>): ContactOption {
   const text = (key: string) => typeof row[key] === "string" ? row[key] as string : "";
-  return { id: text("id"), ...(row.entityType === "company" || row.entityType === "person" ? { entityType: row.entityType } : {}), ...(text("companyId") ? { companyId: text("companyId") } : {}), ...(text("primaryContactId") ? { primaryContactId: text("primaryContactId") } : {}), ...(text("mergedIntoCompanyId") ? { mergedIntoCompanyId: text("mergedIntoCompanyId") } : {}), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), postalAddress: text("postalAddress"), ...(row.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(row.postalAddressDetails, text("postalAddress")) } : {}) };
+  return { id: text("id"), ...(row.entityType === "company" || row.entityType === "person" ? { entityType: row.entityType } : {}), ...(text("companyId") ? { companyId: text("companyId") } : {}), ...(text("primaryContactId") ? { primaryContactId: text("primaryContactId") } : {}), ...(text("mergedIntoCompanyId") ? { mergedIntoCompanyId: text("mergedIntoCompanyId") } : {}), name: text("name"), firstName: text("firstName"), companyName: text("companyName"), email: text("email"), phone: text("phone"), city: text("city"), ...(text("organizationFunction") ? { organizationFunction: text("organizationFunction") } : {}), ...(text("supplierCategory") ? { supplierCategory: text("supplierCategory") } : {}), postalAddress: text("postalAddress"), ...(row.postalAddressDetails ? { postalAddressDetails: normalizeAddressValue(row.postalAddressDetails, text("postalAddress")) } : {}) };
 }
 
 /** Captured-token clients from useScopedOperations are supported. Auth, Contacts
@@ -99,12 +100,23 @@ export function createFonciereRepository(client: SupabaseClient) {
     const rows = snapshot.collections.contacts.map(contactOption);
     // The authorized projection supplies every value; canonical display does
     // not write a historical person's free-text company name.
-    return { revision: snapshot.revision, contacts: rows.map(row => row.entityType !== "company" && row.companyId
-      ? { ...row, companyName: getContactCompany(row, rows)?.companyName || row.companyName } : row) };
+    const fields = createContactFieldResolver(rows);
+    return { revision: snapshot.revision, contacts: rows.map(row => ({ ...row,
+      ...(row.entityType !== "company" && row.companyId ? { companyName: getContactCompany(row, rows)?.companyName || row.companyName } : {}),
+      searchText: fields(row).filter(Boolean).join(" ")
+    })) };
   }
   return {
     async listProjects(options: OperationOptions = {}): Promise<FonciereProjectRecord[]> {
-      const result = await guarded(options.signal, () => client.from("fonciere_projects").select("*").order("updated_at", { ascending: false })); failure(result.error); return result.data || [];
+      const rows: FonciereProjectRecord[] = [], pageSize = 250;
+      // RLS remains applied to each page; rank/search only after every eligible page is loaded.
+      for (let offset = 0; ; offset += pageSize) {
+        const result = await guarded(options.signal, () => client.from("fonciere_projects").select("*").order("updated_at", { ascending: false }).order("id", { ascending: true }).range(offset, offset + pageSize - 1));
+        failure(result.error);
+        const page = (result.data || []) as FonciereProjectRecord[];
+        rows.push(...page);
+        if (page.length < pageSize) return rows;
+      }
     },
     loadProject, listAssets, downloadAsset,
     async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; sourceFiles?: File[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions = {}): Promise<LoadedFonciereProject> {
@@ -153,7 +165,7 @@ export function createFonciereRepository(client: SupabaseClient) {
     },
     async searchContacts(query: string, options: OperationOptions = {}): Promise<ContactOption[]> {
       const rows = (await contacts(options)).contacts;
-      return rows.filter(row => !row.mergedIntoCompanyId && (matchesProjectContact(row, query.trim()) || row.entityType === "company" && rows.some(person => person.companyId === row.id && matchesProjectContact(person, query.trim())))).slice(0, 50);
+      return searchProjectContacts(rows, query.trim());
     },
     async readContact(id: string, options: OperationOptions = {}): Promise<ContactOption | null> {
       if (!id || id.length > 180) return null;

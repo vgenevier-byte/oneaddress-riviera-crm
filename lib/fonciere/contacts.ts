@@ -1,10 +1,11 @@
-import { matchesContactSearchFields, normalizeContactSearch } from "../contactSearch";
+import { createContactFieldResolver, matchesContactSearchFields, normalizeContactSearch } from "../contactSearch";
+import { createSearchIndex, searchIndex } from "../search";
 import { getContactPersonName } from "../contactIdentity";
 import type { FonciereData } from "./model";
 import { normalizeAddressValue, type AddressValue } from "../address";
 
 /** Only fields from the server-authorized Contacts projection. */
-export type ProjectContact = { id: string; entityType?: "person" | "company"; companyId?: string; primaryContactId?: string; mergedIntoCompanyId?: string; name: string; firstName: string; companyName: string; email: string; phone: string; city: string; postalAddress: string; postalAddressDetails?: AddressValue };
+export type ProjectContact = { id: string; entityType?: "person" | "company"; companyId?: string; primaryContactId?: string; mergedIntoCompanyId?: string; name: string; firstName: string; companyName: string; email: string; phone: string; city: string; postalAddress: string; postalAddressDetails?: AddressValue; organizationFunction?: string; supplierCategory?: string; /** Search-only authorized context, never written to a contact. */ searchText?: string };
 export type FirstProjectCompanyPerson = Pick<ProjectContact, "name"> & Partial<Omit<ProjectContact, "id" | "name" | "companyId" | "primaryContactId" | "mergedIntoCompanyId">>;
 export type ContactCreateInput = Omit<ProjectContact, "id" | "primaryContactId" | "mergedIntoCompanyId"> & {
   firstPerson?: FirstProjectCompanyPerson;
@@ -22,7 +23,7 @@ export function contactPhoneKeys(value: string): string[] {
 }
 
 export function matchesProjectContact(contact: ProjectContact, query: string): boolean {
-  const fields = [contact.companyName, contact.firstName, contact.name, contact.city, contact.email, contact.phone, ...contactPhoneKeys(contact.phone)];
+  const fields = [contact.companyName, contact.firstName, contact.name, contact.city, contact.postalAddress, contact.email, contact.phone, contact.organizationFunction, contact.supplierCategory, contact.searchText, ...contactPhoneKeys(contact.phone)];
   if (matchesContactSearchFields(query, fields)) return true;
   // Phone punctuation and spacing are interchangeable, also in a mixed query.
   const chunks = query.match(/[+\d][\d\s().-]{3,}\d/g) || [];
@@ -34,6 +35,19 @@ export function matchesProjectContact(contact: ProjectContact, query: string): b
     rest = rest.replace(chunk, " ");
   }
   return matchesContactSearchFields(rest, fields);
+}
+
+/** Rank every authorized candidate before the picker applies its presentation cap. */
+export function searchProjectContacts(rows: ProjectContact[], query: string): ProjectContact[] {
+  const fields = createContactFieldResolver(rows);
+  const people = new Map<string, ProjectContact[]>();
+  for (const row of rows) if (row.companyId) people.set(row.companyId, [...(people.get(row.companyId) || []), row]);
+  const searchableFields = (row: ProjectContact) => [
+    ...fields(row), row.searchText, ...contactPhoneKeys(row.phone),
+    ...(row.entityType === "company" ? (people.get(row.id) || []).flatMap(person => [...fields(person), ...contactPhoneKeys(person.phone)]) : [])
+  ];
+  const index = createSearchIndex(rows.filter(row => !row.mergedIntoCompanyId), searchableFields, { getId: row => row.id, getLabel: projectContactLabel });
+  return searchIndex(index, query).map(hit => ({ ...hit.item, searchText: searchableFields(hit.item).filter(Boolean).join(" ") }));
 }
 
 export function projectContactLabel(contact: ProjectContact): string {

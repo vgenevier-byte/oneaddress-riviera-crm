@@ -1,0 +1,20 @@
+.control { position: relative; display: inline-flex; flex-direction: column; vertical-align: top; width: 100%; min-width: 0; max-width: 100%; gap: 4px; color: inherit; text-align: left; }
+.native { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; border: 0 !important; opacity: 0 !important; pointer-events: none; }
+.inputRow { display: flex; position: relative; width: 100%; min-width: 0; align-items: stretch; }
+.inputRow input { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; padding-right: 58px; font: inherit; text-overflow: ellipsis; }
+.inputRow input:disabled { cursor: not-allowed; }
+.toggle, .clear { position: absolute; top: 1px; bottom: 1px; padding: 0 7px !important; margin: 0 !important; border: 0 !important; min-width: 25px; min-height: 30px; background: transparent !important; color: #5f6b7a; box-shadow: none !important; }
+.toggle { right: 3px; } .clear { right: 27px; font-size: 19px; }
+.retained { display: block; padding: 6px 10px; color: #606c7b; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.validation { color: #a33232; font-size: 12px; }
+.popup { z-index: 70; display: block; width: 100%; box-sizing: border-box; max-height: min(320px, 45dvh); overflow-y: auto; overflow-x: hidden; border: 1px solid #cdd5e0; border-radius: 8px; background: #fff; color: #182433; box-shadow: 0 4px 14px #0e1d351a; }
+.list { display: flex; flex-direction: column; }
+.option { display: flex !important; flex-direction: column; align-items: flex-start !important; justify-content: center !important; box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; gap: 3px !important; margin: 0 !important; padding: 9px 11px !important; border: 0 !important; border-bottom: 1px solid #e9edf2 !important; border-radius: 0 !important; background: #fff !important; color: #182433 !important; text-align: left; white-space: normal; box-shadow: none !important; }
+.option strong, .option small { display: block; max-width: 100%; overflow-wrap: anywhere; }
+.option strong { font-size: 13px; font-weight: 600; } .option small { color: #657184; font-size: 11px; font-weight: 400; }
+.option[data-active="true"] { background: #edf3fb !important; outline: 2px solid #7896c4; outline-offset: -2px; }
+.option[aria-selected="true"] strong::after { content: " ✓"; }
+.option .approximate { font-style: italic; color: #7b693d; }
+.message { display: block; padding: 12px; color: #657184; font-size: 12px; }
+.more { display: block !important; width: 100%; margin: 0 !important; padding: 9px !important; min-height: 44px; border: 0 !important; border-radius: 0 !important; background: #f5f7fa !important; color: #304d76 !important; font-size: 12px; box-shadow: none !important; }
+@media (max-width: 600px) { .inputRow input { font-size: 16px; } .popup { max-height: 35dvh; } }
