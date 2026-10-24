@@ -8,7 +8,7 @@ export const statusFile = process.env.MONTHLY_CHARGES_STATUS_FILE;
 assert.ok(statusFile, 'MONTHLY_CHARGES_STATUS_FILE required; repository env is never loaded');
 export const directory = dirname(statusFile);
 export const status = JSON.parse(readFileSync(statusFile, 'utf8'));
-assertMonthlyLocalTarget({ api: status.API_URL, database: status.DB_URL, app: 'http://127.0.0.1:3183', mail: 'http://127.0.0.1:55634', acknowledgement: process.env.IZORD_TEST_ACK });
+assertMonthlyLocalTarget({ api: status.API_URL, database: status.DB_URL, app: 'http://127.0.0.1:3183', mail: `http://127.0.0.1:${Number(new URL(status.API_URL).port) + 3}`, acknowledgement: process.env.IZORD_TEST_ACK });
 export const sql = new Client({ connectionString: status.DB_URL });
 export async function connect() {
   await sql.connect();

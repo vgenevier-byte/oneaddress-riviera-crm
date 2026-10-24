@@ -1,6 +1,6 @@
 /** Fresh owned stack only; never bootstraps or exports real business data. */
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { connect, sql, request, rpc, directory, status } from './server-local.mjs';
 
@@ -24,9 +24,9 @@ export const fixtureData = {
     { id: 'invoice-zero', contactId: 'vendor-options', contactName: 'Entretien fictif', title: 'Zéro explicite', amount: 0, paidAmount: 0, status: 'À payer', invoiceDate: '2026-10-10' },
     { id: 'invoice-invalid', contactId: 'vendor-options', contactName: 'Entretien fictif', title: 'Montant manquant', paidAmount: 0, status: 'À payer', invoiceDate: '2026-10-10' }
   ],
-  houseTrackingHouses: [{ id: 'house-demo', name: 'Maison de démonstration', address: 'PRIVATE_HOUSE_ADDRESS' }],
+  houseTrackingHouses: [{ id: 'house-demo', name: 'Maison de démonstration', address: '12 avenue de démonstration, Nice' }],
   houseTrackingWorkers: [
-    { id: 'worker-september', contactId: 'worker-contact', contactName: 'Camille fictive', hourlyRate: 25, role: 'Entretien', status: 'Actif', notes: 'PRIVATE_WORKER_NOTE', documentStoragePath: 'PRIVATE_WORKER_DOC' },
+    { id: 'worker-september', contactId: 'worker-contact', contactName: 'Camille fictive', hourlyRate: 25, role: 'Entretien', status: 'Actif', notes: 'PRIVATE_WORKER_NOTE' },
     { id: 'worker-archived', contactName: 'Intervenant archivé fictif', hourlyRate: 25, status: 'Inactif' }
   ],
   houseTimeEntries: [
@@ -59,7 +59,7 @@ try {
   const baseline = readFileSync('tests/izord/sql-fixture.sql', 'utf8');
   await sql.query(baseline.slice(baseline.indexOf('create table public.crm_workspace_state'), baseline.indexOf('create schema storage;')));
   await sql.query("insert into storage.buckets(id,name,public) values('crm-documents','crm-documents',false); create policy crm_docs on storage.objects for all to authenticated using(bucket_id='crm-documents') with check(bucket_id='crm-documents');");
-  for (const file of ['20260914210807_drive_folder_registry.sql','20260916170445_module_access_foundation.sql','20260917172412_izord_generator_versions.sql','20260918084849_unified_module_permissions.sql','20260919195633_edit_house_worker.sql','20260928191512_publisher_module_access.sql','20261005092958_monthly_charges.sql']) {
+  for (const file of readdirSync('supabase/migrations').filter(name => name.endsWith('.sql')).sort()) {
     const before = (await sql.query("select payload from public.crm_workspace_state where workspace_id='oneaddress-riviera'")).rows[0].payload;
     await sql.query(readFileSync('supabase/migrations/' + file, 'utf8'));
     assert.deepEqual((await sql.query("select payload from public.crm_workspace_state where workspace_id='oneaddress-riviera'")).rows[0].payload, before, 'Migration preserves every source record');

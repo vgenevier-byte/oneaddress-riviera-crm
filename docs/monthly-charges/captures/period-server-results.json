@@ -1,0 +1,73 @@
+{
+  "passed": 14,
+  "results": [
+    {
+      "name": "authenticated Charges patch saves exact invoice-house and month/spread identities with no business-payload mutation",
+      "passed": true
+    },
+    {
+      "name": "new real authentication session re-reads persisted house and month assignments",
+      "passed": true
+    },
+    {
+      "name": "real server snapshot produces September 1233.34, October1133.34, November33.33, December0 and period2400.01",
+      "passed": true
+    },
+    {
+      "name": "payment status changes leave recorded charge amounts and months unchanged",
+      "passed": true
+    },
+    {
+      "name": "new supplier invoice defaults included; explicit exclusion reason survives",
+      "passed": true
+    },
+    {
+      "name": "cancelled and expected invoices remain outside effective totals; missing date is unattached",
+      "passed": true
+    },
+    {
+      "name": "other-house and unassigned invoices count once globally and remain outside selected-house total",
+      "passed": true
+    },
+    {
+      "name": "house lookup remains available for invoice-only source reads under house read permission",
+      "passed": true
+    },
+    {
+      "name": "house read without house export cannot export house identities while global invoice export retains total",
+      "passed": true
+    },
+    {
+      "name": "hidden house relation survives unrelated month/default edits by invoice-only contributor",
+      "passed": true
+    },
+    {
+      "name": "changing and clearing house preserves monthly attachment and source legal invoice fields",
+      "passed": true
+    },
+    {
+      "name": "server rejects missing rights, forged references and duplicate/malformed assignment operations atomically",
+      "passed": true
+    },
+    {
+      "name": "assignment idempotence, revision conflict and fresh authorization survive retries",
+      "passed": true
+    },
+    {
+      "name": "private configuration and request history retain RLS, no direct grants and RPC is authenticated only",
+      "passed": true
+    }
+  ],
+  "realLocalAuthJWT": true,
+  "realPostgresPersistence": true,
+  "newAuthenticationReadback": true,
+  "canonicalMonthTotals": [
+    1233.34,
+    1133.34,
+    33.33,
+    0
+  ],
+  "canonicalPeriodTotal": 2400.01,
+  "productionTouched": false,
+  "sourceSeeds": "SQL into disposable fictitious database only"
+}

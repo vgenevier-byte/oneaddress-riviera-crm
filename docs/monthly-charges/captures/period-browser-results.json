@@ -1,0 +1,72 @@
+{
+  "realAuth": true,
+  "realHTTPRPC": true,
+  "realPostgres": true,
+  "actualCRMComponents": true,
+  "fictionalData": true,
+  "physicalDevice": false,
+  "emulatedMobileTouch": true,
+  "results": [
+    {
+      "name": "desktop FR: initial compact annual view, inclusive September–December, exact totals, keyboard collapse and screenshots",
+      "passed": true
+    },
+    {
+      "name": "period summary/detail downloads equal displayed totals and clearly identify filters and inclusive months",
+      "passed": true
+    },
+    {
+      "name": "mobile EN emulated touch, searchable house while invoice source, precise month reopening and no overflow",
+      "passed": true
+    },
+    {
+      "name": "UI month and house edits persist independently through fresh authentication and reload",
+      "passed": true
+    },
+    {
+      "name": "monthly task created in multimonth view keeps exact month and invoice-house filters, then opens only its month",
+      "passed": true
+    },
+    {
+      "name": "restricted read and export rights constrain controls and house-filtered export",
+      "passed": true
+    },
+    {
+      "name": "300 real isolated interventions stay unmounted while closed, paginate fully and retain whole-month totals",
+      "passed": true
+    }
+  ],
+  "receipts": [
+    {
+      "invoiceId": "invoice-B",
+      "realHouseWrites": 2,
+      "realMonthWrites": 2,
+      "newAuthenticationOnEveryRead": true,
+      "reload": true
+    },
+    {
+      "taskId": "483d919f-9bd8-4c04-a504-52757dddf7a5",
+      "target": {
+        "id": "2026-09",
+        "type": "monthly_charges",
+        "context": {
+          "source": "invoice",
+          "houseId": "fixture-house"
+        }
+      },
+      "freshAuthRead": true,
+      "sourceActionMonth": true,
+      "reopenedOnlyTargetMonth": true,
+      "repeatedTargetReopen": true
+    },
+    {
+      "storedFictionalInterventions": 300,
+      "initialMountedInterventions": 0,
+      "firstPage": 50,
+      "allReachable": 300,
+      "totalCents": 30000
+    }
+  ],
+  "pageErrors": [],
+  "nonlocal": []
+}

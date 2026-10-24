@@ -1,0 +1,29 @@
+{
+  "realAuth": true,
+  "realHTTPRPC": true,
+  "realPostgres": true,
+  "fictional": true,
+  "taskId": "charges-context-e702488a-4dd1-4047-8dde-dad86f7b0d46",
+  "results": [
+    {
+      "name": "invoice and legacy hours monthly refs normalize with exact month, house and source identities",
+      "passed": true
+    },
+    {
+      "name": "canonical task mutation persists invoice-house month and a new login retrieves exact context and inverse link",
+      "passed": true
+    },
+    {
+      "name": "restricted assignee sees opaque relation and an authorized note edit preserves it",
+      "passed": true
+    },
+    {
+      "name": "invoice-house target export needs house export while ordinary authorized read remains available",
+      "passed": true
+    },
+    {
+      "name": "invoice-house monthly relation is masked after house read revocation and its storage is preserved",
+      "passed": true
+    }
+  ]
+}

@@ -17,34 +17,35 @@ function docker(args) {return execFileSync('docker',args,{env,encoding:'utf8',st
 const version = JSON.parse(docker(['version','--format','{{json .}}']));
 if (!version.Server) throw new Error('Local Docker server unavailable');
 console.log(`Colima verified: client ${version.Client.Version}, server ${version.Server.Version}, API ${version.Client.ApiVersion}`);
+const portBase = process.env.MONTHLY_CHARGES_LOCAL_ALTERNATE === '1' ? 56030 : 55630;
 const dir = mkdtempSync(join(tmpdir(),'monthly-charges-stack-'));
 const project = basename(dir).toLowerCase(), network = `${project}-loopback`;
 execFileSync(cli,['init','--workdir',dir],{env,stdio:'ignore'});
 writeFileSync(join(dir,'supabase/config.toml'),`project_id = "${project}"
 [api]
 enabled = true
-port = 55631
+port = ${portBase + 1}
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 [db]
-port = 55632
-shadow_port = 55630
+port = ${portBase + 2}
+shadow_port = ${portBase + 0}
 major_version = 17
 health_timeout = "3m"
 [db.seed]
 enabled = false
 [db.pooler]
 enabled = false
-port = 55639
+port = ${portBase + 9}
 [realtime]
 enabled = false
 [studio]
 enabled = false
-port = 55633
+port = ${portBase + 3}
 [local_smtp]
 enabled = true
-port = 55634
+port = ${portBase + 4}
 [storage]
 enabled = true
 file_size_limit = "50MiB"
@@ -71,7 +72,7 @@ enabled = false
 // Follow Supabase's documented loopback network configuration. Docker internal
 // networks suppress port publication on this Colima engine, breaking CLI DB access.
 docker(['network','create','--label',`monthly-charges.disposable=${project}`,'-o','com.docker.network.bridge.host_binding_ipv4=127.0.0.1',network]);
-const manifest={dir,project,network,api:'http://127.0.0.1:55631',database:'postgresql://postgres@127.0.0.1:55632/postgres',app:'http://127.0.0.1:3183',mail:'http://127.0.0.1:55634'};
+const manifest={dir,project,network,api:`http://127.0.0.1:${portBase + 1}`,database:`postgresql://postgres@127.0.0.1:${portBase + 2}/postgres`,app:'http://127.0.0.1:3183',mail:`http://127.0.0.1:${portBase + 4}`};
 assertLocalTarget({...manifest,acknowledgement:process.env.IZORD_TEST_ACK});
 writeFileSync(join(dir,'manifest.json'),JSON.stringify(manifest,null,2),{mode:0o600});
 console.log(`Local-only workdir: ${dir}`);

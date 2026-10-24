@@ -11,7 +11,12 @@ assert.equal(process.env.MONTHLY_CHARGES_TEST_ACK, 'MONTHLY_CHARGES_LOCAL_ONLY')
 assert.ok(process.env.MONTHLY_CHARGES_STATUS_FILE, 'Owned local status file required');
 const repo = process.cwd(), root = dirname(process.env.MONTHLY_CHARGES_STATUS_FILE), app = 'http://127.0.0.1:3183';
 const status = JSON.parse(readFileSync(process.env.MONTHLY_CHARGES_STATUS_FILE, 'utf8'));
-assert.equal(status.API_URL, 'http://127.0.0.1:55631');
+const api = new URL(status.API_URL), database = new URL(status.DB_URL);
+assert.equal(api.hostname, '127.0.0.1');
+assert.equal(api.protocol, 'http:');
+assert.ok(['55631', '56031'].includes(api.port), 'Owned monthly-charge test slot only');
+assert.equal(database.hostname, '127.0.0.1');
+assert.equal(Number(database.port), Number(api.port) + 1);
 const directory = join(root, 'app'), manifestFile = join(root, 'app.private.json');
 if (existsSync(manifestFile)) {
   const old = JSON.parse(readFileSync(manifestFile, 'utf8'));
@@ -29,7 +34,7 @@ for (const file of ['package.json', 'package-lock.json', 'tsconfig.json', 'next-
 if (!existsSync(join(directory, 'node_modules'))) symlinkSync(join(repo, 'node_modules'), join(directory, 'node_modules'), 'dir');
 const guard = join(root, 'network-guard.cjs');
 const originalGuard = readFileSync(join(repo, 'tests/izord/local-network-guard.cjs'), 'utf8');
-writeFileSync(guard, originalGuard.replaceAll("IZORD_TEST_ACK", "MONTHLY_CHARGES_TEST_ACK").replaceAll('IZORD_DISPOSABLE_LOCAL_ONLY', 'MONTHLY_CHARGES_LOCAL_ONLY').replace('new Set([3159, 55431])', 'new Set([3183, 55631, 55632])'), { mode: 0o600 });
+writeFileSync(guard, originalGuard.replaceAll("IZORD_TEST_ACK", "MONTHLY_CHARGES_TEST_ACK").replaceAll('IZORD_DISPOSABLE_LOCAL_ONLY', 'MONTHLY_CHARGES_LOCAL_ONLY').replace('new Set([3159, 55431])', `new Set([3183, ${Number(api.port)}, ${Number(database.port)}])`), { mode: 0o600 });
 const dev = process.argv.includes('--dev');
 const env = {
   PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, LANG: process.env.LANG || 'en_US.UTF-8',

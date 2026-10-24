@@ -8,10 +8,11 @@ export function assertMonthlyLocalTarget({ api, database, app, mail, acknowledge
     assert.equal(url.search, ''); assert.equal(url.hash, '');
     assert.ok(!url.href.includes('jcmnwvlmysecrahupfkk'));
   }
-  assert.equal(urls[0].origin, 'http://127.0.0.1:55631');
+  const base = urls[0].port === '56031' ? 56030 : 55630;
+  assert.equal(urls[0].origin, `http://127.0.0.1:${base + 1}`);
   assert.equal(urls[0].pathname, '/');
   assert.equal(urls[1].protocol, 'postgresql:');
-  assert.equal(urls[1].port, '55632'); assert.equal(urls[1].pathname, '/postgres');
+  assert.equal(urls[1].port, String(base + 2)); assert.equal(urls[1].pathname, '/postgres');
   assert.equal(urls[2].origin, 'http://127.0.0.1:3183');
-  assert.equal(urls[3].origin, 'http://127.0.0.1:55634');
+  assert.equal(urls[3].origin, `http://127.0.0.1:${base + 4}`);
 }

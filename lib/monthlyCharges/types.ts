@@ -6,19 +6,22 @@ export type MonthlyChargeAttachment = { source: "invoice"; sourceId: string } & 
   | { mode: "month"; month: string }
   | { mode: "spread"; startMonth: string; endMonth: string }
 );
+export type MonthlyChargeHouseAssignment = { source: "invoice"; sourceId: string; houseId: string };
 export type MonthlyChargesConfig = {
   personRules: MonthlyPersonRule[];
   exceptions: MonthlyChargeException[];
   attachments: MonthlyChargeAttachment[];
+  houseAssignments?: MonthlyChargeHouseAssignment[];
 };
 export type MonthlyChargesPatch = {
   personRules?: { source: MonthlyChargeSource; personId: string; included: boolean }[];
   exceptions?: { source: MonthlyChargeSource; sourceId: string; included: boolean | null; reason?: string }[];
+  houseAssignments?: { source: "invoice"; sourceId: string; houseId: string | null }[];
   attachments?: ({ source: "invoice"; sourceId: string; mode: "default" } | MonthlyChargeAttachment)[];
 };
 export type MonthlyInvoiceSource = {
   id: string; personId: string; personLabel: string; title: string;
-  invoiceReference?: string; invoiceDate?: string; amount?: unknown; status?: string;
+  invoiceReference?: string; invoiceDate?: string; amount?: unknown; status?: string; houseAssigned?: boolean;
 };
 export type MonthlyTimeSource = {
   id: string; personId: string; personLabel: string; houseId?: string; houseName?: string;
@@ -33,12 +36,14 @@ export type MonthlyChargesSnapshot = {
     timeEntries: MonthlyTimeSource[];
     suppliers: { id: string; label: string }[];
     workers: { id: string; label: string; status?: string }[];
-    houses: { id: string; name: string }[];
+    houses: { id: string; name: string; address?: string; city?: string }[];
   };
   permissions: {
     canContribute: boolean;
     readableSources: MonthlyChargeSource[];
     exportableSources: MonthlyChargeSource[];
     contactsVisible: boolean;
+    canReadHouses?: boolean;
+    canExportHouses?: boolean;
   };
 };

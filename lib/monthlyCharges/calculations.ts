@@ -13,17 +13,17 @@ export type MonthlyChargeAllocation = {
 export type MonthlyChargeEntry = {
   key: string; source: MonthlyChargeSource; sourceId: string; personId: string; personLabel: string;
   title: string; sourceDate: string; amountCents: number | null; selected: boolean;
-  selectionOrigin: "individual" | "person" | "none"; reason: string;
+  selectionOrigin: "individual" | "person" | "default" | "none"; reason: string;
   status: "included" | "excluded" | "expected" | "unattached" | "invalid" | "missing";
   allocations: MonthlyChargeAllocation[]; issues: string[]; houseId?: string; houseName?: string;
-  sourceStatus?: string;
+  sourceStatus?: string; houseAssigned?: boolean;
   hoursAmountCents?: number | null; expenseAmountCents?: number | null;
 };
 export type MonthlyChargesFilter = {
   source?: MonthlyChargeSource | "all"; houseId?: string; personId?: string; now?: string;
 };
 export type MonthlyChargesResult = {
-  year: number; filter: MonthlyChargesFilter; readableSources: MonthlyChargeSource[]; totalCents: number;
+  year: number; startMonth: string; endMonth: string; filter: MonthlyChargesFilter; readableSources: MonthlyChargeSource[]; totalCents: number; invoiceCents: number; hoursCents: number;
   months: { month: string; totalCents: number; invoiceCents: number; hoursCents: number; current: boolean; future: boolean }[];
   groups: { key: string; source: MonthlyChargeSource; personId: string; label: string; monthsCents: number[]; totalCents: number }[];
   entries: MonthlyChargeEntry[]; expected: MonthlyChargeEntry[]; unattached: MonthlyChargeEntry[];
@@ -133,6 +133,8 @@ export function evaluateMonthlyChargeEntries(snapshot: MonthlyChargesSnapshot): 
   const rules = new Set(snapshot.config.personRules.filter(rule => allowed.has(rule.source)).map(rule => `${rule.source}:${rule.personId}`));
   const exceptions = new Map(snapshot.config.exceptions.filter(exception => allowed.has(exception.source)).map(exception => [`${exception.source}:${exception.sourceId}`, exception]));
   const attachments = new Map(snapshot.config.attachments.filter(attachment => allowed.has(attachment.source)).map(attachment => [attachment.sourceId, attachment]));
+  const houseAssignments = new Map((snapshot.config.houseAssignments || []).map(assignment => [assignment.sourceId, assignment]));
+  const houses = new Map(snapshot.sources.houses.map(house => [house.id, house]));
   const seen = new Map<string, MonthlyChargeEntry>();
   const append = (source: MonthlyChargeSource, record: MonthlyInvoiceSource | MonthlyTimeSource) => {
     if (!allowed.has(source)) return;
@@ -140,7 +142,7 @@ export function evaluateMonthlyChargeEntries(snapshot: MonthlyChargesSnapshot): 
     if (seen.has(key)) { seen.get(key)!.issues.push("Identifiant source répété : une seule ligne comptée."); return; }
     const exception = exceptions.get(key);
     const followed = rules.has(`${source}:${record.personId}`);
-    const selected = exception ? exception.included : followed;
+    const selected = exception ? exception.included : source === "invoice" || followed;
     const issues: string[] = [];
     let amountCents: number | null;
     let allocations: MonthlyChargeAllocation[];
@@ -185,12 +187,15 @@ export function evaluateMonthlyChargeEntries(snapshot: MonthlyChargesSnapshot): 
     }
     seen.set(key, {
       key, source, sourceId: record.id, personId: record.personId, personLabel: record.personLabel,
-      title, sourceDate, amountCents, selected, selectionOrigin: exception ? "individual" : followed ? "person" : "none",
+      title, sourceDate, amountCents, selected, selectionOrigin: exception ? "individual" : source === "invoice" ? "default" : followed ? "person" : "none",
       reason: exception?.reason || (source === "invoice" && (record as MonthlyInvoiceSource).status === "Annulé" ? "Facture annulée" : ""),
       status, allocations, issues,
       ...(source === "hours" ? { houseId: (record as MonthlyTimeSource).houseId, houseName: (record as MonthlyTimeSource).houseName,
         hoursAmountCents, expenseAmountCents } : {}),
-      ...(source === "invoice" ? { sourceStatus: (record as MonthlyInvoiceSource).status } : {})
+      ...(source === "invoice" ? { sourceStatus: (record as MonthlyInvoiceSource).status,
+        houseAssigned: Boolean((record as MonthlyInvoiceSource).houseAssigned || houseAssignments.has(record.id)),
+        houseId: houseAssignments.get(record.id)?.houseId,
+        houseName: houses.get(houseAssignments.get(record.id)?.houseId || "")?.name } : {})
     });
   };
   snapshot.sources.invoices.forEach(record => append("invoice", record));
@@ -218,30 +223,35 @@ function parisCivilDate() {
   return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
-export function buildMonthlyCharges(snapshot: MonthlyChargesSnapshot, year: number, filter: MonthlyChargesFilter = {}): MonthlyChargesResult {
-  if (!Number.isInteger(year) || year < 1 || year > 9999) throw new Error("Année invalide.");
+/** Inclusive civil-month period. No daily prorating or inferred future expenses. */
+export function buildMonthlyChargesPeriod(snapshot: MonthlyChargesSnapshot, startMonth: string, endMonth: string, filter: MonthlyChargesFilter = {}): MonthlyChargesResult {
+  if (!isMonthlyChargeMonth(startMonth) || !isMonthlyChargeMonth(endMonth)) throw new Error("Choisir un mois de début et un mois de fin valides.");
+  if (startMonth > endMonth) throw new Error("Le mois de début doit précéder ou être égal au mois de fin.");
   const today = isMonthlyChargeCivilDate(filter.now) ? filter.now : parisCivilDate();
   const currentMonth = today.slice(0, 7);
-  const months = Array.from({ length: 12 }, (_, index) => {
-    const month = `${year.toString().padStart(4, "0")}-${(index + 1).toString().padStart(2, "0")}`;
+  const first = monthNumber(startMonth);
+  const count = monthNumber(endMonth) - first + 1;
+  const months = Array.from({ length: count }, (_, index) => {
+    const month = monthFromNumber(first + index);
     return { month, totalCents: 0, invoiceCents: 0, hoursCents: 0, current: month === currentMonth, future: month > currentMonth };
   });
+  const withinPeriod = (month: string) => month >= startMonth && month <= endMonth;
   const sourceCandidates = evaluateMonthlyChargeEntries(snapshot).filter(entry =>
     (!filter.source || filter.source === "all" || entry.source === filter.source) &&
-    (entry.allocations.some(allocation => allocation.month.slice(0, 4) === year.toString().padStart(4, "0")) ||
-      (!entry.allocations.length && (!isMonthlyChargeCivilDate(entry.sourceDate) || Number(entry.sourceDate.slice(0, 4)) === year)))
+    (entry.allocations.some(allocation => withinPeriod(allocation.month)) ||
+      (!entry.allocations.length && (!isMonthlyChargeCivilDate(entry.sourceDate) || withinPeriod(entry.sourceDate.slice(0, 7)))))
   );
   const candidates = filter.personId ? sourceCandidates.filter(entry => entry.personId === filter.personId) : sourceCandidates;
-  const houseUnknown = filter.houseId ? candidates.filter(entry => entry.source === "invoice") : [];
-  const entries = filter.houseId ? candidates.filter(entry => entry.source === "hours" && entry.houseId === filter.houseId) : candidates;
+  const houseUnknown = filter.houseId ? candidates.filter(entry => entry.source === "invoice" && !entry.houseAssigned && !entry.houseId && entry.selected && entry.status !== "excluded") : [];
+  const entries = filter.houseId ? candidates.filter(entry => entry.houseId === filter.houseId) : candidates;
   const groups = new Map<string, MonthlyChargesResult["groups"][number]>();
   for (const entry of entries) {
     if (entry.status !== "included") continue;
     const key = `${entry.source}:${entry.personId || entry.sourceId}`;
-    const group = groups.get(key) || { key, source: entry.source, personId: entry.personId, label: entry.personLabel, monthsCents: Array<number>(12).fill(0), totalCents: 0 };
+    const group = groups.get(key) || { key, source: entry.source, personId: entry.personId, label: entry.personLabel, monthsCents: Array<number>(count).fill(0), totalCents: 0 };
     for (const allocation of entry.allocations) {
-      if (Number(allocation.month.slice(0, 4)) !== year) continue;
-      const index = Number(allocation.month.slice(5, 7)) - 1;
+      if (!withinPeriod(allocation.month)) continue;
+      const index = monthNumber(allocation.month) - first;
       months[index].totalCents = addCents(months[index].totalCents, allocation.amountCents);
       if (entry.source === "invoice") months[index].invoiceCents = addCents(months[index].invoiceCents, allocation.amountCents);
       else months[index].hoursCents = addCents(months[index].hoursCents, allocation.amountCents);
@@ -251,13 +261,23 @@ export function buildMonthlyCharges(snapshot: MonthlyChargesSnapshot, year: numb
     groups.set(key, group);
   }
   return {
-    year, filter, readableSources: snapshot.permissions.readableSources.filter(source => !filter.source || filter.source === "all" || source === filter.source),
-    totalCents: months.reduce((sum, month) => addCents(sum, month.totalCents), 0), months,
+    year: Number(startMonth.slice(0, 4)), startMonth, endMonth, filter,
+    readableSources: snapshot.permissions.readableSources.filter(source => !filter.source || filter.source === "all" || source === filter.source),
+    totalCents: months.reduce((sum, month) => addCents(sum, month.totalCents), 0),
+    invoiceCents: months.reduce((sum, month) => addCents(sum, month.invoiceCents), 0),
+    hoursCents: months.reduce((sum, month) => addCents(sum, month.hoursCents), 0), months,
     groups: [...groups.values()].sort((a, b) => a.source.localeCompare(b.source) || a.label.localeCompare(b.label, "fr") || a.key.localeCompare(b.key)),
     entries, houseUnknown, expected: entries.filter(entry => entry.status === "expected"),
     unattached: entries.filter(entry => entry.status === "unattached"), excluded: entries.filter(entry => entry.status === "excluded"),
     issues: entries.filter(entry => entry.issues.length > 0 || entry.status === "invalid" || entry.status === "missing")
   };
+}
+
+/** Explicit annual compatibility entrypoint; the page uses the inclusive period builder. */
+export function buildMonthlyCharges(snapshot: MonthlyChargesSnapshot, year: number, filter: MonthlyChargesFilter = {}): MonthlyChargesResult {
+  if (!Number.isInteger(year) || year < 1 || year > 9999) throw new Error("Année invalide.");
+  const civilYear = year.toString().padStart(4, "0");
+  return buildMonthlyChargesPeriod(snapshot, `${civilYear}-01`, `${civilYear}-12`, filter);
 }
 
 /** Only scoped custom attachments whose current source amount changed need this warning. */
@@ -290,29 +310,42 @@ function scopeLabel(result: MonthlyChargesResult, scope: MonthlyChargesExportSco
     scope.description || ""].filter(Boolean).join(" · ");
 }
 
-export function exportAnnualChargesCsv(result: MonthlyChargesResult, scope: MonthlyChargesExportScope = {}): string {
+function exportSummaryChargesCsv(result: MonthlyChargesResult, scope: MonthlyChargesExportScope, annual: boolean): string {
   const perimeter = scopeLabel(result, scope);
-  const header = ["Année", "Périmètre", "Origine", "Fournisseur / intervenant", "Rattachement", ...result.months.map(month => month.month), "Total année (€)"];
+  const period = annual ? String(result.year) : `${result.startMonth} – ${result.endMonth}`;
+  const header = [annual ? "Année" : "Période mensuelle inclusive", "Périmètre", "Origine", "Fournisseur / intervenant", "Rattachement", ...result.months.map(month => month.month), annual ? "Total année (€)" : "Total période (€)"];
   const rows: unknown[][] = [header];
-  for (const group of result.groups) rows.push([result.year, perimeter, sourceLabel(group.source), group.label, "Selon détail autorisé", ...group.monthsCents.map(decimal), decimal(group.totalCents)]);
+  for (const group of result.groups) rows.push([period, perimeter, sourceLabel(group.source), group.label, "Selon détail autorisé", ...group.monthsCents.map(decimal), decimal(group.totalCents)]);
   for (const [label, field] of [["Sous-total Factures", "invoiceCents"], ["Sous-total Suivi maison", "hoursCents"], ["Total des charges sélectionnées", "totalCents"]] as const) {
     const values = result.months.map(month => month[field]);
-    rows.push([result.year, perimeter, label, "", "Montants enregistrés dans le CRM", ...values.map(decimal), decimal(values.reduce(addCents, 0))]);
+    rows.push([period, perimeter, label, "", "Montants enregistrés dans le CRM", ...values.map(decimal), decimal(values.reduce(addCents, 0))]);
   }
   return csv(rows);
 }
 
+export function exportPeriodChargesCsv(result: MonthlyChargesResult, scope: MonthlyChargesExportScope = {}): string {
+  return exportSummaryChargesCsv(result, scope, false);
+}
+
+export function exportAnnualChargesCsv(result: MonthlyChargesResult, scope: MonthlyChargesExportScope = {}): string {
+  if (result.startMonth !== `${result.year.toString().padStart(4, "0")}-01` || result.endMonth !== `${result.year.toString().padStart(4, "0")}-12`) {
+    throw new Error("L’export annuel nécessite une année complète explicitement sélectionnée.");
+  }
+  return exportSummaryChargesCsv(result, scope, true);
+}
+
 export function exportDetailedChargesCsv(result: MonthlyChargesResult, scope: MonthlyChargesExportScope = {}, month?: string): string {
-  if (month && (!isMonthlyChargeMonth(month) || Number(month.slice(0, 4)) !== result.year)) throw new Error("Mois d’export invalide.");
+  if (month && (!isMonthlyChargeMonth(month) || month < result.startMonth || month > result.endMonth)) throw new Error("Mois d’export invalide.");
   const perimeter = scopeLabel(result, scope);
+  const period = month || `${result.startMonth} – ${result.endMonth}`;
   const rows: unknown[][] = [["Période", "Périmètre", "Origine", "Identifiant source", "Fournisseur / intervenant", "Intitulé", "Date source", "Mois retenu", "Rattachement", "Sélection", "Rubrique", "Montant source (€)", "Montant retenu (€)", "Motif / qualité", "Montant des heures (€)", "Frais annexes (€)"]];
   const append = (entry: MonthlyChargeEntry, unknownHouse = false) => {
-    const allocations = entry.allocations.filter(allocation => Number(allocation.month.slice(0, 4)) === result.year && (!month || allocation.month === month));
+    const allocations = entry.allocations.filter(allocation => allocation.month >= result.startMonth && allocation.month <= result.endMonth && (!month || allocation.month === month));
     if (month && entry.allocations.length && !allocations.length) return;
     const parts: (MonthlyChargeAllocation | undefined)[] = allocations.length ? allocations : [undefined];
     for (const allocation of parts) {
       const counted = entry.status === "included" && !unknownHouse && Boolean(allocation);
-      rows.push([month || String(result.year), perimeter, sourceLabel(entry.source), entry.sourceId, entry.personLabel, entry.title,
+      rows.push([period, perimeter, sourceLabel(entry.source), entry.sourceId, entry.personLabel, entry.title,
         entry.sourceDate, allocation?.month || "", allocation?.origin || "À vérifier", entry.selected ? "Retenue" : "Non retenue",
         unknownHouse ? "Maison non renseignée · hors total" : entry.status === "included" ? "Charges" : `${statusLabels[entry.status]} · hors total`,
         decimal(entry.amountCents), decimal(counted ? allocation!.amountCents : 0), [entry.reason, ...entry.issues].filter(Boolean).join(" · "),
@@ -322,6 +355,6 @@ export function exportDetailedChargesCsv(result: MonthlyChargesResult, scope: Mo
   result.entries.forEach(entry => append(entry));
   result.houseUnknown.forEach(entry => append(entry, true));
   const total = month ? result.months.find(item => item.month === month)!.totalCents : result.totalCents;
-  rows.push([month || String(result.year), perimeter, "Total des charges sélectionnées", "", "", "", "", "", "Montants enregistrés dans le CRM", "", "Total", "", decimal(total), "", "", ""]);
+  rows.push([period, perimeter, "Total des charges sélectionnées", "", "", "", "", "", "Montants enregistrés dans le CRM", "", "Total", "", decimal(total), "", "", ""]);
   return csv(rows);
 }

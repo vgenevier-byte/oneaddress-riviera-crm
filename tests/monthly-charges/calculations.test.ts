@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  buildMonthlyCharges, evaluateMonthlyChargeEntries, exportAnnualChargesCsv,
+  buildMonthlyCharges, buildMonthlyChargesPeriod, evaluateMonthlyChargeEntries, exportAnnualChargesCsv, exportPeriodChargesCsv,
   exportDetailedChargesCsv, findRecalculatedMonthlyCharges, isMonthlyChargeCivilDate,
   monthlyChargesCsvCell, parseMonthlyChargeCents, spreadMonthlyChargeCents
 } from "../../lib/monthlyCharges/calculations";
@@ -236,20 +236,23 @@ test("les minutes valides ne masquent jamais une vraie anomalie, y compris taux 
   }
 });
 
-test("règle personne, exception prioritaire et nouvelles sources : aucun abonnement implicite ni duplication", () => {
+test("les factures présentes et futures sont incluses par défaut ; seules les exclusions individuelles priment", () => {
   const state = snapshot([invoice("existing"), invoice("excluded"), invoice("new-selected"), invoice("new-person", { personId: "supplier-new" })], []);
   state.config.exceptions = [{ source: "invoice", sourceId: "existing", included: true }, { source: "invoice", sourceId: "excluded", included: false, reason: "Dépense client" }];
   let result = buildMonthlyCharges(state, 2026, filter);
-  assert.equal(result.totalCents, 120000);
+  assert.equal(result.totalCents, 180000);
   assert.equal(result.entries.find(entry => entry.sourceId === "existing")!.selectionOrigin, "individual");
-  assert.equal(result.entries.find(entry => entry.sourceId === "new-person")!.selected, false);
+  assert.equal(result.entries.find(entry => entry.sourceId === "new-person")!.selected, true);
+  assert.equal(result.entries.find(entry => entry.sourceId === "new-person")!.selectionOrigin, "default");
   state.config.exceptions = [];
-  assert.equal(buildMonthlyCharges(state, 2026, filter).totalCents, 180000);
+  assert.equal(buildMonthlyCharges(state, 2026, filter).totalCents, 240000);
   state.config.personRules = [];
   state.config.exceptions = [{ source: "invoice", sourceId: "existing", included: true }];
   result = buildMonthlyCharges(state, 2026, filter);
-  assert.equal(result.totalCents, 60000);
-  assert.equal(result.entries.find(entry => entry.sourceId === "new-selected")!.selected, false);
+  assert.equal(result.totalCents, 240000);
+  assert.equal(result.entries.find(entry => entry.sourceId === "new-selected")!.selected, true);
+  state.sources.timeEntries.push(hours("new-worker"));
+  assert.equal(buildMonthlyCharges(state, 2026, filter).totalCents, 240000, "hours selection still requires a rule or exception");
 });
 
 test("deux factures légitimes identiques restent deux charges ; chevauchement facture/heures exclu explicitement", () => {
@@ -333,4 +336,108 @@ test("périmètre CSV décrit seulement les sources lisibles ; un cumul monétai
   assert.doesNotMatch(csvRows(exportDetailedChargesCsv(result))[1][1], /Suivi maison/);
   const tooLarge = snapshot([invoice("large-1", { amount: 80000000000000 }), invoice("large-2", { amount: 80000000000000 })], []);
   assert.throws(() => buildMonthlyCharges(tooLarge, 2026, filter), /Total trop élevé/);
+});
+
+function controlSnapshot() {
+  const state = snapshot([
+    invoice("A", { invoiceDate: "2026-10-01", amount: 1200, status: "Payé" }),
+    invoice("B", { invoiceDate: "2026-10-02", amount: 600, status: "À payer" }),
+    invoice("C", { invoiceDate: "2026-10-03", amount: 300, status: "Partiellement payé" }),
+    invoice("D", { invoiceDate: "2026-10-04", amount: 100.01, status: "En retard" })
+  ], [hours("personnel", { date: "2026-10-05", startTime: "09:00", endTime: "15:00", hourlyRate: 30, expenseAmount: 20 })]);
+  state.config.personRules = [{ source: "hours", personId: "worker-1", included: true }];
+  state.config.attachments = [
+    { source: "invoice", sourceId: "A", mode: "month", month: "2026-09" },
+    { source: "invoice", sourceId: "D", mode: "spread", startMonth: "2026-09", endMonth: "2026-11" }
+  ];
+  state.config.houseAssignments = state.sources.invoices.map(item => ({ source: "invoice", sourceId: item.id, houseId: "house-1" }));
+  return state;
+}
+
+test("contrôle septembre–décembre : 1 233,34 + 1 133,34 + 33,33 + 0 = 2 400,01, détail et synthèse CSV égaux", () => {
+  const state = controlSnapshot();
+  const original = structuredClone(state);
+  const result = buildMonthlyChargesPeriod(state, "2026-09", "2026-12", { ...filter, houseId: "house-1" });
+  assert.deepEqual(result.months.map(month => [month.month, month.totalCents]), [["2026-09", 123334], ["2026-10", 113334], ["2026-11", 3333], ["2026-12", 0]]);
+  assert.equal(result.totalCents, 240001);
+  assert.equal(result.invoiceCents, 220001);
+  assert.equal(result.hoursCents, 20000);
+  assert.equal(result.houseUnknown.length, 0);
+  assert.equal(result.groups.reduce((sum, group) => sum + group.totalCents, 0), result.totalCents);
+  assert.equal(result.months.reduce((sum, month) => sum + month.totalCents, 0), result.totalCents);
+  const summary = csvRows(exportPeriodChargesCsv(result, { houseLabel: "Maison fictive" }));
+  const detail = csvRows(exportDetailedChargesCsv(result, { houseLabel: "Maison fictive" }));
+  assert.equal(summary.at(-1)!.at(-1), "2400,01");
+  assert.equal(detail.at(-1)![12], "2400,01");
+  assert.equal(detail[1][0], "2026-09 – 2026-12");
+  assert.equal(summary[1][0], "2026-09 – 2026-12");
+  assert.equal(detail.slice(1, -1).reduce((sum, row) => sum + Math.round(Number(row[12].replace(",", ".")) * 100), 0), result.totalCents);
+  assert.equal(csvRows(exportDetailedChargesCsv(result, {}, "2026-10")).at(-1)![12], "1133,34");
+  for (const status of ["À payer", "Payé", "Partiellement payé", "En retard"]) {
+    state.sources.invoices[1].status = status;
+    state.sources.invoices[2].status = status;
+    assert.equal(buildMonthlyChargesPeriod(state, "2026-09", "2026-12", filter).totalCents, 240001);
+  }
+  assert.deepEqual({ ...state, sources: { ...state.sources, invoices: original.sources.invoices } }, original);
+});
+
+test("mois unique, période traversant deux années, mois vides et période inversée", () => {
+  const state = controlSnapshot();
+  assert.equal(buildMonthlyChargesPeriod(state, "2026-09", "2026-09", filter).totalCents, 123334);
+  state.config.attachments!.push({ source: "invoice", sourceId: "B", mode: "spread", startMonth: "2026-12", endMonth: "2027-01" });
+  const result = buildMonthlyChargesPeriod(state, "2026-11", "2027-02", filter);
+  assert.deepEqual(result.months.map(month => [month.month, month.totalCents]), [["2026-11", 3333], ["2026-12", 30000], ["2027-01", 30000], ["2027-02", 0]]);
+  assert.equal(result.totalCents, 63333);
+  assert.equal(csvRows(exportDetailedChargesCsv(result, {}, "2027-01")).at(-1)![12], "300,00");
+  assert.throws(() => buildMonthlyChargesPeriod(state, "2027-02", "2026-11"), /mois de début/);
+  assert.throws(() => buildMonthlyChargesPeriod(state, "2026-13", "2027-01"), /mois de début/);
+  assert.throws(() => exportAnnualChargesCsv(result), /année complète/);
+  assert.deepEqual(buildMonthlyChargesPeriod(snapshot([], []), "2026-11", "2027-02", filter).months.map(month => month.totalCents), [0, 0, 0, 0]);
+});
+
+test("affectation maison indépendante du mois, une facture une seule fois et signaux limités à la période et personne", () => {
+  const state = controlSnapshot();
+  state.sources.invoices.push(invoice("other-house", { invoiceDate: "2026-10-06", amount: 90 }), invoice("no-house", { invoiceDate: "2026-10-07", amount: 70 }), invoice("outside-period", { invoiceDate: "2026-05-01", amount: 10 }), invoice("other-person", { invoiceDate: "2026-10-01", personId: "supplier-2", amount: 20 }));
+  state.config.houseAssignments!.push({ source: "invoice", sourceId: "other-house", houseId: "house-2" });
+  let result = buildMonthlyChargesPeriod(state, "2026-09", "2026-12", { ...filter, houseId: "house-1", personId: "supplier-1" });
+  assert.equal(result.totalCents, 220001);
+  assert.deepEqual(result.houseUnknown.map(entry => entry.sourceId), ["no-house"]);
+  assert.equal(result.entries.some(entry => entry.sourceId === "other-house"), false);
+  assert.equal(buildMonthlyChargesPeriod(state, "2026-09", "2026-12", filter).totalCents, 258001);
+  const assignments = structuredClone(state.config.houseAssignments);
+  state.config.attachments = [];
+  result = buildMonthlyChargesPeriod(state, "2026-10", "2026-10", { ...filter, houseId: "house-1" });
+  assert.equal(result.totalCents, 240001);
+  assert.deepEqual(state.config.houseAssignments, assignments);
+  state.config.houseAssignments![0].houseId = "house-2";
+  assert.deepEqual(state.config.attachments, []);
+  assert.equal(buildMonthlyChargesPeriod(state, "2026-10", "2026-10", { ...filter, houseId: "house-1" }).totalCents, 120001);
+  const detail = csvRows(exportDetailedChargesCsv(result));
+  assert.equal(detail.at(-1)![12], "2400,01");
+  assert.ok(detail.filter(row => row[3] === "no-house").every(row => row[12] === "0,00"));
+});
+
+test("une maison liée mais non lisible reste distincte d’une facture non affectée", () => {
+  const state = snapshot([invoice("hidden-house", { houseAssigned: true }), invoice("no-house")], []);
+  const result = buildMonthlyChargesPeriod(state, "2026-09", "2026-09", { ...filter, houseId: "house-1" });
+  assert.equal(result.totalCents, 0);
+  assert.deepEqual(result.houseUnknown.map(entry => entry.sourceId), ["no-house"]);
+  assert.equal(buildMonthlyChargesPeriod(state, "2026-09", "2026-09", filter).totalCents, 120000);
+});
+
+test("le périmètre mensuel conserve exclusions, attentes et sans date sans créer de charge future", () => {
+  const state = snapshot([
+    invoice("excluded"), invoice("cancelled", { status: "Annulé" }),
+    invoice("expected", { invoiceDate: "2026-09-10", status: "En attente de facture" }),
+    invoice("no-date", { invoiceDate: undefined }), invoice("new-supplier", { personId: "brand-new" })
+  ], []);
+  state.config.personRules = [];
+  state.config.exceptions = [{ source: "invoice", sourceId: "excluded", included: false, reason: "Déjà compté en heures" }];
+  const result = buildMonthlyChargesPeriod(state, "2026-09", "2026-12", filter);
+  assert.equal(result.totalCents, 60000);
+  assert.deepEqual(result.expected.map(entry => entry.sourceId), ["expected"]);
+  assert.deepEqual(result.unattached.map(entry => entry.sourceId), ["no-date"]);
+  assert.deepEqual(result.excluded.map(entry => entry.sourceId), ["excluded", "cancelled"]);
+  assert.equal(result.excluded[0].reason, "Déjà compté en heures");
+  assert.deepEqual(result.months.slice(1).map(month => month.totalCents), [0, 0, 0]);
 });
