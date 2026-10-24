@@ -1,0 +1,48 @@
+{
+  "baseCommit": "fb0f8e58cc1b59c952094abaa6d4d492cd5b2164",
+  "targetedTests": {
+    "passed": 63,
+    "failed": 0,
+    "newRegressionTests": 13
+  },
+  "integratedBrowserChecks": {
+    "passed": 208,
+    "failed": 0,
+    "sessions": 8,
+    "engines": [
+      "Chromium",
+      "WebKit"
+    ],
+    "viewports": [
+      "desktop",
+      "mobile emulation"
+    ],
+    "languages": [
+      "fr",
+      "en"
+    ],
+    "actualBusinessViews": [
+      "DocumentsView",
+      "HouseTrackingView"
+    ],
+    "exactGlobalStyles": true,
+    "sourceHashesMatch": true,
+    "consoleErrors": 0,
+    "businessRequests": 0,
+    "saves": "React callbacks + localStorage simulation with reload",
+    "realServerWritesVerified": false,
+    "authenticatedProductionSession": false
+  },
+  "typescript": "passed --noEmit --incremental false",
+  "lint": {
+    "errors": 0,
+    "preExistingWarnings": 2
+  },
+  "build": "passed next build --webpack with fictional public Supabase values",
+  "diffCheck": "passed",
+  "originalFilesPreserved": 149,
+  "productionSourceChanges": [
+    "components/CRMApp.tsx",
+    "lib/houseWorkerSearch.ts"
+  ]
+}

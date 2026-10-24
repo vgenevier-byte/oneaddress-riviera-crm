@@ -4,6 +4,7 @@ import { SearchableSelect } from "./search/SearchableSelect";
 import { SearchableInput } from "./search/SearchableInput";
 import { createSearchIndex, searchIndex } from "@/lib/search";
 import { createContactFieldResolver } from "@/lib/contactSearch";
+import { createHouseWorkerFieldResolver } from "@/lib/houseWorkerSearch";
 import { sortSelectOptions } from "@/lib/selectOptions";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import type { Variables } from "@/lib/i18n/types";
@@ -2891,6 +2892,10 @@ function DocumentsView({
   const documentResults = useMemo(() => searchIndex(documentSearchIndex, documentSearch), [documentSearchIndex, documentSearch]);
   const approximateDocumentIds = new Set(documentResults.filter(result => result.approximate).map(result => result.item.id));
   const [currentFolderId, setCurrentFolderId] = useState("");
+  function navigateToFolder(folderId: string) {
+    setCurrentFolderId(folderId);
+    setDocumentSearch("");
+  }
   const [folderName, setFolderName] = useState("");
   const [editingDocument, setEditingDocument] = useState<CRMDocument | null>(null);
   const [previewDocument, setPreviewDocument] = useState<CRMDocument | null>(null);
@@ -3254,15 +3259,15 @@ function DocumentsView({
 
         <div className="form-grid">
           <label>{language === "en" ? "Search all authorized documents" : "Rechercher dans tous les documents autorisés"}<input type="search" value={documentSearch} onChange={event => setDocumentSearch(event.target.value)} /></label>
-          <label>{language === "en" ? "Folder" : "Dossier"}<SearchableSelect value={currentFolderId} onChange={event => { setCurrentFolderId(event.target.value); setDocumentSearch(""); }}>
+          <label>{language === "en" ? "Folder" : "Dossier"}<SearchableSelect value={currentFolderId} onChange={event => navigateToFolder(event.target.value)}>
             <option value="">{t("crm.documents.35c762079d")}</option>
             {folders.map(folder => <option key={folder.id} value={folder.id} data-search={folder.location} data-secondary={folder.location}>{folder.title}</option>)}
           </SearchableSelect></label>
         </div>
         <div className="document-breadcrumbs">
-          <button type="button" className={!currentFolderId ? "primary-button" : "secondary-button"} onClick={() => setCurrentFolderId("")}>{t("crm.documents.35c762079d")}</button>
+          <button type="button" className={!currentFolderId ? "primary-button" : "secondary-button"} onClick={() => navigateToFolder("")}>{t("crm.documents.35c762079d")}</button>
           {folderPath.map((folder) => (
-            <button key={folder.id} type="button" className="secondary-button" onClick={() => setCurrentFolderId(folder.id)}>
+            <button key={folder.id} type="button" className="secondary-button" onClick={() => navigateToFolder(folder.id)}>
               {folder.title}
             </button>
           ))}
@@ -3308,7 +3313,7 @@ function DocumentsView({
                   <p className="muted-line">{t("crm.documents.f85f2ec2af")}</p>
                 </div>
                 <div className="item-actions contact-row-actions oar-contact-actions">
-                  <button className="primary-button compact-button" type="button" onClick={() => setCurrentFolderId(folder.id)} data-crm-auto-scroll="true">{t("crm.documents.9fb440435a")}</button>
+                  <button className="primary-button compact-button" type="button" onClick={() => navigateToFolder(folder.id)} data-crm-auto-scroll="true">{t("crm.documents.9fb440435a")}</button>
                   {folder.driveWebViewLink && <a className="secondary-button compact-button" href={folder.driveWebViewLink} target="_blank" rel="noreferrer">{t("crm.documents.6312b4b9ba")}</a>}
                   {canManageDocuments && canTrash && folder.driveFolderId && <button className="danger-link compact-danger" type="button" disabled={Boolean(trashingDocumentId)} onClick={() => void trashDriveBackedDocument(folder)}>{trashingDocumentId === folder.id ? t("crm.documents.647dc788e2") : t("crm.documents.a52f470c90")}</button>}
                 </div>
@@ -3501,6 +3506,7 @@ function HouseTrackingView({
   const { t, label, screen, screenText, dialogT } = useCRMDisplay();
 
   const houseContactSearchOptions = useMemo(() => new Map(crmContactTextOptions(contacts, contacts).map(option => [option.id, option])), [contacts]);
+  const workerSearchFields = useMemo(() => createHouseWorkerFieldResolver(contacts), [contacts]);
   const business = useBusinessPermissions();
   const canEditTimeExpenses = access ? access.fullAccess || access.modules.houseTracking?.level === "contribute" : business?.write !== false;
   const { language } = useI18n();
@@ -3665,7 +3671,7 @@ function HouseTrackingView({
   const selectedArchivedWorkerHistory = selectedArchivedWorker
     ? getHouseTrackingWorkerHistorySummary(selectedArchivedWorker.id, timeEntries, payments)
     : null;
-  const archivedWorkerIndex = useMemo(() => createSearchIndex(archivedWorkers, worker => [worker.contactName, worker.role]), [archivedWorkers]);
+  const archivedWorkerIndex = useMemo(() => createSearchIndex(archivedWorkers, workerSearchFields, { getId: worker => worker.id, getLabel: worker => worker.contactName }), [archivedWorkers, workerSearchFields]);
   const visibleArchivedWorkers = useMemo(() => searchIndex(archivedWorkerIndex, archivedWorkerSearch).map(result => result.item), [archivedWorkerIndex, archivedWorkerSearch]);
 
   function getAutoAllocatedPaidForSelectedEntries(targetEntries: typeof filteredEntries) {
@@ -3997,7 +4003,7 @@ function HouseTrackingView({
             <div className="house-worker-filter-controls">
               <SearchableSelect aria-label={t("crm.house.d282bc2490")} value={workerFilter} onChange={event => setWorkerFilter(event.target.value)}>
                 <option value="Tous">{t("crm.house.2ff5998143")}</option>
-                {(selectedArchivedWorker ? [...activeWorkers, selectedArchivedWorker] : activeWorkers).map(worker => <option key={worker.id} value={worker.id} data-search={worker.role} data-secondary={worker.role}>{worker.contactName}</option>)}
+                {(selectedArchivedWorker ? [...activeWorkers, selectedArchivedWorker] : activeWorkers).map(worker => <option key={worker.id} value={worker.id} data-search={workerSearchFields(worker).filter(Boolean).join(" ")} data-secondary={worker.role}>{worker.contactName}</option>)}
               </SearchableSelect>
               {houseSection !== "today" && (
                 <BusinessButton
@@ -4108,7 +4114,7 @@ function HouseTrackingView({
                   setHourDraft((current) => ({ ...current, workerId: event.target.value, hourlyRate: houseHourlyRateInput(worker) }));
                 }}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id} data-search={worker.role} data-secondary={worker.role}>{worker.contactName}</option>)}
+                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id} data-search={workerSearchFields(worker).filter(Boolean).join(" ")} data-secondary={worker.role}>{worker.contactName}</option>)}
                 </SearchableSelect>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.3c48aa2bdf")}<input type="time" step="900" required value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))} />
@@ -4186,7 +4192,7 @@ function HouseTrackingView({
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.d282bc2490")}<SearchableSelect name="workerId" defaultValue={initialActiveWorker?.id || ""}>
                   <option value="">{t("crm.house.3f2aaae201")}</option>
-                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id} data-search={worker.role} data-secondary={worker.role}>{worker.contactName}</option>)}
+                  {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id} data-search={workerSearchFields(worker).filter(Boolean).join(" ")} data-secondary={worker.role}>{worker.contactName}</option>)}
                 </SearchableSelect>
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.947cc07e2b")}<input name="amount" type="text" inputMode="decimal" min="0" step="1" placeholder={t("crm.house.3b23fa9915")} />
@@ -13769,5 +13775,5 @@ function Badge({ children }: { children: React.ReactNode }) {
 }
 
 // Shared business views: importing these never mounts CRMApp or its global persistence.
-export { QuotesView, BookingsView, HouseTrackingView, VendorInvoicesView, ContactsView, LeadsView, PropertiesView, VehiclesView, BoatsView, PlanningView, Dashboard, createDraftQuoteFromLead, safeNumber, parseAssetKey, normalizePlanningCategory, getPlanningCategoryFromAssetType, isValidPlanningDate, planningDateValue, getQuoteStatus, getQuoteTotal };
+export { QuotesView, BookingsView, DocumentsView, HouseTrackingView, VendorInvoicesView, ContactsView, LeadsView, PropertiesView, VehiclesView, BoatsView, PlanningView, Dashboard, createDraftQuoteFromLead, safeNumber, parseAssetKey, normalizePlanningCategory, getPlanningCategoryFromAssetType, isValidPlanningDate, planningDateValue, getQuoteStatus, getQuoteTotal };
 export type { QuoteRequest };

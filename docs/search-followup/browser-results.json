@@ -1,0 +1,1426 @@
+{
+  "fictionalData": true,
+  "actualAuth": false,
+  "actualRPC": false,
+  "actualDatabase": false,
+  "persistence": "React callbacks + localStorage simulation, verified across reload",
+  "physicalDevice": false,
+  "actualBusinessViews": [
+    "DocumentsView",
+    "HouseTrackingView"
+  ],
+  "globalStyles": "app/globals.css exact source",
+  "sourceManifest": "fixture-manifest.json",
+  "results": [
+    {
+      "session": "chromium-desktop-fr",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-fr",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "chromium-desktop-en",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "chromium-mobile-en",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "webkit-desktop-en",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "documents-global-folder-open-parent-root-and-picker-clear-search",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "general-worker-filter-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "general-worker-filter-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "general-worker-filter-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "general-worker-filter-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "general-historical-contact-missing-selectable-with-worker-id",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "hours-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "hours-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "hours-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "hours-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "hours-and-filter-keep-financial-data-and-archive-eligibility",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "hours-save-simulation-keeps-worker-id-rate-expenses-and-existing-ledger",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "payments-worker-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "payments-worker-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "payments-worker-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "payments-worker-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "payment-save-simulation-worker-id-exact-amount-and-reload",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "archived-search-linked-contact-clemnt",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "archived-search-linked-contact-martin clem",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "archived-search-linked-contact-riviera canne",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "archived-search-linked-contact-cannse",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "archive-choice-keeps-worker-id-eligible-history-and-today-reset",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "restricted-company-projection-no-unavailable-company-or-api-expansion",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "restricted-contacts-projection-legacy-fallback-no-contact-company-city-leak",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "read-only-business-context-blocks-hour-and-payment-writes",
+      "passed": true
+    },
+    {
+      "session": "webkit-mobile-en",
+      "name": "localized-integrated-view-no-runtime-errors-or-business-network-requests",
+      "passed": true
+    }
+  ],
+  "sessions": [
+    {
+      "session": "chromium-desktop-fr",
+      "engine": "chromium",
+      "language": "fr",
+      "mobileEmulation": false,
+      "width": 1360,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-62d92115",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-408bdbaf",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "session": "chromium-desktop-en",
+      "engine": "chromium",
+      "language": "en",
+      "mobileEmulation": false,
+      "width": 1360,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-2e8b4479",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-60fdcf35",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "session": "chromium-mobile-fr",
+      "engine": "chromium",
+      "language": "fr",
+      "mobileEmulation": true,
+      "width": 390,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-9aa4ee37",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-a3f34d6f",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "session": "chromium-mobile-en",
+      "engine": "chromium",
+      "language": "en",
+      "mobileEmulation": true,
+      "width": 390,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-cb47ce49",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-fe4f4e5b",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "session": "webkit-desktop-fr",
+      "engine": "webkit",
+      "language": "fr",
+      "mobileEmulation": false,
+      "width": 1360,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-2a7028b2",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-769cfe92",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "session": "webkit-desktop-en",
+      "engine": "webkit",
+      "language": "en",
+      "mobileEmulation": false,
+      "width": 1360,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-31801a4a",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-a1cac5e3",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "session": "webkit-mobile-fr",
+      "engine": "webkit",
+      "language": "fr",
+      "mobileEmulation": true,
+      "width": 390,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-09753893",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-8752b59c",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    },
+    {
+      "session": "webkit-mobile-en",
+      "engine": "webkit",
+      "language": "en",
+      "mobileEmulation": true,
+      "width": 390,
+      "consoleErrors": [],
+      "businessRequests": [],
+      "blockedExternalResources": [],
+      "simulatedSaves": [
+        {
+          "kind": "hours",
+          "record": {
+            "id": "hours-0f82ac4c",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "startTime": "09:00",
+            "endTime": "13:00",
+            "breakMinutes": 0,
+            "hourlyRate": 25.5,
+            "expenseAmount": 7.25,
+            "expenseNote": "Frais fictifs conservés",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        },
+        {
+          "kind": "payment",
+          "record": {
+            "id": "payment-165e9002",
+            "houseId": "house-riviera",
+            "houseName": "Villa des Oliviers",
+            "workerId": "worker-clement",
+            "workerName": "Clément Martin",
+            "date": "2026-10-24",
+            "amount": 17.4,
+            "method": "Virement",
+            "note": "",
+            "createdAt": "2026-10-24T10:30:00.000Z"
+          }
+        }
+      ]
+    }
+  ]
+}
