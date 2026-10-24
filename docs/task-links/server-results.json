@@ -1,0 +1,99 @@
+{
+  "passed": 16,
+  "results": [
+    {
+      "name": "typed catalogue enumerates real identities and no sensitive bank coordinates",
+      "passed": true
+    },
+    {
+      "name": "all families resolve authoritative data with precise immutable context",
+      "passed": true
+    },
+    {
+      "name": "creation, primary and supplementary links persist in private canonical rows",
+      "passed": true
+    },
+    {
+      "name": "fresh Auth login/reload re-reads identical task and inverse links enforce task privacy",
+      "passed": true
+    },
+    {
+      "name": "a task assignment grants no target rights and dynamic labels disappear after revocation",
+      "passed": true
+    },
+    {
+      "name": "unrelated edits preserve complete masked links and attribution/status capabilities",
+      "passed": true
+    },
+    {
+      "name": "RIB identity survives main-account change and archival with exact account state",
+      "passed": true
+    },
+    {
+      "name": "empty hours period, expenses and source project/presentation snapshots remain independent",
+      "passed": true
+    },
+    {
+      "name": "forged IDs/context, revoked permissions and raw relation replacement reject atomically",
+      "passed": true
+    },
+    {
+      "name": "explicit remove/change primary only changes relations, never business amounts/documents",
+      "passed": true
+    },
+    {
+      "name": "revision conflicts and lost-response/double-click idempotency include link delta",
+      "passed": true
+    },
+    {
+      "name": "marking complete affects task only; historical API never reveals private reference changes",
+      "passed": true
+    },
+    {
+      "name": "target deletion retains task and comprehensible reader-authorized state",
+      "passed": true
+    },
+    {
+      "name": "Publisher bridge accepts only service-role confirmed real IDs for this actor",
+      "passed": true
+    },
+    {
+      "name": "catalogue pagination searches beyond the first page and keeps homonyms by ID",
+      "passed": true
+    },
+    {
+      "name": "migration is idempotent without rewriting any stored task, event, document or business amount",
+      "passed": true
+    }
+  ],
+  "evidence": {
+    "realAuth": true,
+    "httpRpc": true,
+    "postgres": true,
+    "loopback": "http://127.0.0.1:55931",
+    "privateCanonicalStorage": true,
+    "taskId": "link-5a38bfb6-task-00cb8f4a-ea6f-45e7-b394-c2b66979c60f",
+    "targetFamilies": [
+      "contact",
+      "lead",
+      "quote",
+      "booking",
+      "vendor_quote",
+      "vendor_invoice",
+      "bank_account",
+      "worker",
+      "worker_period",
+      "time_entry",
+      "staff_payment",
+      "house",
+      "property",
+      "vehicle",
+      "boat",
+      "planning_entry",
+      "fonciere_project",
+      "presentation",
+      "document",
+      "monthly_charges"
+    ]
+  }
+}

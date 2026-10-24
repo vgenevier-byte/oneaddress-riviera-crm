@@ -1,0 +1,39 @@
+{
+  "realAuth": true,
+  "realRpc": true,
+  "realDatabase": true,
+  "fictionalData": true,
+  "externalProviderCalls": 0,
+  "instagramPublications": 0,
+  "results": [
+    {
+      "name": "invoice source creates primary invoice with complementary contact; server persistence after reload",
+      "passed": true
+    },
+    {
+      "name": "Fonciere source keeps a manually edited field after task cancellation",
+      "passed": true
+    },
+    {
+      "name": "presentation revision routes to the exact independent historical snapshot",
+      "passed": true
+    },
+    {
+      "name": "monthly calculated context opens source, person, house and empty month without creating business rows",
+      "passed": true
+    },
+    {
+      "name": "private document opens exact authorized card with inverse task list",
+      "passed": true
+    },
+    {
+      "name": "English mobile task linking remains keyboard accessible without horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "saved Publisher creation uses real local Neon catalog and canonical link without generation",
+      "passed": true
+    }
+  ],
+  "pageErrors": []
+}

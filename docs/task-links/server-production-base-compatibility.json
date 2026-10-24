@@ -1,0 +1,29 @@
+{
+  "readOnly": true,
+  "results": [
+    {
+      "name": "task_project",
+      "expected": "6f165a4216baf9d94e0c862866996774",
+      "local": "6f165a4216baf9d94e0c862866996774",
+      "matches": true
+    },
+    {
+      "name": "crm_tasks_mutate",
+      "expected": "335c37ae57dee56f4a3d1d5e5706191f",
+      "local": "335c37ae57dee56f4a3d1d5e5706191f",
+      "matches": true
+    },
+    {
+      "name": "crm_tasks_export",
+      "expected": "c49c42fc316fd35800590d47c1ff6f0f",
+      "local": "c49c42fc316fd35800590d47c1ff6f0f",
+      "matches": true
+    },
+    {
+      "name": "crm_tasks_history",
+      "expected": "58fb359236e33a867e10024bbd0edd74",
+      "local": "58fb359236e33a867e10024bbd0edd74",
+      "matches": true
+    }
+  ]
+}

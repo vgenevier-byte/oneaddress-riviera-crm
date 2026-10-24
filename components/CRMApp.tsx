@@ -132,11 +132,15 @@ import Image from "next/image";
 
 import { isCompletedTaskStatus } from "@/lib/taskMaintenance";
 import TasksWorkspace from "./TasksWorkspace";
+import { TaskSourceActions, useTaskLinks } from "./TaskLinkProvider";
+import RetainedTaskView from "./RetainedTaskView";
+import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
 import { taskContactOptions } from "@/lib/tasks/contactOptions";
 import { normalizeContactSearch } from "@/lib/contactSearch";
 import { createContactSearchIndex, searchContactSuggestions, searchDirectContacts } from "@/lib/contactSuggestions";
 import { useTaskApi, useTaskProjection, taskPermissions, taskForBusinessView } from "@/lib/tasks/client";
-import { parisCivilDate, isCivilDate, TaskRequestLedger, effectiveTaskLeadId } from "@/lib/tasks/domain";
+import { parisCivilDate, isCivilDate, TaskRequestLedger, effectiveTaskLeadId, taskTargetKey } from "@/lib/tasks/domain";
+import type { TaskTarget, TaskTargetRef } from "@/lib/tasks/types";
 import { crmCache } from "@/lib/access/crmCache";
 import { useCommittedValue } from "@/lib/access/useCommittedValue";
 import { WorkspaceSyncGuard, workspaceFingerprint } from "@/lib/access/workspaceSync";
@@ -2057,6 +2061,12 @@ function QuotesView({
     if (prefilledLead) setEditingQuoteId(quote?.id || null);
   }
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | "Tous">("Tous");
+  const taskTarget = useTaskTargetFocus("quote");
+  useEffect(() => {
+    if (!taskTarget || !quotes.some(quote => quote.id === taskTarget.id)) return;
+    const timer = window.setTimeout(() => { setStatusFilter("Tous"); window.requestAnimationFrame(() => scrollTaskTarget(`quote-${taskTarget.id}`)); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, quotes]);
 
   // Synchronize the form only for a new, snapshotted prefill request.
   useEffect(() => {
@@ -2257,8 +2267,9 @@ function QuotesView({
         </div>
 
         {visibleQuotes.length === 0 ? (<p className="muted-line">{t("crm.quotes.5cbb140b1b")}</p>) : (visibleQuotes.map((quote) => (
-              <article className="quote-card" key={quote.id} data-notification-target={`quote-${quote.id}`}>
+              <article className="quote-card" key={quote.id} id={`quote-${quote.id}`} data-notification-target={`quote-${quote.id}`}>
                 <div>
+                <TaskSourceActions reference={{type:"quote",id:quote.id}} title="Vérifier le devis client" />
                   <p className="eyebrow">{getQuoteItems(quote).map((item) => label(getQuoteCategoryFrenchLabel(item.category), "crm")).join(" · ")}</p>
                   <h3>{quote.title || quote.clientName}</h3>
                   <p>{quote.clientName}</p>
@@ -2608,6 +2619,12 @@ function BookingsView({
   const providerSearchOptions = useMemo(() => new Map(crmContactTextOptions(contacts, contacts).map(option => [option.id, option])), [contacts]);
   const business = useBusinessPermissions();
   const confirmedQuotes = quotes.filter((quote) => getQuoteStatus(quote.status) === "Accepted");
+  const taskTarget = useTaskTargetFocus("booking");
+  useEffect(() => {
+    if (!taskTarget || !quotes.some(quote => quote.id === taskTarget.id && getQuoteStatus(quote.status) === "Accepted")) return;
+    const timer = window.setTimeout(() => scrollTaskTarget(`booking-${taskTarget.id}`), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, quotes]);
   const providerContacts = contacts.filter(isSupplierContact);
 
   function getAssignedProvider(quote: QuoteRequest) {
@@ -2701,8 +2718,9 @@ function BookingsView({
             const assignedProvider = getAssignedProvider(quote);
 
             return (
-              <article className="item-card" key={quote.id} data-notification-target={`booking-${quote.id}`}>
+              <article className="item-card" key={quote.id} id={`booking-${quote.id}`} data-notification-target={`booking-${quote.id}`}>
                 <div>
+                <TaskSourceActions reference={{type:"booking",id:quote.id}} title="Vérifier la réservation" />
                   <p className="eyebrow" data-semantic-text={"Service confirmé"}>{services || t("crm.bookings.54cc57ed9f")}</p>
                   <h3>{quote.clientName}</h3>
                   <p>{quote.title || t("crm.bookings.7491ed9a17")}</p>
@@ -2888,6 +2906,23 @@ function DocumentsView({
   const { t, label, screen, screenText, dialogText, dialogT, language } = useCRMDisplay();
 
   const [documentSearch, setDocumentSearch] = useState("");
+  const taskTarget = useTaskTargetFocus("folder", "document");
+  const documentTaskApi = useTaskApi();
+  const registryKey = taskTarget?.type === "folder" && taskTarget.context?.catalog === "drive_registry" ? taskTargetKey(taskTarget) : "";
+  const [registrySnapshot, setRegistrySnapshot] = useState<{ user: string; key: string; target?: TaskTarget }>({ user: "", key: "" });
+  const registryFolder = registrySnapshot.user === sessionUserId && registrySnapshot.key === registryKey ? registrySnapshot.target : undefined;
+  useEffect(() => {
+    if (!registryKey || !documentTaskApi.resolveTargets) return;
+    let cancelled = false;
+    const [type,id,context] = JSON.parse(registryKey) as [string,string,[string,string][]];
+    const ref = {type,id,context:Object.fromEntries(context)};
+    const refresh = async () => {
+      try { const resolved=await documentTaskApi.resolveTargets!([ref]);if(!cancelled)setRegistrySnapshot({user:sessionUserId,key:registryKey,target:resolved[0]}); }
+      catch { if(!cancelled)setRegistrySnapshot({user:sessionUserId,key:registryKey}); }
+    };
+    void refresh();window.addEventListener("focus",refresh);const timer=window.setInterval(()=>void refresh(),15000);
+    return()=>{cancelled=true;window.removeEventListener("focus",refresh);window.clearInterval(timer);};
+  }, [registryKey, sessionUserId, documentTaskApi]);
   const documentSearchIndex = useMemo(() => createSearchIndex(documents, document => [document.title, document.fileName, document.location, document.category], { getLabel: document => document.title }), [documents]);
   const documentResults = useMemo(() => searchIndex(documentSearchIndex, documentSearch), [documentSearchIndex, documentSearch]);
   const approximateDocumentIds = new Set(documentResults.filter(result => result.approximate).map(result => result.item.id));
@@ -2940,6 +2975,22 @@ function DocumentsView({
   const files = documents.filter((crmDocument) => !crmDocument.isFolder);
   const currentFolder = currentFolderId ? folders.find((folder) => folder.id === currentFolderId) || null : null;
   const currentDriveFolderId = currentFolder?.driveFolderId || "";
+  useEffect(() => {
+    if (!taskTarget || taskTarget.context?.catalog) return;
+    const source = taskTarget.type === "folder"
+      ? documents.find(row => row.isFolder && row.id === taskTarget.id)
+      : documents.find(row => !row.isFolder && (taskTarget.context?.provider === "google-drive" ? row.driveFileId === taskTarget.id : row.storagePath === taskTarget.id));
+    if (!source) return;
+    const timer = window.setTimeout(() => {
+      setDocumentSearch("");setCurrentFolderId(source.isFolder ? source.id : source.folderId || source.parentFolderId || "");
+      window.requestAnimationFrame(() => scrollTaskTarget(source.isFolder ? "document-current-task-folder" : `document-${source.id}`));
+    },0);
+    return()=>window.clearTimeout(timer);
+  },[taskTarget,documents]);
+  function documentReference(document: CRMDocument): TaskTargetRef | undefined {
+    return document.driveFileId ? {type:"document",id:document.driveFileId,context:{provider:"google-drive"}}
+      : document.storagePath ? {type:"document",id:document.storagePath,context:{provider:"storage"}} : undefined;
+  }
 
   const folderPath = (() => {
     const path: CRMDocument[] = [];
@@ -3273,6 +3324,14 @@ function DocumentsView({
           ))}
         </div>
 
+        {registryKey && <section className="card" data-task-registry-folder>
+          <h3>{registryFolder?.state === "available" ? registryFolder.label : language === "en" ? "Folder unavailable with current access" : "Dossier inaccessible avec vos droits actuels"}</h3>
+          {registryFolder?.state === "available" && <>
+            <TaskSourceActions reference={registryFolder.ref} title="Vérifier le dossier" />
+            <a className="secondary-button" href={`https://drive.google.com/drive/folders/${encodeURIComponent(registryFolder.ref.id)}`} target="_blank" rel="noreferrer">{language === "en" ? "Open this Drive folder" : "Ouvrir ce dossier Drive"}</a>
+          </>}
+        </section>}
+        {currentFolder && <section id="document-current-task-folder"><TaskSourceActions reference={{type:"folder",id:currentFolder.id}} title="Vérifier le dossier" /></section>}
         <div className="document-current-folder-note">
           {currentFolder ? (<span>{t("crm.documents.32df902c91")}{" "}<strong>{currentFolder.title}</strong></span>) : (<span>{t("crm.documents.4f1493fe26")}</span>)}
         </div>
@@ -3309,6 +3368,7 @@ function DocumentsView({
               >
                 <div>
                   <p className="eyebrow" data-semantic-text={"Dossier"}>{t("crm.documents.2cdf175d11")}</p>
+                  <TaskSourceActions reference={{type:"folder",id:folder.id}} title="Vérifier le dossier" />
                   <h3>📁 {folder.title}</h3>{approximateDocumentIds.has(folder.id) && <small>{language === "en" ? "Close match" : "Correspondance approchée"}</small>}
                   <p className="muted-line">{t("crm.documents.f85f2ec2af")}</p>
                 </div>
@@ -3328,7 +3388,8 @@ function DocumentsView({
                 <article className={`item-card document-card document-file-card ${needsCheck ? "document-card-warning" : ""}`} key={crmDocument.id} id={`document-${crmDocument.id}`}>
                   <div>
                     <p className="eyebrow" data-semantic-text={crmDocument.status}>{t("crm.documents.d8027b2582")}{" "}{label(crmDocument.status, "crm")}</p>
-                    <h3>{crmDocument.title}</h3>{approximateDocumentIds.has(crmDocument.id) && <small>{language === "en" ? "Close match" : "Correspondance approchée"}</small>}
+                    <h3>{crmDocument.title}</h3>
+                    <TaskSourceActions reference={documentReference(crmDocument)} title="Vérifier le document" saved={Boolean(documentReference(crmDocument))} />{approximateDocumentIds.has(crmDocument.id) && <small>{language === "en" ? "Close match" : "Correspondance approchée"}</small>}
                     <p className="muted-line">{t("crm.documents.2b276cb139")}{" "}{screen.date(crmDocument.addedAt)}{" "}{t("crm.documents.c9d9d2c4be")}{" "}{crmDocument.addedBy}
                     </p>
                     {crmDocument.expiryDate && (
@@ -3545,6 +3606,31 @@ function HouseTrackingView({
   const [showArchivedWorkerPicker, setShowArchivedWorkerPicker] = useState(false);
   const [archivedWorkerSearch, setArchivedWorkerSearch] = useState("");
   const [focusedEntry, setFocusedEntry] = useState<string | undefined>();
+  const taskTarget = useTaskTargetFocus("worker", "worker_period", "time_entry", "staff_payment", "house");
+  useEffect(() => {
+    if (!taskTarget) return;
+    const worker = workers.find(row => row.id === taskTarget.id);
+    const entry = timeEntries.find(row => row.id === taskTarget.id);
+    const payment = payments.find(row => row.id === taskTarget.id);
+    const house = houses.find(row => row.id === taskTarget.id);
+    const context = taskTarget.context || {};
+    const timer = window.setTimeout(() => {
+      if (taskTarget.type === "worker_period" && worker && isCivilDate(String(context.startDate || "")) && isCivilDate(String(context.endDate || "")) && String(context.startDate) <= String(context.endDate) && (!context.houseId || houses.some(row => row.id === context.houseId))) {
+        setHouseSection("hours"); setDateRange({ start: String(context.startDate), end: String(context.endDate) }); setWorkerFilter(worker.id); setHouseFilter(String(context.houseId || "Tous")); setShowAllHoursHistory(true);
+      } else if (taskTarget.type === "worker" && worker) {
+        setHouseSection("settings"); setWorkerFilter(worker.id);
+        window.requestAnimationFrame(() => { const node = document.querySelector<HTMLElement>(`[data-notification-target="house-worker-${CSS.escape(worker.id)}"]`); node?.closest("details")?.setAttribute("open", ""); node?.scrollIntoView({block:"center"}); });
+      } else if (taskTarget.type === "time_entry" && entry) {
+        setHouseSection("hours"); setDateRange({ start: entry.date, end: entry.date }); setWorkerFilter(entry.workerId); setHouseFilter("Tous"); setShowAllHoursHistory(true); setFocusedEntry(entry.id);
+      } else if (taskTarget.type === "staff_payment" && payment) {
+        setHouseSection("payments"); setDateRange({start:payment.date,end:payment.date}); setWorkerFilter(payment.workerId); setHouseFilter("Tous"); setShowAllPaymentsHistory(true);
+        window.requestAnimationFrame(() => scrollTaskTarget(`house-payment-${payment.id}`));
+      } else if (taskTarget.type === "house" && house) {
+        setHouseSection("settings"); setHouseFilter(house.id); window.requestAnimationFrame(() => scrollTaskTarget(`house-${house.id}`));
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, workers, houses, timeEntries, payments]);
   const sourceEntry = focusEntryId ? timeEntries.find(entry => entry.id === focusEntryId) : undefined;
   if (sourceEntry && focusedEntry !== focusEntryId) {
     setFocusedEntry(focusEntryId);
@@ -4020,6 +4106,8 @@ function HouseTrackingView({
         </div>
       </section>
 
+      {workerFilter !== "Tous" && workers.some(worker => worker.id === workerFilter) && isCivilDate(dateRange.start) && isCivilDate(dateRange.end) && dateRange.start <= dateRange.end && <TaskSourceActions reference={{type:"worker_period",id:workerFilter,context:{startDate:dateRange.start,endDate:dateRange.end,...(houseFilter !== "Tous" ? {houseId:houseFilter} : {})}}} title="Vérifier ou compléter les heures" />}
+
       <nav className="house-tabs" aria-label={t("crm.house.64e5dfc548")}>
         <BusinessButton className={houseSection === "today" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("today")}>{t("crm.house.f2de9e072a")}</BusinessButton>
         <BusinessButton className={houseSection === "hours" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("hours")}>{t("crm.house.2aa022f972")}</BusinessButton>
@@ -4153,6 +4241,7 @@ function HouseTrackingView({
                 <div key={entry.id} className="house-time-history-item">
                   <article className="mini-row house-compact-row house-time-history-row" id={`house-time-${entry.id}`}>
                     <div>
+                    <TaskSourceActions reference={{type:"time_entry",id:entry.id}} title="Vérifier l’intervention et ses frais" />
                       <strong>{entry.workerName}</strong>
                       {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
                       <span>{entry.date} · {entry.houseName} · {entry.startTime}{" "}{t("crm.house.b3fc9de526")}{" "}{entry.endTime} · {formatHours(getHouseTimeHours(entry))}</span>
@@ -4218,8 +4307,9 @@ function HouseTrackingView({
             <h3>{t("crm.house.f96547f753")}</h3>
             <div className="list-stack house-history-list">
               {filteredPayments.length === 0 ? <p className="muted-line">{t("crm.house.9b8270818a")}</p> : visiblePaymentEntries.map((payment) => (
-                <article className="mini-row house-compact-row" key={payment.id}>
+                <article className="mini-row house-compact-row" key={payment.id} id={`house-payment-${payment.id}`}>
                   <div>
+                  <TaskSourceActions reference={{type:"staff_payment",id:payment.id}} title="Contrôler le paiement enregistré" />
                     <strong>{payment.workerName}</strong>
                     {isArchivedWorker(payment.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
                     <span>{payment.date} · {payment.houseName} · {screen.money(payment.amount, 2)} · {label(payment.method, "crm")}</span>
@@ -4255,8 +4345,9 @@ function HouseTrackingView({
             </BusinessForm>
             <div className="list-stack house-history-list">
               {houses.length === 0 ? <p className="muted-line">{t("crm.house.153fc60415")}</p> : houses.map((house) => (
-                <article className="mini-row house-compact-row" key={house.id}>
+                <article className="mini-row house-compact-row" key={house.id} id={`house-${house.id}`}>
                   <div>
+                  <TaskSourceActions reference={{type:"house",id:house.id}} title="Vérifier le suivi de la maison" />
                     <strong>{house.name}</strong>
                     <span>{house.address || t("crm.house.a8293fde8d")}</span>
                     <AddressMapLink address={house.address} metadata={house.addressDetails} />
@@ -4303,6 +4394,8 @@ function HouseTrackingView({
                   <article className="mini-row house-compact-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                     <div>
                       <strong>{worker.contactName}</strong>
+                      <TaskSourceActions reference={{type:"worker",id:worker.id}} title="Vérifier le dossier intervenant" />
+                      {isCivilDate(dateRange.start) && isCivilDate(dateRange.end) && dateRange.start <= dateRange.end && <TaskSourceActions reference={{type:"worker_period",id:worker.id,context:{startDate:dateRange.start,endDate:dateRange.end,...(houseFilter !== "Tous" ? {houseId:houseFilter} : {})}}} title="Vérifier ou compléter les heures" />}
                       <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
                       {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
                         <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)} data-crm-auto-scroll="true">{t("crm.house.39bb8b1625")}</button>
@@ -4338,6 +4431,8 @@ function HouseTrackingView({
                   return (
                     <article className="mini-row house-compact-row house-archived-worker-row" key={worker.id} data-notification-target={`house-worker-${worker.id}`}>
                       <div>
+                        <TaskSourceActions reference={{type:"worker",id:worker.id}} title="Vérifier le dossier intervenant historique" />
+                        {isCivilDate(dateRange.start) && isCivilDate(dateRange.end) && dateRange.start <= dateRange.end && <TaskSourceActions reference={{type:"worker_period",id:worker.id,context:{startDate:dateRange.start,endDate:dateRange.end,...(houseFilter !== "Tous" ? {houseId:houseFilter} : {})}}} title="Vérifier ou compléter les heures" />}
                         <strong>{worker.contactName} <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span></strong>
                         <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
                         <span>{history.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(history.hours)} · {history.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(history.paid, 2)}{" "}{t("crm.house.36e0bcfd26")}</span>
@@ -4488,6 +4583,12 @@ function VendorInvoicesView({
   const bankContact = contacts.find(c => c.id === bankContactId);
   const [statusFilter, setStatusFilter] = useState<VendorInvoice["status"] | "Tous">("Tous");
   const [editingInvoice, setEditingInvoice] = useState<VendorInvoice | null>(null);
+  const taskTarget = useTaskTargetFocus("vendor_invoice");
+  useEffect(() => {
+    if (!taskTarget || !invoices.some(invoice => invoice.id === taskTarget.id)) return;
+    const timer = window.setTimeout(() => { setStatusFilter("Tous"); window.requestAnimationFrame(() => scrollTaskTarget(`vendor-invoice-${taskTarget.id}`)); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, invoices]);
   const [uploadingInvoiceDocument, setUploadingInvoiceDocument] = useState(false);
   const [duplicateDecision, setDuplicateDecision] = useState<{
     duplicates: VendorInvoiceDuplicate[]; reference?: string; form: HTMLFormElement;
@@ -4946,6 +5047,7 @@ function VendorInvoicesView({
               return (
               <article className="item-card vendor-invoice-card" key={invoice.id} id={`vendor-invoice-${invoice.id}`} data-notification-target={`vendor-invoice-${invoice.id}`}>
                 <div>
+                <TaskSourceActions reference={{type:"vendor_invoice",id:invoice.id}} title="Vérifier la facture à payer" dueDate={isCivilDate(invoice.dueDate || "") ? invoice.dueDate : undefined} />
                   <p className={`eyebrow ${invoice.status === "Payé" ? "invoice-eyebrow-paid" : invoice.status === "En attente de facture" ? "" : "invoice-eyebrow-danger"}`} data-semantic-text={invoice.status}>{screen.category(profession)} · {label(invoice.status, "crm")}</p>
                   <h3>{businessName}</h3>
                   {contactPersonName && contactPersonName !== businessName ? (
@@ -5541,6 +5643,8 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
   const beginContactOperation = useScopedOperations("contacts");
   const unconfirmedContact = useRef<{ id: string; fingerprint: string; revision: string } | null>(null);
   const taskApi = useTaskApi();
+  const taskLinkContext = useTaskLinks();
+  const taskRouteTarget = useTaskTargetFocus();
   const taskStatusRequests = useRef(new TaskRequestLedger());
   const pendingTaskStatus = useRef(new Set<string>());
   const taskSessionKey = sessionUserId + ":" + access.revision;
@@ -5781,6 +5885,8 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
     setQuery("");
     setActiveTabState(tab);
     setNavigationRevision(value => value + 1);
+    window.history.replaceState(null,"","/?module="+tab);
+    window.dispatchEvent(new Event("oar-task-target-navigated"));
     return true;
   }
 
@@ -8958,7 +9064,7 @@ function createQuoteDraftFromLead(lead: Lead) {
           </section>
         )}
 
-        {activeTab === "dashboard" && (
+        <RetainedTaskView active={activeTab === "dashboard"}>
           <>
             <Dashboard
               stats={stats}
@@ -8987,9 +9093,9 @@ function createQuoteDraftFromLead(lead: Lead) {
               onCreateTask={createTaskDraftFromFollowUp}
             />
           </>
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "contacts" && (
+        <RetainedTaskView active={activeTab === "contacts"}>
           <ContactsView createIntent={contactCreateIntent} onCreateReturn={onContactCreateReturn} onDraftStateChange={setFormDirty} access={access} focusContactId={focusContactId} focusRevision={externalRevision} actor={activeActor} contacts={data.contacts} query={query} leads={data.leads} tasks={visibleTasks} onAdd={addContact} onUpdate={updateContact} onBundle={saveContactBundle} onDelete={deleteContact} onCreateLead={(contactName) => {
                   setLeadDraftContactName(contactName);
                   setActiveTab("leads");
@@ -9017,9 +9123,9 @@ function createQuoteDraftFromLead(lead: Lead) {
 
                   notify(screenNotice("crm.shell.4c02a620d5", { value1: displayValue(contactName) }));
                 }} />
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "documents" && (
+        <RetainedTaskView active={activeTab === "documents"}>
           <><DocumentsView
             documents={(((data as any).documents ?? []) as CRMDocument[])}
             activeActor={activeActor}
@@ -9029,8 +9135,8 @@ function createQuoteDraftFromLead(lead: Lead) {
             canTrash={access.fullAccess || (access.modules.documents?.level === "contribute" && Boolean(access.modules.documents.sensitive.delete))}
             sessionUserId={sessionUserId}
           /><ContactDocumentLibrary access={access}/></>
-        )}
-{activeTab === "quotes" && (
+        </RetainedTaskView>
+<RetainedTaskView active={activeTab === "quotes"}>
           <QuotesView
             contacts={data.contacts}
             prefilledLead={quoteDraftFromLead}
@@ -9039,19 +9145,19 @@ function createQuoteDraftFromLead(lead: Lead) {
             onChange={(nextQuotes) => setData((current) => ({ ...current, quotes: nextQuotes }))}
             onQuoteChange={syncLeadFromQuote}
           />
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "bookings" && (
+        <RetainedTaskView active={activeTab === "bookings"}>
           <BookingsView
             quotes={mergeQuoteRequests((data as any).quotes ?? [], loadSavedQuotes())}
             contacts={data.contacts}
             activeActor={activeActor}
             onChange={(nextQuotes) => setData((current) => ({ ...current, quotes: nextQuotes }))}
           />
-        )}
+        </RetainedTaskView>
 
 
-        {activeTab === "vendorQuotes" && (
+        <RetainedTaskView active={activeTab === "vendorQuotes"}>
           <VendorQuotesView
             contacts={data.contacts}
             quotes={(((data as any).vendorQuotes ?? []) as VendorQuote[])}
@@ -9063,9 +9169,9 @@ function createQuoteDraftFromLead(lead: Lead) {
             onReject={rejectVendorQuote}
             onOpenInvoice={() => setActiveTab("vendorInvoices")}
           />
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "vendorInvoices" && (
+        <RetainedTaskView active={activeTab === "vendorInvoices"}>
           <VendorInvoicesView
             focusInvoiceId={sourceFocus?.module === "vendorInvoices" ? sourceFocus.id : undefined}
             quotes={data.vendorQuotes || []}
@@ -9080,9 +9186,9 @@ function createQuoteDraftFromLead(lead: Lead) {
             onDelete={deleteVendorInvoice}
             onOpenQuote={() => setActiveTab("vendorQuotes")}
           />
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "houseTracking" && (
+        <RetainedTaskView active={activeTab === "houseTracking"}>
           <HouseTrackingView
             access={access}
             onOpenContact={contactId => {
@@ -9108,9 +9214,9 @@ function createQuoteDraftFromLead(lead: Lead) {
             onAddPayment={addHousePayment}
             onDeletePayment={deleteHousePayment}
           />
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "planning" && (
+        <RetainedTaskView active={activeTab === "planning"}>
           <PlanningView
             leads={data.leads}
             properties={data.properties}
@@ -9124,10 +9230,10 @@ function createQuoteDraftFromLead(lead: Lead) {
             onPatchPlanningEntry={patchPlanningEntry}
             onPatchLeadReservationDates={patchLeadReservationDates}
           />
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "leads" && (
-          <LeadsView leads={filteredLeads} contacts={data.contacts} tasks={visibleTasks} quotes={mergeQuoteRequests((data as any).quotes ?? [], loadSavedQuotes())} properties={data.properties} vehicles={data.vehicles ?? []} boats={data.boats ?? []} preselectedContactName={leadDraftContactName} onAdd={addLead} onUpdate={updateLead} onStatusChange={updateLeadStatus} onDelete={deleteLead} onCreateQuote={createQuoteDraftFromLead} onCreateTask={(lead: Lead) => {
+        <RetainedTaskView active={activeTab === "leads"}>
+          <LeadsView leads={taskRouteTarget?.type === "lead" ? data.leads : filteredLeads} contacts={data.contacts} tasks={visibleTasks} quotes={mergeQuoteRequests((data as any).quotes ?? [], loadSavedQuotes())} properties={data.properties} vehicles={data.vehicles ?? []} boats={data.boats ?? []} preselectedContactName={leadDraftContactName} onAdd={addLead} onUpdate={updateLead} onStatusChange={updateLeadStatus} onDelete={deleteLead} onCreateQuote={createQuoteDraftFromLead} onCreateTask={(lead: Lead) => {
                   setTaskDraftContactId("");
                   setTaskDraftLeadId(lead.id);
                   setTaskDraftTitle(lead.nextAction || `Relancer ${lead.contactName}`);
@@ -9142,23 +9248,23 @@ function createQuoteDraftFromLead(lead: Lead) {
 
                   notify(screenNotice("crm.shell.4c02a620d5", { value1: displayValue(lead.contactName) }));
                 }} />
-        )}
+        </RetainedTaskView>
 
-        {activeTab === "properties" && (
-          <PropertiesView properties={filteredProperties} leads={data.leads} onAdd={addProperty} onUpdate={updateProperty} onDelete={deleteProperty} />
-        )}
+        <RetainedTaskView active={activeTab === "properties"}>
+          <PropertiesView properties={taskRouteTarget?.type === "property" ? data.properties : filteredProperties} leads={data.leads} onAdd={addProperty} onUpdate={updateProperty} onDelete={deleteProperty} />
+        </RetainedTaskView>
 
-        {activeTab === "vehicles" && (
-          <VehiclesView vehicles={filteredVehicles} leads={data.leads} onAdd={addVehicle} onUpdate={updateVehicle} onDelete={deleteVehicle} />
-        )}
+        <RetainedTaskView active={activeTab === "vehicles"}>
+          <VehiclesView vehicles={taskRouteTarget?.type === "vehicle" ? data.vehicles ?? [] : filteredVehicles} leads={data.leads} onAdd={addVehicle} onUpdate={updateVehicle} onDelete={deleteVehicle} />
+        </RetainedTaskView>
 
-        {activeTab === "boats" && (
-          <BoatsView boats={filteredBoats} leads={data.leads} onAdd={addBoat} onUpdate={updateBoat} onDelete={deleteBoat} />
-        )}
+        <RetainedTaskView active={activeTab === "boats"}>
+          <BoatsView boats={taskRouteTarget?.type === "boat" ? data.boats ?? [] : filteredBoats} leads={data.leads} onAdd={addBoat} onUpdate={updateBoat} onDelete={deleteBoat} />
+        </RetainedTaskView>
 
-        {activeTab === "tasks" && (
-          <TasksWorkspace query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={taskLinks} />
-        )}
+        <RetainedTaskView active={activeTab === "tasks"}>
+          <TasksWorkspace onOpenTarget={taskLinkContext?.openTarget} query={query} onQueryChange={setQuery} sessionKey={taskSessionKey} userId={sessionUserId} api={taskApi} permissions={taskRights} onTasksChange={taskProjection.accept} onDirty={setFormDirty} onDraftConsumed={()=>{setTaskDraftTitle("");setTaskDraftLeadId("");setTaskDraftContactId("");}} draft={taskDraftTitle || taskDraftLeadId || taskDraftContactId ? { title: taskDraftTitle, leadId: taskDraftLeadId, contactId: taskDraftContactId } : undefined} links={taskLinks} />
+        </RetainedTaskView>
       </section>
 
       {toast && <div className={`toast ${toast.tone}`}>{screenText(toast.message)}</div>}
@@ -9702,6 +9808,17 @@ function PlanningView({
   const [showAllUpcomingPlanningEntries, setShowAllUpcomingPlanningEntries] = useState(false);
   const [showCompletedPlanningEntries, setShowCompletedPlanningEntries] = useState(false);
   const [quickPlanningDate, setQuickPlanningDate] = useState("");
+  const taskTarget = useTaskTargetFocus("planning_entry");
+  useEffect(() => {
+    const target = taskTarget && planningEntries.find(entry => entry.id === taskTarget.id);
+    if (!target) return;
+    const timer = window.setTimeout(() => {
+      setCategoryFilter("Tous"); setAssetFilter("Tous"); setStartDate(""); setEndDate(""); setShowAllUpcomingPlanningEntries(true); setShowCompletedPlanningEntries(true);
+      if (isCivilDate(target.startDate || "")) { setCalendarMonth(target.startDate.slice(0,7)); setPlanningWeekStart(target.startDate); }
+      window.requestAnimationFrame(() => scrollTaskTarget(`planning-${target.id}`));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, planningEntries]);
 
   const planningDragDataType = "application/x-oar-planning-event";
 
@@ -10738,8 +10855,9 @@ function PlanningView({
                 const asset = assets.find((item) => item.type === entry.assetType && item.id === entry.assetId);
 
                 return (
-                  <article className={`mini-row planning-entry-compact-row planning-entry-line-clean status-${getPlanningStatusClass(getPlanningEntryStatus(entry))}`} key={entry.id} data-notification-target={`planning-${entry.id}`}>
+                  <article className={`mini-row planning-entry-compact-row planning-entry-line-clean status-${getPlanningStatusClass(getPlanningEntryStatus(entry))}`} key={entry.id} id={`planning-${entry.id}`} data-notification-target={`planning-${entry.id}`}>
                     <div className="planning-entry-info-clean">
+                    <TaskSourceActions reference={{type:"planning_entry",id:entry.id}} title="Vérifier l’élément du planning" dueDate={isCivilDate(entry.startDate || "")?entry.startDate:undefined} />
                       <strong>{entry.title}</strong>
                       <span className="planning-entry-main-line">
                         {screen.planningRange(entry)} · {entry.contactName || t("crm.planning.9fa7db0383")}{asset ? t("crm.planning.f6b53f9c8a", { value1: displayValue(asset.label) }) : ""}
@@ -11857,6 +11975,17 @@ function ContactsViewBody({
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState("Toutes");
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
   const [selectedContactSnapshot, setSelectedContact] = useState<Contact | null>(() => contacts.find(contact => contact.id === focusContactId) ?? null);
+  const taskActions = useTaskLinks();
+  const hasScopedBanking = Boolean(business);
+  const taskTarget = useTaskTargetFocus("contact", "bank_account");
+  useEffect(() => {
+    if (!taskTarget) return;
+    const id = taskTarget.type === "bank_account" ? taskTarget.context?.contactId : taskTarget.id;
+    const contact = contacts.find(item => item.id === id);
+    if (!contact) return;
+    const timer = window.setTimeout(() => setSelectedContact(taskTarget.type === "bank_account" && hasScopedBanking ? null : contact), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, contacts, hasScopedBanking]);
   const selectedContact = selectedContactSnapshot ? contacts.find(contact => contact.id === selectedContactSnapshot.id) ?? selectedContactSnapshot : null;
   const openedContactFocus = useRef<{ id: string; revision?: number } | undefined>(undefined);
   useEffect(() => {
@@ -12402,11 +12531,12 @@ function ContactsViewBody({
             {selectedContact.mergedIntoCompanyId && contacts.find(item => item.id === selectedContact.mergedIntoCompanyId) && <BusinessButton className="secondary-button" type="button" onClick={() => setSelectedContact(contacts.find(item => item.id === selectedContact.mergedIntoCompanyId)!)}>{journeyText("Ouvrir le dossier entreprise commun", "Open shared company record")}</BusinessButton>}
             {selectedContact.entityType === "company" && contacts.some(item => item.mergedIntoCompanyId === selectedContact.id) && <section className="stack" data-company-original-records><h4>{journeyText("Fiches d’origine / informations conservées", "Original records / retained information")}</h4>{contacts.filter(item => item.mergedIntoCompanyId === selectedContact.id).map(original => <div className="item-card" key={original.id}><strong>{getContactLabel(original)}</strong><p className="muted-line">{journeyText("Identifiant d’origine : ", "Original ID: ")}{original.id}</p><BusinessButton type="button" className="secondary-button" onClick={() => setSelectedContact(original)}>{journeyText("Consulter les informations et documents d’origine", "View original information and documents")}</BusinessButton></div>)}</section>}
             {access && <ContactDocuments key={`contact-documents-${selectedContact.id}`} contactId={selectedContact.id} access={access}/>}
+            <TaskSourceActions reference={{type:"contact",id:selectedContact.id}} title="Vérifier ou compléter le dossier contact" saved={contacts.some(contact => contact.id === selectedContact.id)} />
 
             <div className="confirm-actions">
               <BusinessButton className="ghost-button" type="button" onClick={() => setSelectedContact(null)} data-crm-dismiss="true">{t("crm.contacts.711e5f2e19")}</BusinessButton>
               <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); setSelectedContact(null); onCreateLead(name); }} data-crm-auto-scroll="true">{t("crm.contacts.b17ed17a3a")}</BusinessButton>
-              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); const id = selectedContact.id; setSelectedContact(null); onCreateTask(name, id); }} data-crm-auto-scroll="true">{t("crm.contacts.502e6ba2e5")}</BusinessButton>
+              <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { const name = getContactActionLabel(selectedContact); const id = selectedContact.id; if (taskActions) taskActions.create({type:"contact",id}, {title:"Relancer le contact"}); else { setSelectedContact(null); onCreateTask(name, id); } }} data-crm-auto-scroll="true">{t("crm.contacts.502e6ba2e5")}</BusinessButton>
               <BusinessButton permission="write" className="primary-button" type="button" onClick={() => openEdit(selectedContact)} data-crm-auto-scroll="true">{t("crm.contacts.42e37604b6")}</BusinessButton>
             </div>
           </div>
@@ -12418,6 +12548,7 @@ function ContactsViewBody({
           <div id="contact-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
             <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.contacts.46889b43bc")}</p>
             <h3>{t("crm.contacts.b67e91e395")}</h3>
+            <TaskSourceActions reference={{type:"contact",id:editingContact.id}} title="Vérifier ou compléter le dossier contact" saved={contacts.some(contact=>contact.id===editingContact.id)} />
 
             <BusinessForm ref={editingForm} className="form-grid contact-edit-form" pending={edition.saving} onSubmit={submitEdit} onChangeCapture={edition.changed} onChange={(event) => {
               const target = event.target;
@@ -12562,6 +12693,18 @@ function LeadsView({
   const business = useBusinessPermissions();
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const taskActions = useTaskLinks();
+  const taskTarget = useTaskTargetFocus("lead");
+  useEffect(() => {
+    const target = taskTarget && leads.find(lead => lead.id === taskTarget.id);
+    if (!target) return;
+    const timer = window.setTimeout(() => setSelectedLead(target), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, leads]);
+  function createLinkedTask(lead: Lead) {
+    if (taskActions) taskActions.create({type:"lead",id:lead.id}, {title:"Suivre la demande client",dueDate:isCivilDate(lead.dueDate || "")?lead.dueDate:undefined});
+    else onCreateTask(lead);
+  }
   const [leadCategoryFilter, setLeadCategoryFilter] = useState<"Toutes" | Lead["category"]>("Toutes");
   const [leadStatusFilter, setLeadStatusFilter] = useState<"Tous" | LeadStatus>("Tous");
   const [leadPriorityFilter, setLeadPriorityFilter] = useState<"Toutes" | Lead["priority"]>("Toutes");
@@ -12890,7 +13033,7 @@ const visibleLeads = leads.filter((lead) => {
                       <div className="lead-card-actions">
                         <BusinessButton className="lead-detail-button" type="button" onClick={() => setSelectedLead(lead)} data-crm-auto-scroll="true" data-crm-action="details">{t("crm.leads.17eaee489b")}</BusinessButton>
 
-                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateTask(lead)}>{t("crm.leads.e4c05d29df")}</BusinessButton>
+                        <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => createLinkedTask(lead)}>{t("crm.leads.e4c05d29df")}</BusinessButton>
 
                         <BusinessButton permission="write" className="lead-detail-button" type="button" onClick={() => onCreateQuote(lead)} data-crm-auto-scroll="true">
                           {quotes.some((quote) => quote.leadId === lead.id) ? t("crm.leads.4d2edfdd47") : t("crm.leads.1b45a42c1e")}
@@ -12912,6 +13055,7 @@ const visibleLeads = leads.filter((lead) => {
           <div className="confirm-dialog lead-detail-dialog" role="dialog" aria-modal="true">
             <p className="eyebrow" data-semantic-text={"Fiche lead"}>{t("crm.leads.5730fbf554")}</p>
             <h3>{label(selectedLead.category, "crm")} • {selectedLead.contactName}</h3>
+            <TaskSourceActions reference={{type:"lead",id:selectedLead.id}} title="Suivre la demande client" dueDate={isCivilDate(selectedLead.dueDate || "")?selectedLead.dueDate:undefined} />
 
             <div className="lead-detail-grid">
               <div>
@@ -12983,8 +13127,8 @@ const visibleLeads = leads.filter((lead) => {
                 type="button"
                 onClick={() => {
                   const lead = selectedLead;
-                  setSelectedLead(null);
-                  onCreateTask(lead);
+                  if (!taskActions) setSelectedLead(null);
+                  createLinkedTask(lead);
                 }}
                data-crm-auto-scroll="true">{t("crm.leads.502e6ba2e5")}</BusinessButton>
 
@@ -13007,6 +13151,7 @@ const visibleLeads = leads.filter((lead) => {
           <div id="lead-edit-panel" className="confirm-dialog edit-dialog" role="dialog" aria-modal="true">
             <p className="eyebrow" data-semantic-text={"Modification"}>{t("crm.leads.46889b43bc")}</p>
             <h3>{t("crm.leads.cf4075f488")}</h3>
+            <TaskSourceActions reference={{type:"lead",id:editingLead.id}} title="Suivre la demande client" />
 
             <BusinessForm className="form-grid contact-edit-form" onSubmit={submitEdit}>
               <BusinessLabel>{t("crm.leads.68a5341fc6")}<select name="category" defaultValue={editingLead.category}>
@@ -13087,6 +13232,13 @@ function PropertiesView({
   const business = useBusinessPermissions();
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
+  const taskTarget = useTaskTargetFocus("property");
+  useEffect(() => {
+    const target = taskTarget && properties.find(item => item.id === taskTarget.id);
+    if (!target) return;
+    const timer = window.setTimeout(() => setSelectedProperty(target), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, properties]);
   const [propertyStatusFilter, setPropertyStatusFilter] = useState<"Tous" | PropertyStatus>("Tous");
   const [propertyCityFilter, setPropertyCityFilter] = useState("");
 
@@ -13231,6 +13383,7 @@ function PropertiesView({
           <div className="confirm-dialog asset-detail-dialog" role="dialog" aria-modal="true">
             <p className="eyebrow" data-semantic-text={"Fiche bien"}>{t("crm.properties.8acd64a7bf")}</p>
             <h3>{selectedProperty.name}</h3>
+            <TaskSourceActions reference={{type:"property",id:selectedProperty.id}} title="Vérifier ou compléter le dossier" />
 
             <div className="asset-detail-grid">
               <div><span>{t("crm.properties.dee377cfd8")}</span><strong>{label(selectedProperty.status, "crm")}</strong></div>
@@ -13323,6 +13476,13 @@ function VehiclesView({
   const business = useBusinessPermissions();
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
+  const taskTarget = useTaskTargetFocus("vehicle");
+  useEffect(() => {
+    const target = taskTarget && vehicles.find(item => item.id === taskTarget.id);
+    if (!target) return;
+    const timer = window.setTimeout(() => setSelectedVehicle(target), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, vehicles]);
   const [vehicleStatusFilter, setVehicleStatusFilter] = useState<"Tous" | VehicleStatus>("Tous");
   const [vehicleCityFilter, setVehicleCityFilter] = useState("");
 
@@ -13461,6 +13621,7 @@ function VehiclesView({
           <div className="confirm-dialog asset-detail-dialog" role="dialog" aria-modal="true">
             <p className="eyebrow" data-semantic-text={"Fiche voiture"}>{t("crm.vehicles.29196e9e1d")}</p>
             <h3>{selectedVehicle.name}</h3>
+            <TaskSourceActions reference={{type:"vehicle",id:selectedVehicle.id}} title="Vérifier ou compléter le dossier" />
 
             <div className="asset-detail-grid">
               <div><span>{t("crm.vehicles.ee5745548b")}</span><strong>{selectedVehicle.brand || "—"}</strong></div>
@@ -13557,6 +13718,13 @@ function BoatsView({
   const business = useBusinessPermissions();
   const [editingBoat, setEditingBoat] = useState<Boat | null>(null);
   const [selectedBoat, setSelectedBoat] = useState<Boat | null>(null);
+  const taskTarget = useTaskTargetFocus("boat");
+  useEffect(() => {
+    const target = taskTarget && boats.find(item => item.id === taskTarget.id);
+    if (!target) return;
+    const timer = window.setTimeout(() => setSelectedBoat(target), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, boats]);
   const [boatStatusFilter, setBoatStatusFilter] = useState<"Tous" | BoatStatus>("Tous");
   const [boatPortFilter, setBoatPortFilter] = useState("");
 
@@ -13693,6 +13861,7 @@ function BoatsView({
           <div className="confirm-dialog asset-detail-dialog" role="dialog" aria-modal="true">
             <p className="eyebrow" data-semantic-text={"Fiche bateau"}>{t("crm.boats.f92bc9bd5f")}</p>
             <h3>{selectedBoat.name}</h3>
+            <TaskSourceActions reference={{type:"boat",id:selectedBoat.id}} title="Vérifier ou compléter le dossier" />
 
             <div className="asset-detail-grid">
               <div><span>{t("crm.boats.baaddf70fb")}</span><strong>{selectedBoat.type || "—"}</strong></div>

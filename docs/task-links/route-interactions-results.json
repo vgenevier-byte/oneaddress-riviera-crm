@@ -1,0 +1,26 @@
+{
+  "account": "author",
+  "appMode": "production-local",
+  "results": [
+    {
+      "name": "mobile keyboard task detail opens exact invoice and browser Back restores tasks without a blocking dialog",
+      "passed": true
+    },
+    {
+      "name": "mobile EN local task editor retains unsaved title when opening exact archived RIB in a new tab",
+      "passed": true
+    },
+    {
+      "name": "contact form draft survives keyboard-created task draft and cancellation",
+      "passed": true
+    },
+    {
+      "name": "real workspace folder opens exact contents with inverse task section without fabricated records",
+      "passed": true
+    }
+  ],
+  "pageErrors": [],
+  "loopbackOnly": true,
+  "businessWrites": 0,
+  "taskWrites": 0
+}

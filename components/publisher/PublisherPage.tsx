@@ -1,4 +1,6 @@
 "use client";
+import { TaskSourceActions } from "@/components/TaskLinkProvider";
+import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
 import { sortSelectOptions } from "@/lib/selectOptions";
 import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -187,6 +189,8 @@ export default function PublisherPage({ userId, grant, accessRevision, onUnsaved
   userId: string; grant: ModuleGrant; accessRevision: number; onUnsavedChange?: (dirty: boolean) => void;
 }) {
   const { t } = useI18n();
+  const taskFocus = useTaskTargetFocus("publisher_creation");
+  const handledTaskFocus = useRef("");
 
   const publisherApi = usePublisherApi();
   const canWrite = grant.level === 'contribute';
@@ -213,7 +217,7 @@ export default function PublisherPage({ userId, grant, accessRevision, onUnsaved
 
   useEffect(() => {
     // An admitted request takes priority over a recovered creative draft.
-    if (requestId.current || !recovered) void loadToday();
+    if (!new URL(window.location.href).searchParams.has("crmTarget") && (requestId.current || !recovered)) void loadToday();
     return () => { generationTracker.current += 1; };
     // The account/access boundary remounts this page; do not reset a draft on a render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -315,6 +319,23 @@ export default function PublisherPage({ userId, grant, accessRevision, onUnsaved
     }
     throw new Error('La création prend plus de temps que prévu. Reprenez son état dans quelques instants.');
   }
+
+  useEffect(() => {
+    if (!taskFocus || handledTaskFocus.current === taskFocus.id || generating || requestId.current) return;
+    const tracker = ++generationTracker.current;
+    const timer = window.setTimeout(async () => {
+      handledTaskFocus.current = taskFocus.id;
+      setLoading(true); setError("");
+      try {
+        const result = await publisherApi.generationStatus({ id: taskFocus.id });
+        if (generationTracker.current !== tracker) return;
+        if (result.state !== "ready") { setError("Création enregistrée indisponible."); return; }
+        setPost(result.post); setView("today");
+      } catch (error) { if (!isCancelled(error) && generationTracker.current === tracker) setError(messageOf(error)); }
+      finally { if (generationTracker.current === tracker) setLoading(false); }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [taskFocus, publisherApi, generating]);
 
   async function showHistory() {
     if (requestId.current) return;
@@ -650,6 +671,7 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
 
   return (
     <article className="publisher-post" data-publisher-post-id={post.id}>
+      <TaskSourceActions reference={{ type: "publisher_creation", id: post.id }} />
       {conflict && <section className="publisher-alert" aria-label={t("publisher.conflit_de_revision_530d0f")}><strong>{t("publisher.verifiez_la_version_partagee_avant_de_reessa_1cd336")}</strong><p>{t("publisher.votre_selection_musicale_et_la_revision_d_or_6a4e38")}</p><button className="publisher-small-button" onClick={() => void compare()}>{t("publisher.comparer_la_version_partagee_839ad1")}</button>{remote && <div><p>{t("publisher.revision_partagee_4fbcbd")}{" "}{remote.revision} · {remote.caption}</p><button className="publisher-small-button" onClick={() => { mutations.current.clear(); const saved = readPublisherDraft(userId, accessRevision); if (saved) capturePublisherDraft({ ...saved, requests: {} }); onChange(remote); setSelectedMusic(musicSelection(remote)); setMusicConfirmation(emptyMusicConfirmation); setRemote(null); setConflict(false); onError(''); }}>{t("publisher.recharger_cette_version_et_abandonner_le_bro_a8fe40")}</button></div>}</section>}
       <div className="publisher-date-row">
         <div>

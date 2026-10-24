@@ -1,0 +1,26 @@
+{
+  "realAuth": true,
+  "realNeonAdapter": true,
+  "localPostgresTransport": true,
+  "realCanonicalRPC": true,
+  "externalProviderCalls": 0,
+  "instagramPublications": 0,
+  "results": [
+    {
+      "name": "Publisher task bridge requires real Auth and independent target rights",
+      "passed": true
+    },
+    {
+      "name": "Neon existence attestation rejects invented IDs and cannot be forged through canonical task RPC",
+      "passed": true
+    },
+    {
+      "name": "saved Neon creation persists atomically in canonical Tasks and reverse lookup after fresh Auth login",
+      "passed": true
+    },
+    {
+      "name": "bridge calls never mutate creations, generation operations, music or financial business records",
+      "passed": true
+    }
+  ]
+}

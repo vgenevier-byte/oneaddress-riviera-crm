@@ -1,0 +1,139 @@
+{
+  "passed": true,
+  "tables": [
+    {
+      "schema": "app_private",
+      "name": "task_links",
+      "rls": true,
+      "browser_access": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_publisher_proofs",
+      "rls": true,
+      "browser_access": false
+    }
+  ],
+  "functions": [
+    {
+      "schema": "app_private",
+      "name": "task_apply_link_changes",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_links_previous_mutate",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_links_previous_project",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_target_candidates",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_target_export_allowed",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_target_module",
+      "definer": false,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_target_ref",
+      "definer": false,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "app_private",
+      "name": "task_target_resolve",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "public",
+      "name": "crm_task_publisher_confirm",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": false
+    },
+    {
+      "schema": "public",
+      "name": "crm_task_targets_resolve",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": true
+    },
+    {
+      "schema": "public",
+      "name": "crm_task_targets_search",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": true
+    },
+    {
+      "schema": "public",
+      "name": "crm_tasks_for_target",
+      "definer": true,
+      "proconfig": [
+        "search_path=pg_catalog"
+      ],
+      "anon": false,
+      "authenticated": true
+    }
+  ]
+}

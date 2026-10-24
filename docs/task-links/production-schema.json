@@ -1,0 +1,22 @@
+{
+  "project": "jcmnwvlmysecrahupfkk",
+  "migration": { "name": "canonical_task_links", "installedVersion": "20261024144757", "source": "supabase/migrations/20261024134118_canonical_task_links.sql" },
+  "beforeAndAfterIdentical": {
+    "tasks": "77a096ba1eb8e4dad58b55f1de040f9d",
+    "assignments": "e5e470664863e20d465c782ea69faa3d",
+    "events": "3356313d26d0d1aad5361dd5613d1f9d",
+    "workspace": "1d926883f5866063cd44796cc8cf6f64",
+    "taskCount": 12
+  },
+  "additiveLegacyLinks": 1,
+  "localAndProductionFunctionBodiesIdentical": {
+    "task_project": "d4e8329140cb127f23cacac20157805e",
+    "crm_tasks_export": "fced5a6a79e9e9f736cbdf7d88336dd9",
+    "crm_tasks_mutate": "aa1674205633355d94d5fe5e66eed336",
+    "crm_tasks_for_target": "2a112f324d841c7dc5f02e367ff828a0",
+    "crm_task_targets_search": "b05758af51a1db9201ad1f8558aeea4e",
+    "crm_task_targets_resolve": "c1c07626d6df878348bd121f65f14389",
+    "crm_task_publisher_confirm": "176ac42617f08bdc602ec9e763c19ebf"
+  },
+  "productionBusinessWorkflowAuthTest": false
+}

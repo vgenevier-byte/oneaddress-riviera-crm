@@ -1,0 +1,130 @@
+{
+  "appMode": "production-local",
+  "actualAuth": true,
+  "loopbackOnly": true,
+  "taskWrites": 0,
+  "businessWrites": 0,
+  "results": [
+    {
+      "name": "full exact contact",
+      "passed": true
+    },
+    {
+      "name": "full exact lead",
+      "passed": true
+    },
+    {
+      "name": "full exact quote",
+      "passed": true
+    },
+    {
+      "name": "full exact booking",
+      "passed": true
+    },
+    {
+      "name": "full exact vendor_quote",
+      "passed": true
+    },
+    {
+      "name": "full exact vendor_invoice",
+      "passed": true
+    },
+    {
+      "name": "full exact bank_account",
+      "passed": true
+    },
+    {
+      "name": "full exact worker",
+      "passed": true
+    },
+    {
+      "name": "full exact worker_period",
+      "passed": true
+    },
+    {
+      "name": "full exact time_entry",
+      "passed": true
+    },
+    {
+      "name": "full exact staff_payment",
+      "passed": true
+    },
+    {
+      "name": "full exact house",
+      "passed": true
+    },
+    {
+      "name": "full exact property",
+      "passed": true
+    },
+    {
+      "name": "full exact boat",
+      "passed": true
+    },
+    {
+      "name": "full exact planning_entry",
+      "passed": true
+    },
+    {
+      "name": "assignee exact contact",
+      "passed": true
+    },
+    {
+      "name": "assignee exact lead",
+      "passed": true
+    },
+    {
+      "name": "assignee exact quote",
+      "passed": true
+    },
+    {
+      "name": "assignee exact booking",
+      "passed": true
+    },
+    {
+      "name": "assignee exact vendor_quote",
+      "passed": true
+    },
+    {
+      "name": "assignee exact vendor_invoice",
+      "passed": true
+    },
+    {
+      "name": "assignee exact bank_account",
+      "passed": true
+    },
+    {
+      "name": "assignee exact worker",
+      "passed": true
+    },
+    {
+      "name": "assignee exact worker_period",
+      "passed": true
+    },
+    {
+      "name": "assignee exact time_entry",
+      "passed": true
+    },
+    {
+      "name": "assignee exact staff_payment",
+      "passed": true
+    },
+    {
+      "name": "assignee exact house",
+      "passed": true
+    },
+    {
+      "name": "assignee exact property",
+      "passed": true
+    },
+    {
+      "name": "assignee exact boat",
+      "passed": true
+    },
+    {
+      "name": "assignee exact planning_entry",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

@@ -11,6 +11,10 @@ import { taskSearchFields, buildTaskPatch, draftForTask, effectiveTaskLeadId, fi
 import { taskPriorities, taskStatuses, type Task, type TaskApi, type TaskDraft, type TaskLinkOption, type TaskPermissions, type TaskRecipient, type TaskMutation } from "@/lib/tasks/types";
 import { taskContactLabel, taskContactSearchFields, type TaskContactOption } from "@/lib/tasks/contactOptions";
 import TaskContactPicker from "./TaskContactPicker";
+import { TaskLinkCards, TaskLinksEditor, taskTargetTypeLabel } from "./TaskLinks";
+import { taskTargetKey } from "@/lib/tasks/domain";
+import { taskTargetHref } from "@/lib/tasks/navigation";
+import type { TaskInitialDraft, TaskTargetRef } from "@/lib/tasks/types";
 
 export type TasksWorkspaceProps = {
   api: TaskApi;
@@ -23,7 +27,11 @@ export type TasksWorkspaceProps = {
   onDraftConsumed?: () => void;
   query?: string;
   onQueryChange?: (query: string) => void;
-  draft?: { title?: string; leadId?: string; contactId?: string };
+  draft?: TaskInitialDraft;
+  onOpenTarget?: (reference: TaskTargetRef) => void;
+  focusTaskId?: string;
+  onSaved?: (task: Task) => void;
+  onEditorClosed?: () => void;
   links?: { leads?: TaskLinkOption[]; contacts?: TaskContactOption[] };
 };
 
@@ -56,7 +64,7 @@ export default function TasksWorkspace(props: TasksWorkspaceProps) {
 }
 
 /** Account/permission changes remount this entire private state, including drafts. */
-function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty, onDraftConsumed, query, onQueryChange, draft, links, scope }: TasksWorkspaceProps & { scope: string }) {
+function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty, onDraftConsumed, query, onQueryChange, draft, links, scope, onOpenTarget, focusTaskId, onSaved, onEditorClosed }: TasksWorkspaceProps & { scope: string }) {
   const {t, label: uiLabel, formatDate: uiDate, locale, language} = useI18n();
 
   const contactLabel = (contact: TaskContactOption) => [contact.firstName, contact.name, contact.company].some(value => value?.trim()) ? taskContactLabel(contact) : t("modules.contacts.unnamed");
@@ -72,7 +80,9 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   const [collection, setCollection] = useState<{ scope: string; items: Task[] }>({ scope, items: [] });
   const [directory, setDirectory] = useState<Directory>({ scope, items: [], remembered: [], status: "idle" });
   const [editor, setEditor] = useState<Editor | null>(null);
-  const [detailId, setDetailId] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(focusTaskId ?? null);
+  const focusTaskRef = useRef("");
+  useEffect(() => { if (!focusTaskId || focusTaskRef.current === focusTaskId) return; focusTaskRef.current = focusTaskId; queueMicrotask(() => setDetailId(focusTaskId)); }, [focusTaskId]);
   const [filters, setFilters] = useState<TaskFilters>({ relation: "related", status: "all", priority: "all", query: "" });
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -171,9 +181,16 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
   useEffect(() => {
     const key = `${scope}|${JSON.stringify(draft)}`;
     if (!draft || consumedDraft.current === key || !permissions.contribute) return;
-    consumedDraft.current = key;
     const capturedLease = lease.current;
-    queueMicrotask(() => { if (capturedLease === lease.current) { setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null }); callbacks.current.onDraftConsumed?.(); } });
+    queueMicrotask(() => {
+      if (capturedLease !== lease.current || consumedDraft.current === key) return;
+      // StrictMode may invalidate an earlier scheduled effect. Consume only
+      // after its current lease admits the editor, so a discarded callback
+      // cannot swallow a source creation intent.
+      consumedDraft.current = key;
+      setEditor({ scope, id: crypto.randomUUID(), draft: draftForTask(undefined, draft), revision: null });
+      callbacks.current.onDraftConsumed?.();
+    });
     void loadDirectory();
   }, [draft, loadDirectory, permissions.contribute, scope]);
 
@@ -212,7 +229,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
         if (confirmed) items.push(confirmed);
         return { scope: capturedScope, items };
       });
-      if (closeEditor) setEditor(null);
+      if (closeEditor) { setEditor(null); if (confirmed) onSaved?.(confirmed); }
       if (!confirmed) setDetailId(null);
       if (!editorRef.current || (closeEditor && editorRef.current.id === request.id)) callbacks.current.onDirty?.(false);
       setMessage(confirmed ? "Enregistrement confirmé par le serveur." : "Suppression confirmée par le serveur.");
@@ -268,6 +285,8 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
     ? [...leadOptions, { id: currentEditor.draft.leadId, label: t("modules.tasksWorkspace.linkRetainedDetailsUnavailable") }]
     : leadOptions;
   const detailContact = detail?.contactId ? contactOptions.find(option => option.id === detail.contactId) : undefined;
+  const linkedOptions = new Map(tasks.flatMap(task => (task.links ?? []).flatMap(link => link.target && link.state !== "inaccessible" ? [[taskTargetKey(link.target), { ref: link.target, label: link.label || link.target.id }] as const] : [])));
+  const linkTypes = [...new Set([...linkedOptions.values()].map(option => option.ref.type))];
 
   function addRecipient(id: string) {
     if (!currentEditor || !editorCapabilities.fields || editorBusy || !recipients.some(person => person.userId === id) || selectedRecipients.includes(id)) return;
@@ -296,6 +315,8 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
         <label>{t("modules.tasksWorkspace.status")}<select value={filters.status} onChange={event => setFilters(previous => ({ ...previous, status: event.target.value as TaskFilters["status"] }))}><option value="all">{t("modules.tasksWorkspace.allStatuses")}</option>{taskStatuses.map(status => <option key={status} value={status}>{status === "Terminé" ? t("modules.tasksWorkspace.completed") : uiLabel(status, "modules")}</option>)}</select></label>
         <label>{t("modules.tasksWorkspace.priority")}<select value={filters.priority} onChange={event => setFilters(previous => ({ ...previous, priority: event.target.value as TaskFilters["priority"] }))}><option value="all">{t("modules.tasksWorkspace.allPriorities")}</option>{taskPriorities.map(priority => <option key={priority} value={priority}>{uiLabel(priorityLabels[priority], "modules")}</option>)}</select></label>
         <label>{t("modules.moduleWorkspace.search")}<input type="search" value={query ?? filters.query ?? ""} onChange={event => onQueryChange ? onQueryChange(event.target.value) : setFilters(previous => ({ ...previous, query: event.target.value }))} placeholder={t("modules.tasksWorkspace.searchMyVisibleTasks")} /></label>
+        <label>{language === "en" ? "Linked item type" : "Type d’élément lié"}<select value={filters.targetType ?? ""} onChange={event => setFilters(previous => ({ ...previous, targetType: event.target.value, targetKey: "" }))}><option value="">{language === "en" ? "All types" : "Tous les types"}</option>{linkTypes.map(type => <option value={type} key={type}>{taskTargetTypeLabel(type, language)}</option>)}</select></label>
+        <label>{language === "en" ? "Linked item" : "Élément concerné"}<SearchableSelect value={filters.targetKey ?? ""} onChange={event => setFilters(previous => ({ ...previous, targetKey: event.target.value }))}><option value="">{language === "en" ? "All linked items" : "Tous les éléments liés"}</option>{sortSelectOptions([...linkedOptions.entries()].filter(([, option]) => !filters.targetType || option.ref.type === filters.targetType), ([, option]) => option.label, language).map(([key, option]) => <option value={key} key={key}>{taskTargetTypeLabel(option.ref.type, language)} · {option.label}</option>)}</SearchableSelect></label>
       </div>
       <nav aria-label={t("modules.tasksWorkspace.taskSections")} className="taskws-anchors">{taskStatuses.map((status, index) => <a href={`#task-section-${index}`} key={status}>{status === "Terminé" ? t("modules.tasksWorkspace.completed") : uiLabel(status, "modules")} ({visibleTasks.filter(task => task.status === status).length})</a>)}</nav>
       <p className="taskws-help">{t("modules.tasksWorkspace.sortedByOverdueDatesUpcomingDeadlinesPriorityThenAStableOrderTasks")}</p>
@@ -312,6 +333,7 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
               <p className="taskws-persons">{t("modules.tasksWorkspace.assignees")} {task.assignees.length ? task.assignees.map(person => `${person.label}${person.active ? "" : t("modules.tasksWorkspace.inactiveAccess_594462")}`).join(", ") : t("modules.tasksWorkspace.nonePrivateToItsCreator")}</p>
               <p className="taskws-help">{t("modules.tasksWorkspace.createdBy")} {task.createdByLabel || t("modules.tasksWorkspace.historicalAuthorUnconfirmed")}</p>
               {task.createdBy === null && <p className="taskws-help">{taskManagementLabel(task)}</p>}
+              {(task.links ?? []).length > 0 && <div className="taskws-help">{(task.links ?? []).map(link => <span key={link.id}>{link.primary ? "★ " : ""}{link.state === "inaccessible" ? language === "en" ? "Unavailable item" : "Élément inaccessible" : link.label || taskTargetTypeLabel(link.target?.type ?? "", language)} · </span>)}</div>}
               {task.notes && <p className="taskws-note-excerpt">{task.notes.length > 160 ? `${task.notes.slice(0, 160)}…` : task.notes}</p>}
               {task.status === "Terminé" && <p className="taskws-help">{t("modules.tasksWorkspace.completedOn")} {formatTaskTimestamp(task.completedAt)}</p>}
               <div className="taskws-card-actions"><button type="button" onClick={() => setDetailId(task.id)}>{t("modules.tasksWorkspace.details")}</button>{capability.progress && <button type="button" disabled={busy} onClick={() => openEditor(task)}>{t("modules.tasksWorkspace.edit")}</button>}
@@ -322,16 +344,17 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
           })}
         </section>;
       })}</div>
-      {detail && <Dialog title={t("modules.tasksWorkspace.taskDetails")} onClose={() => setDetailId(null)}>
+      {detail && <Dialog title={t("modules.tasksWorkspace.taskDetails")} onClose={() => { setDetailId(null); onEditorClosed?.(); }}>
         <h3>{detail.title}</h3><div className="taskws-meta"><span>{uiLabel(priorityLabels[detail.priority], "modules")}</span><span>{taskDueLabel(detail.dueDate, today)}</span><span>{uiLabel(detail.status, "modules")}</span></div>
         <dl><dt>{t("modules.tasksWorkspace.createdBy")}</dt><dd>{detail.createdByLabel || t("modules.tasksWorkspace.historicalAuthorUnconfirmed")}</dd><dt>{t("modules.tasksWorkspace.createdOn")}</dt><dd>{formatTaskTimestamp(detail.createdAt)}</dd><dt>{t("modules.tasksWorkspace.assignees_a6d3cc")}</dt><dd>{detail.assignees.length ? detail.assignees.map(person => `${person.label} · ${person.active ? person.access === "read" ? t("modules.moduleWorkspace.read") : t("modules.moduleWorkspace.contribute") : t("modules.tasksWorkspace.inactiveAccess")}`).join(" ; ") : t("modules.tasksWorkspace.nonePrivateToItsCreator")}</dd>{detail.status === "Terminé" && <><dt>{t("modules.tasksWorkspace.completedOn")}</dt><dd>{formatTaskTimestamp(detail.completedAt)}</dd></>}</dl>
         {detail.createdBy === null && <p className="taskws-help">{taskManagementLabel(detail)}{t("modules.tasksWorkspace.thisRoleIsSeparateFromTheHistoricalAuthor")}</p>}
         {effectiveTaskLeadId(detail) && leadOptions.some(option => option.id === effectiveTaskLeadId(detail)) && <p>{t("modules.tasksWorkspace.linkedEnquiry")} {leadOptions.find(option => option.id === effectiveTaskLeadId(detail))?.label}</p>}
         {detail.contactId && <p>{t("modules.tasksWorkspace.linkedContact")} {detailContact ? contactLabel(detailContact) : t("modules.tasksWorkspace.linkRetainedDetailsUnavailable")}</p>}
+        <h3>{language === "en" ? "Linked items" : "Éléments liés"}</h3><TaskLinkCards links={detail.links ?? []} onOpen={reference => { setDetailId(null); onOpenTarget?.(reference); }} />
         <h3>{t("modules.tasksWorkspace.notes")}</h3><p className="taskws-notes">{detail.notes || t("modules.tasksWorkspace.noNotes")}</p>
-        <div className="taskws-buttons"><button type="button" onClick={() => setDetailId(null)}>{t("modules.tasksWorkspace.close")}</button>{taskCapabilities(detail, userId, permissions).progress && <button type="button" className="taskws-primary" onClick={() => openEditor(detail)}>{t("modules.tasksWorkspace.edit")}</button>}</div>
+        <div className="taskws-buttons"><button type="button" onClick={() => { setDetailId(null); onEditorClosed?.(); }}>{t("modules.tasksWorkspace.close")}</button>{taskCapabilities(detail, userId, permissions).progress && <button type="button" className="taskws-primary" onClick={() => openEditor(detail)}>{t("modules.tasksWorkspace.edit")}</button>}</div>
       </Dialog>}
-      {currentEditor && <Dialog title={currentEditor.base ? t("modules.tasksWorkspace.editTask") : t("modules.tasksWorkspace.addATask")} onClose={() => { setEditor(null); callbacks.current.onDirty?.(false); }} busy={editorBusy}>
+      {currentEditor && <Dialog title={currentEditor.base ? t("modules.tasksWorkspace.editTask") : t("modules.tasksWorkspace.addATask")} onClose={() => { setEditor(null); callbacks.current.onDirty?.(false); onEditorClosed?.(); }} busy={editorBusy}>
         {message && <p role="alert" className="taskws-message">{moduleMessage(message, t)}</p>}
         {currentEditor.base ? <p className="taskws-help">{t("modules.tasksWorkspace.createdBy")} {currentEditor.base.createdByLabel || t("modules.tasksWorkspace.historicalAuthorUnconfirmed")} · {formatTaskTimestamp(currentEditor.base.createdAt)}{currentEditor.base.completedAt ? t("modules.tasks.completedDate", {date: formatTaskTimestamp(currentEditor.base.completedAt)}) : ""}</p> : <p className="taskws-help">{t("modules.tasksWorkspace.theServerWillRecordYourIdentityAndTheCreationDate")}</p>}
         {currentEditor.base?.createdBy === null && <p className="taskws-help">{taskManagementLabel(latest ?? currentEditor.base)}{t("modules.tasksWorkspace.theManagerCanEditFieldsWithContributeAccessTheHistoricalAuthorRemains")}</p>}
@@ -358,8 +381,9 @@ function ScopedTasksWorkspace({ api, userId, permissions, onTasksChange, onDirty
             <button type="button" disabled={directory.status === "loading"} onClick={() => void loadDirectory()}>{directory.status === "error" ? t("modules.tasksWorkspace.retryLoadingAssignees") : t("modules.tasksWorkspace.refreshEligiblePeople")}</button>
           </fieldset>
           {(leadOptions.length > 0 || currentEditor.draft.leadId) && <label className="taskws-full">{t("modules.tasksWorkspace.linkedEnquiry_98abe0")}<SearchableSelect name="leadId" value={currentEditor.draft.leadId} disabled={!editorCapabilities.fields || editorBusy} onChange={event => changeDraft("leadId", event.target.value)}><option value="">{t("modules.tasksWorkspace.noLinkedEnquiry")}</option>{sortSelectOptions(editorLeadOptions, option => option.label, language).map(option => <option key={option.id} value={option.id}>{option.label}</option>)}</SearchableSelect></label>}
-          <TaskContactPicker key={currentEditor.id} options={contactOptions} contactId={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={id => changeDraft("contactId", id)} />
-          <div className="taskws-full taskws-buttons"><button type="button" disabled={editorBusy} onClick={() => { setEditor(null); callbacks.current.onDirty?.(false); }}>{t("modules.tasksWorkspace.cancel")}</button><button className="taskws-primary" type="submit" disabled={editorBusy || conflict || !editorCapabilities.progress}>{editorBusy ? t("modules.tasksWorkspace.awaitingConfirmation") : currentEditor.base ? t("modules.tasksWorkspace.save") : t("modules.tasksWorkspace.createTask")}</button></div>
+          <TaskContactPicker key={`contact:${currentEditor.id}`} options={contactOptions} contactId={currentEditor.draft.contactId} disabled={!editorCapabilities.fields || editorBusy} onChange={id => changeDraft("contactId", id)} />
+          <TaskLinksEditor key={`links:${currentEditor.id}`} api={api} scope={scope} links={(latest ?? currentEditor.base)?.links ?? []} changes={currentEditor.draft.linkChanges} onChange={changes => changeDraft("linkChanges", changes)} onOpen={reference => { window.open(taskTargetHref(reference), "_blank", "noopener"); }} disabled={!editorCapabilities.fields || editorBusy} />
+          <div className="taskws-full taskws-buttons"><button type="button" disabled={editorBusy} onClick={() => { setEditor(null); callbacks.current.onDirty?.(false); onEditorClosed?.(); }}>{t("modules.tasksWorkspace.cancel")}</button><button className="taskws-primary" type="submit" disabled={editorBusy || conflict || !editorCapabilities.progress}>{editorBusy ? t("modules.tasksWorkspace.awaitingConfirmation") : currentEditor.base ? t("modules.tasksWorkspace.save") : t("modules.tasksWorkspace.createTask")}</button></div>
         </form>
       </Dialog>}
     </>}

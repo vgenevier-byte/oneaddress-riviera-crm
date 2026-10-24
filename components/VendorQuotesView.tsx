@@ -1,6 +1,8 @@
 "use client";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import {TaskSourceActions} from "./TaskLinkProvider";
+import {useTaskTargetFocus,scrollTaskTarget} from "@/lib/tasks/navigation";
 
 import { BusinessForm, BusinessLabel, BusinessButton, useBusinessPermissions } from "./BusinessPermissions";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -86,6 +88,8 @@ export default function VendorQuotesView({
   const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
   const deletionPlan = deletingQuoteId ? getVendorQuoteDeletionPlan({ vendorQuotes: quotes, vendorInvoices: invoices }, deletingQuoteId) : null;
   const [uploading, setUploading] = useState(false);
+  const taskTarget=useTaskTargetFocus("vendor_quote");
+  useEffect(()=>{if(!taskTarget||!quotes.some(quote=>quote.id===taskTarget.id))return;const timer=window.setTimeout(()=>{setStatusFilter("Tous");window.requestAnimationFrame(()=>scrollTaskTarget(`vendor-quote-${taskTarget.id}`));},0);return()=>window.clearTimeout(timer);},[taskTarget,quotes]);
 
   const selectableContacts = useMemo(
     () =>
@@ -375,6 +379,7 @@ export default function VendorQuotesView({
                   data-notification-target={`vendor-quote-${quote.id}`}
                 >
                   <div>
+                  <TaskSourceActions reference={{type:"vendor_quote",id:quote.id}} title="Vérifier le devis prestataire" />
                     <p className="eyebrow">
                       {profession} · {quote.quoteReference || t("modules.vendorQuotesView.referenceRequired")}
                     </p>

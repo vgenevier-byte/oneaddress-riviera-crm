@@ -1,4 +1,6 @@
 "use client";
+import { TaskSourceActions } from "@/components/TaskLinkProvider";
+
 import { SearchMatchHint } from "@/components/search/SearchMatchHint";
 import { createSearchIndex, searchIndex } from "@/lib/search";
 import { SearchableSelect } from "@/components/search/SearchableSelect";
@@ -72,7 +74,8 @@ export function ContactDocumentCards({access,documents,onChanged,onReplace,appro
   async function openSharing(doc:ContactDocument){setWorking(doc.resource_id);try{const op=await begin();const result=await op.run(()=>op.client.rpc("crm_admin_users"));if(result.error)throw result.error;await op.check();const users=(result.data.users as Recipient[]).filter(user=>user.active&&user.confirmed&&readable({modules:user.modules} as AccessSnapshot,"contacts")&&readable({modules:user.modules} as AccessSnapshot,"documents"));setRecipients(users);setRecipient("");setSharing(doc);}catch(error){fail(error);}finally{setWorking("");}}
   async function share(revokeUser?:string){if(!sharing||(!recipient&&!revokeUser))return;setWorking(sharing.resource_id);try{const op=await begin();const result=await op.run(()=>revokeUser?op.client.rpc("crm_revoke_document_share",{p_provider:"storage",p_resource:sharing.resource_id,p_user:revokeUser}):op.client.rpc("crm_share_contact_document",{p_resource:sharing.resource_id,p_user:recipient}));if(result.error)throw result.error;await op.check();setMessage(revokeUser?"Autorisation retirée.":"Autorisation explicite confirmée.");setSharing(null);await onChanged();}catch(error){fail(error);}finally{setWorking("");}}
   return <div className={styles.list}>
-    {documents.map(doc=><article key={doc.resource_id} className={styles.document} data-contact-document={doc.resource_id}>
+    {documents.map(doc=><article key={doc.resource_id} className={styles.document} data-contact-document={doc.resource_id} id={`scoped-document-${doc.resource_id}`}>
+      <TaskSourceActions reference={{ type: "document", id: doc.resource_id, context: { provider: doc.provider || "storage" } }} />
       <div><h4>{doc.title}</h4><SearchMatchHint approximate={Boolean(approximateIds?.has(doc.resource_id))}/><p>{doc.personal_contact?doc.document_type||t("modules.moduleWorkspace.other"):doc.bank?t("modules.contactDocuments.existingBankDocument"):t("modules.contactDocuments.existingBusinessDocument")}{doc.superseded_by||doc.lifecycle==="superseded"?t("modules.contactDocuments.previousVersion"):""}</p>
       {doc.personal_contact&&<><p>{doc.file_name} · {doc.size_bytes?t("modules.documents.megabytes", {size: (doc.size_bytes/1_000_000).toLocaleString(locale,{maximumFractionDigits:2})}):""}</p><p>{t("modules.contactDocuments.added")} {doc.created_at ? uiDate(doc.created_at) : t("modules.contactDocuments.notProvided")}  {t("modules.contactDocuments.author")} {doc.created_by_label||doc.created_by||t("modules.contactDocuments.serverrecordedAuthor")}</p><p>{t("modules.contactDocuments.expiry")} {doc.expires_on ? uiDate(doc.expires_on) : t("modules.contactDocuments.notProvided")}</p><p className={styles.private}>{t("modules.contactDocuments.privateOwnerAuthorisedUploaderAndExplicitlyAuthorisedPeople")}</p></>}</div>
       <div className={styles.actions}>

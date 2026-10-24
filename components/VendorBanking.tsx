@@ -4,7 +4,9 @@ import { sortSelectOptions } from "@/lib/selectOptions";
 import { getContactLabel } from "@/lib/contactIdentity";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
-import { useEffect, useRef, useState } from "react";
+import { TaskSourceActions } from "./TaskLinkProvider";
+import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormSave } from "@/lib/access/useConfirmedForm";
 import type { Contact, VendorBankAccount, VendorInvoice } from "../lib/types";
 import { addVendorBankAccount, formatIban, getInvoicePaymentReference, getPrimaryVendorBankAccount, getVerifiedVendorBankAccounts, hasBankAccountChange, maskIban, normalizeBic, normalizeIban, selectInvoiceBankAccount, updateBankAccountStatus } from "../lib/vendorBanking";
@@ -64,8 +66,14 @@ export function VendorBankAccounts({ contact, actor, onUpdate }: { contact: Cont
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const saving = useRef(false);
-  const accounts = contact.supplierBankAccounts || [];
+  const accounts = useMemo(() => contact.supplierBankAccounts || [], [contact.supplierBankAccounts]);
   const changed = hasBankAccountChange(contact, iban);
+  const taskTarget = useTaskTargetFocus("bank_account");
+  useEffect(() => {
+    if (taskTarget?.context?.contactId !== contact.id || !accounts.some(account => account.id === taskTarget.id)) return;
+    const timer = window.setTimeout(() => scrollTaskTarget(`bank-account-${taskTarget.id}`), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskTarget, contact.id, accounts]);
   async function action(id: string, kind: "verify" | "primary" | "archive") {
     if (saving.current) return;
     if (kind === "verify" && !window.confirm(t("modules.vendorBanking.confirmThatYouHaveVerifiedTheseBankDetailsWithTheSupplierThrough"))) return;
@@ -103,7 +111,8 @@ export function VendorBankAccounts({ contact, actor, onUpdate }: { contact: Cont
     <div className="banking-heading"><div><p className="eyebrow">{t("modules.vendorBanking.bankDetails")}</p><h3>{t("modules.vendorBanking.supplierBankDetails")}</h3></div><button type="button" className="primary-button" disabled={busy} onClick={() => { setAdding(true); setError(""); }}>{t("modules.vendorBanking.addBankDetails")}</button></div>
     {error && <p role="alert" className="banking-warning">{moduleMessage(error, t)}</p>}
     {!accounts.length && <p className="muted-line">{t("modules.vendorBanking.noBankDetailsRecordedForThisSupplier")}</p>}
-    {accounts.map(account => <article className="banking-account" key={account.id}>
+    {accounts.map(account => <article className="banking-account" key={account.id} id={`bank-account-${account.id}`}>
+      <TaskSourceActions reference={{type:"bank_account",id:account.id,context:{contactId:contact.id}}} title="Vérifier le RIB" />
       <div className="banking-heading"><strong>{account.label || t("modules.vendorBanking.bankAccount")}</strong><span className={`banking-status ${account.status === "Vérifié" ? "verified" : ""}`}>{uiLabel(account.status, "modules")}{account.isPrimary ? t("modules.vendorBanking.primary") : ""}</span></div>
       <p>{account.accountHolder}</p><p className="banking-iban">{maskIban(account.iban)}</p><p>{t("modules.vendorBanking.bic")} {account.bic} {account.bankName && `· ${account.bankName}`}</p>
       {account.verifiedAt && <p className="muted-line">{t("modules.vendorBanking.verifiedOn")} {uiDate(account.verifiedAt)}  {t("modules.vendorBanking.by")} {account.verifiedBy || t("modules.vendorBanking.userNotRecorded")}</p>}

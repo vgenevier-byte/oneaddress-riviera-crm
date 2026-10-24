@@ -5,6 +5,8 @@ import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { specialistMessage } from "@/lib/i18n/catalogs/specialist";
 
+import { TaskSourceActions } from "@/components/TaskLinkProvider";
+import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
 import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
@@ -43,7 +45,10 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
   const eur = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? new Intl.NumberFormat(locale,{style:"currency",currency:"EUR",minimumFractionDigits:0,maximumFractionDigits:0}).format(value) : displayLabel("À renseigner","izord");
   const pct = (value: number | null) => value === null ? "—" : new Intl.NumberFormat(locale,{minimumFractionDigits:1,maximumFractionDigits:1}).format(value) + " %";
 
-  const canWrite = ["admin","partner","contributor"].includes(role), canApprove = ["admin","partner"].includes(role);
+  const [historicalRevision, setHistoricalRevision] = useState<number | null>(null);
+  const taskFocus = useTaskTargetFocus("presentation", "document");
+  const handledTaskFocus = useRef("");
+  const canWrite = !historicalRevision && ["admin","partner","contributor"].includes(role), canApprove = !historicalRevision && ["admin","partner"].includes(role);
   const [projects,setProjects] = useState<ProjectRecord[]>([]), [listLoading,setListLoading] = useState(true);
   const [projectQuery,setProjectQuery]=useState("");
   const projectIndex=useMemo(()=>createSearchIndex(projects,project=>{
@@ -88,14 +93,36 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
   function leave(){return !dirty||window.confirm(t("izord.ce_brouillon_n_est_pas_enregistre_exportez_s_e4fdd1"));}
   function edit(next:ProjectData){if(accessSignal.aborted||!canWrite)return;setData(next);setDirty(true);setNotice("Modifications non enregistrées");setError("");}
   function field(key:keyof ProjectState,value:string|boolean){if(data)edit({...data,state:{...data.state,[key]:value}});}
-  function fresh(next=createProjectData(),files:File[]=[]){begin();setDraftId(crypto.randomUUID());setData(next);setLoaded(null);setVersions([]);setSourceFiles(files);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setWorkflow("draft");setDirty(true);setBusy(false);setError("");setConflict(false);setRemote(null);setNotice("Nouveau brouillon — non enregistré");}
+  function fresh(next=createProjectData(),files:File[]=[]){setHistoricalRevision(null);begin();setDraftId(crypto.randomUUID());setData(next);setLoaded(null);setVersions([]);setSourceFiles(files);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setWorkflow("draft");setDirty(true);setBusy(false);setError("");setConflict(false);setRemote(null);setNotice("Nouveau brouillon — non enregistré");}
   async function refreshList(){const operation=begin();try{const list=await repository.listProjects({signal:operation.signal});if(current(operation.id))setProjects(list);}catch{if(current(operation.id))setError("Liste indisponible.");}}
-  async function open(project:ProjectRecord){
-    if(!leave())return;const operation=begin();setDraftId(crypto.randomUUID());setData(null);setLoaded(null);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setBusy(true);setError("");setNotice("Ouverture…");
-    try{const value=await repository.loadProject(project.id,{signal:operation.signal,hydratePhotos:canWrite});const history=await repository.listVersions(project.id,{signal:operation.signal});
+  async function open(project:ProjectRecord, revision?:number){
+    if(!leave())return;setHistoricalRevision(revision ?? null);const operation=begin();setDraftId(crypto.randomUUID());setData(null);setLoaded(null);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setBusy(true);setError("");setNotice("Ouverture…");
+    try{const value=await repository.loadProject(project.id,{signal:operation.signal,hydratePhotos:canWrite && !revision,revision});const history=await repository.listVersions(project.id,{signal:operation.signal});
       if(current(operation.id)){setDraftId(crypto.randomUUID());setLoaded(value);setData(value.data);setWorkflow(value.project.status);setVersions(history);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setConflict(false);setRemote(null);setNotice("Enregistré · révision "+value.project.revision);}
     }catch(e){if(current(operation.id))setError(messageOf(e));}finally{if(current(operation.id))setBusy(false);}
   }
+  useEffect(() => {
+    if (!taskFocus || listLoading || busy) return;
+    const id = taskFocus.type === "presentation" ? taskFocus.id : taskFocus.context?.catalog === "presentation" ? taskFocus.context.projectId : "";
+    const key = JSON.stringify(taskFocus);
+    if (!id || handledTaskFocus.current === key) return;
+    const timer = window.setTimeout(() => {
+      handledTaskFocus.current = key;
+      const project = projects.find(item => item.id === id);
+      if (!project) { setError(language === "en" ? "This presentation is unavailable." : "Cette présentation est inaccessible."); return; }
+      const raw = taskFocus.context?.revision;
+      const revision = raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined;
+      if (loaded?.project.id !== id || revision !== (historicalRevision ?? undefined)) void open(project, revision);
+    }, 0);
+    return () => window.clearTimeout(timer);
+    // The repository rechecks RLS for the project, revision and assets.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskFocus, listLoading, busy]);
+  useEffect(() => {
+    if (taskFocus?.type !== "document" || taskFocus.context?.catalog !== "presentation" || loaded?.project.id !== taskFocus.context.projectId) return;
+    const timer = window.setTimeout(() => scrollTaskTarget(`presentation-asset-${taskFocus.id}`), 0);
+    return () => window.clearTimeout(timer);
+  }, [taskFocus, loaded]);
   async function save():Promise<LoadedProject|null>{
     if(accessSignal.aborted||!data||!canWrite||busy||loaded?.project.status==="approved"&&!canApprove)return null;
     const operation=begin(), snapshot=data;setBusy(true);setError("");setNotice("Enregistrement en cours…");
@@ -177,6 +204,9 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
     {notice&&<p role="status" className={styles.status}>{specialistMessage(notice,t)}</p>}{error&&<p role="alert" className={styles.error}>{specialistMessage(error,t)}</p>}
     {conflict&&<section className={styles.conflict} aria-label={t("izord.conflit_de_sauvegarde_55870f")}><h2>{t("izord.une_version_plus_recente_existe_97a83c")}</h2><p>{t("izord.votre_brouillon_est_conserve_aucun_ecrasemen_48480a")}</p><div className={styles.toolbar}><button disabled={!canExport} onClick={jsonDownload}>{t("izord.exporter_le_json_de_recuperation_c6d97e")}</button><button className={styles.quiet} onClick={async()=>{if(!loaded)return;const operation=begin();try{const value=await repository.loadProject(loaded.project.id,{signal:operation.signal});if(current(operation.id))setRemote(value);}catch(e){if(current(operation.id))setError(messageOf(e));}}}>{t("izord.comparer_a_la_version_partagee_d6423a")}</button>{loaded&&<button className={styles.quiet} onClick={()=>void open(loaded.project)}>{t("izord.recharger_la_version_partagee_dc8c85")}</button>}</div>{remote&&<details open><summary>{t("izord.version_partagee_fd7b16")}{" "}{remote.project.revision}{" "}{t("izord._votre_brouillon_reste_dans_le_formulaire_2337ff")}</summary><pre style={{whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{JSON.stringify(remote.data.state,null,2)}</pre></details>}</section>}
     {data&&result&&<>
+      {historicalRevision && <p role="status">{language === "en" ? "Historical revision (read only)" : "Révision historique (lecture seule)"} · r{historicalRevision}</p>}
+      <TaskSourceActions reference={loaded ? { type: "presentation", id: loaded.project.id } : undefined} saved={Boolean(loaded)} title={language === "en" ? "Review the presentation" : "Vérifier la présentation"} />
+      {loaded && <TaskSourceActions reference={{ type: "presentation", id: loaded.project.id, context: { revision: String(loaded.project.revision) } }} title={language === "en" ? "Review this presentation revision" : "Vérifier cette révision de présentation"} />}
       <div className={styles.toolbar}>{canWrite&&<><button disabled={busy||(!dirty&&!!loaded)||loaded?.project.status==="approved"&&!canApprove} onClick={()=>void save()}>{t("izord.enregistrer_f7c8bc")}</button><button className={styles.quiet} disabled={busy||!canExport} onClick={jsonDownload}>{dirty?t("izord.exporter_le_json_de_recuperation_c6d97e"):t("izord.exporter_le_json_4be389")}</button><button disabled={busy||!canExport||financialErrors.length>0||loaded?.project.status==="approved"} onClick={()=>void exportPpt()}>{t("izord.generer_le_powerpoint_0577c8")}</button></>}{busy&&<button className={styles.quiet} onClick={()=>{controller.current?.abort();epoch.current++;setBusy(false);setNotice("Opération interrompue. Vérifiez l’état partagé et les transferts avant de reprendre.");}}>{t("izord.interrompre_f36bd2")}</button>}</div>
       <p className={styles.muted}>{t("izord.les_modifications_restent_en_memoire_jusqu_a_2d945c")}</p>
       <div className={styles.layout}><div><fieldset disabled={!canWrite||busy||loaded?.project.status==="approved"&&!canApprove}>
@@ -204,7 +234,7 @@ export default function IzordGenerator({role,canExport=true,userId,onUnsavedChan
       <section className={styles.panel}><h2>{t("izord.workflow_partage_5ad012")}</h2><p>{t("izord.etat_officiel_a98513")}{" "}{loaded?displayLabel(statusLabels[loaded.project.status],"izord"):t("izord.brouillon_non_enregistre_7052bf")}</p>{canWrite&&<label>{t("izord.etat_a_enregistrer_93d5a8")}<select disabled={busy||loaded?.project.status==="approved"&&!canApprove} value={workflow} onChange={e=>{setWorkflow(e.target.value as ProjectStatus);setDirty(true);}}><option value="draft">{t("izord.brouillon_57d2d7")}</option><option value="review">{t("izord.en_revue_7da044")}</option>{canApprove&&<option value="approved">{t("izord.approuve_4a06a7")}</option>}</select></label>}<p className={styles.muted}>{t("izord.generez_et_archivez_les_fichiers_avant_l_app_095f31")}</p>
         <details><summary>{t("izord.historique_des_versions_67d508")}{versions.length})</summary><ul>{versions.map(version=><li key={version.revision}>{t("izord.revision_d6cbfa")}{" "}{version.revision} · {displayLabel(statusLabels[version.status],"izord")}{" "}{t("izord._auteur_0d4c34")}{" "}{version.author_id}</li>)}</ul></details>
       </section>
-      <section className={styles.panel}><h2>{t("izord.documents_prives_f9ba75")}</h2>{loaded&&<button className={styles.quiet} disabled={busy} onClick={()=>void documentAction(async()=>undefined)}>{t("izord.verifier_les_transferts_35bd5b")}</button>}{!loaded?<p>{t("izord.enregistrez_le_dossier_pour_transferer_ses_f_f99477")}</p>:<ul>{loaded.assets.map(asset=><li key={asset.id}><span>{t(`izord.assetKind.${asset.kind}`)}{" "}{t("izord._r_9ddde8")}{asset.project_revision} · {t(`izord.assetState.${asset.lifecycle}`)}</span><div className={styles.toolbar}>{asset.lifecycle==="finalized"&&<><button className={styles.quiet} disabled={busy||!canExport} onClick={async()=>{if(!canExport)return;const operation=begin();try{const blob=await repository.downloadAsset(asset,{signal:operation.signal});if(current(operation.id))download(blob,`${asset.kind}-${asset.id}${asset.kind==="presentation"?".pptx":asset.kind==="pdf"?".pdf":".jpg"}`);}catch(e){if(current(operation.id))setError(messageOf(e));}}}>{t("izord.telecharger_b332d0")}</button>{canApprove&&asset.kind==="presentation"&&<button className={styles.quiet} disabled={busy} onClick={()=>void documentAction(signal=>repository.setReaderDownload(asset.id,!asset.reader_download,{signal}))}>{asset.reader_download?t("izord.retirer_l_acces_lecteur_339a8c"):t("izord.autoriser_le_lecteur_66b10f")}</button>}</>}{asset.lifecycle==="pending"&&canWrite&&<button className={styles.quiet} disabled={busy} onClick={()=>void documentAction(signal=>repository.abandonAsset(asset.id,{signal}))}>{t("izord.abandonner_ce_transfert_8f5153")}</button>}</div></li>)}</ul>}<p className={styles.muted}>{t("izord.les_fichiers_finalises_sont_immuables_un_tra_ead430")}</p></section>
+      <section className={styles.panel}><h2>{t("izord.documents_prives_f9ba75")}</h2>{loaded&&<button className={styles.quiet} disabled={busy} onClick={()=>void documentAction(async()=>undefined)}>{t("izord.verifier_les_transferts_35bd5b")}</button>}{!loaded?<p>{t("izord.enregistrez_le_dossier_pour_transferer_ses_f_f99477")}</p>:<ul>{loaded.assets.map(asset=><li key={asset.id} id={`presentation-asset-${asset.id}`}><TaskSourceActions reference={{ type: "document", id: asset.id, context: { catalog: "presentation", projectId: loaded!.project.id } }} title={language === "en" ? "Review the document" : "Vérifier le document"} /><span>{t(`izord.assetKind.${asset.kind}`)}{" "}{t("izord._r_9ddde8")}{asset.project_revision} · {t(`izord.assetState.${asset.lifecycle}`)}</span><div className={styles.toolbar}>{asset.lifecycle==="finalized"&&<><button className={styles.quiet} disabled={busy||!canExport} onClick={async()=>{if(!canExport)return;const operation=begin();try{const blob=await repository.downloadAsset(asset,{signal:operation.signal});if(current(operation.id))download(blob,`${asset.kind}-${asset.id}${asset.kind==="presentation"?".pptx":asset.kind==="pdf"?".pdf":".jpg"}`);}catch(e){if(current(operation.id))setError(messageOf(e));}}}>{t("izord.telecharger_b332d0")}</button>{canApprove&&asset.kind==="presentation"&&<button className={styles.quiet} disabled={busy} onClick={()=>void documentAction(signal=>repository.setReaderDownload(asset.id,!asset.reader_download,{signal}))}>{asset.reader_download?t("izord.retirer_l_acces_lecteur_339a8c"):t("izord.autoriser_le_lecteur_66b10f")}</button>}</>}{asset.lifecycle==="pending"&&canWrite&&<button className={styles.quiet} disabled={busy} onClick={()=>void documentAction(signal=>repository.abandonAsset(asset.id,{signal}))}>{t("izord.abandonner_ce_transfert_8f5153")}</button>}</div></li>)}</ul>}<p className={styles.muted}>{t("izord.les_fichiers_finalises_sont_immuables_un_tra_ead430")}</p></section>
       </aside></div>
       <section className={styles.panel}><h2>{t("izord.apercu_de_la_presentation_54cbee")}</h2><p className={styles.muted}>{t("izord.les_diapositives_generees_conservent_les_tex_cc85f2")}</p><PresentationPreview data={data}/></section>
       <section className={styles.note}><strong>{t("izord.cadre_de_la_simulation_reserves_du_html_du_1_8d84fe")}</strong><p>{t("izord.montants_ttc_sans_recuperation_de_tva_modeli_826bd2")}</p><p>{t("izord.references_conservees_d4e0d4")}{" "}<a href="https://www.legifrance.gouv.fr/codes/id/LEGIARTI000053187621/2026-09-01" target="_blank" rel="noreferrer">{t("izord.cgi_article_1115_928a70")}</a> · <a href="https://bofip.impots.gouv.fr/bofip/3290-PGP.html/identifiant=BOI-ENR-DMTOI-10-50-20140429" target="_blank" rel="noreferrer">{t("izord.bofip_engagement_de_revendre_2014_6d8e44")}</a>. <a href="https://www.cnaf.notaires.fr/actualites/dmto-et-exoneration-pour-engagement-de-revendre" target="_blank" rel="noreferrer">{t("izord.cnaf_engagement_de_revendre_d0e25e")}</a>{t("izord._sources_datees_du_html_non_actualisees_dans_a81383")}</p></section>

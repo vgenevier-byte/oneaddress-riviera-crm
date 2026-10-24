@@ -20,7 +20,7 @@ export type MonthlyChargeEntry = {
   hoursAmountCents?: number | null; expenseAmountCents?: number | null;
 };
 export type MonthlyChargesFilter = {
-  source?: MonthlyChargeSource | "all"; houseId?: string; now?: string;
+  source?: MonthlyChargeSource | "all"; houseId?: string; personId?: string; now?: string;
 };
 export type MonthlyChargesResult = {
   year: number; filter: MonthlyChargesFilter; readableSources: MonthlyChargeSource[]; totalCents: number;
@@ -29,7 +29,7 @@ export type MonthlyChargesResult = {
   entries: MonthlyChargeEntry[]; expected: MonthlyChargeEntry[]; unattached: MonthlyChargeEntry[];
   excluded: MonthlyChargeEntry[]; issues: MonthlyChargeEntry[]; houseUnknown: MonthlyChargeEntry[];
 };
-export type MonthlyChargesExportScope = { source?: MonthlyChargeSource | "all"; houseId?: string; houseLabel?: string; description?: string };
+export type MonthlyChargesExportScope = { source?: MonthlyChargeSource | "all"; houseId?: string; houseLabel?: string; personLabel?: string; description?: string };
 
 const invoiceStatuses = new Set(["En attente de facture", "À payer", "Partiellement payé", "Payé", "En retard", "Annulé"]);
 const clockPattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
@@ -226,11 +226,12 @@ export function buildMonthlyCharges(snapshot: MonthlyChargesSnapshot, year: numb
     const month = `${year.toString().padStart(4, "0")}-${(index + 1).toString().padStart(2, "0")}`;
     return { month, totalCents: 0, invoiceCents: 0, hoursCents: 0, current: month === currentMonth, future: month > currentMonth };
   });
-  const candidates = evaluateMonthlyChargeEntries(snapshot).filter(entry =>
+  const sourceCandidates = evaluateMonthlyChargeEntries(snapshot).filter(entry =>
     (!filter.source || filter.source === "all" || entry.source === filter.source) &&
     (entry.allocations.some(allocation => allocation.month.slice(0, 4) === year.toString().padStart(4, "0")) ||
       (!entry.allocations.length && (!isMonthlyChargeCivilDate(entry.sourceDate) || Number(entry.sourceDate.slice(0, 4)) === year)))
   );
+  const candidates = filter.personId ? sourceCandidates.filter(entry => entry.personId === filter.personId) : sourceCandidates;
   const houseUnknown = filter.houseId ? candidates.filter(entry => entry.source === "invoice") : [];
   const entries = filter.houseId ? candidates.filter(entry => entry.source === "hours" && entry.houseId === filter.houseId) : candidates;
   const groups = new Map<string, MonthlyChargesResult["groups"][number]>();
@@ -285,6 +286,7 @@ const statusLabels: Record<MonthlyChargeEntry["status"], string> = {
 function scopeLabel(result: MonthlyChargesResult, scope: MonthlyChargesExportScope) {
   return ["Vue limitée aux sources autorisées", result.readableSources.map(sourceLabel).join(" et ") || "Aucune source autorisée",
     result.filter.houseId ? `Maison : ${scope.houseLabel || result.filter.houseId} ; factures sans maison hors total` : "Toutes maisons",
+    result.filter.personId ? `Personne : ${scope.personLabel || result.filter.personId}` : "Toutes personnes",
     scope.description || ""].filter(Boolean).join(" · ");
 }
 

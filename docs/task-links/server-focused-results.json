@@ -1,0 +1,21 @@
+{
+  "passed": 4,
+  "results": [
+    {
+      "name": "Publisher existing reference resolves for authorized assignee without attachment proof",
+      "passed": true
+    },
+    {
+      "name": "real folder is full-profile-only and no synthetic business row is invented",
+      "passed": true
+    },
+    {
+      "name": "future legacy recoveries insert real legacy contact/lead typed relations without task rewrite",
+      "passed": true
+    },
+    {
+      "name": "monthly context labels resolve current authorized person and house without hidden coordinates",
+      "passed": true
+    }
+  ]
+}

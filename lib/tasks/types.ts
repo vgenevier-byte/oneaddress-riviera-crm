@@ -36,8 +36,10 @@ export type Task = {
   linkedTo?: string;
   contactId?: string;
   leadId?: string;
+  /** Reader-authorized projections only; inaccessible links contain no target identity. */
+  links?: TaskLink[];
 };
-export type TaskPatch = Partial<Pick<Task, "title" | "status" | "notes" | "dueDate" | "priority" | "linkedTo" | "contactId" | "leadId">> & { assigneeIds?: string[] };
+export type TaskPatch = Partial<Pick<Task, "title" | "status" | "notes" | "dueDate" | "priority" | "linkedTo" | "contactId" | "leadId">> & { assigneeIds?: string[]; linkChanges?: TaskLinkChanges };
 export type TaskMutation = {
   requestId: string;
   id: string;
@@ -50,6 +52,9 @@ export type TaskApi = {
   directory: () => Promise<TaskRecipient[]>;
   mutate: (request: TaskMutation) => Promise<Task | null>;
   export?: () => Promise<Task[]>;
+  searchTargets?: (query: string, type?: string, offset?: number, limit?: number) => Promise<TaskTargetPage>;
+  resolveTargets?: (refs: TaskTargetRef[]) => Promise<TaskTarget[]>;
+  forTarget?: (ref: TaskTargetRef) => Promise<Task[]>;
 };
 export type TaskPermissions = { read: boolean; contribute: boolean; export: boolean; delete: boolean };
 /** Pass only references whose IDs and labels the connected account may read. */
@@ -63,4 +68,39 @@ export type TaskDraft = {
   assigneeIds: string[];
   leadId: string;
   contactId: string;
+  /** Explicit operations, never a replacement of the partially visible relation list. */
+  linkChanges?: TaskLinkChanges;
 };
+
+/** A label or a URL is never an identity. Context is part of contextual references. */
+export type TaskTargetRef = { type: string; id: string; context?: Record<string, string> };
+export type TaskTargetState = "available" | "archived" | "deleted" | "inaccessible";
+export type TaskTarget = {
+  ref: TaskTargetRef;
+  label: string;
+  detail?: string;
+  status?: string;
+  state?: TaskTargetState;
+  /** Only fields authorized for this reader, resolved afresh by the server. */
+  dueDate?: string;
+  financial?: { amount: number; paidAmount: number; dueDate?: string; status: string };
+  searchFields?: string[];
+  approximate?: boolean;
+};
+export type TaskTargetPage = { items: TaskTarget[]; hasMore: boolean };
+export type TaskLink = {
+  id: string;
+  primary: boolean;
+  state: TaskTargetState;
+  target?: TaskTargetRef;
+  label?: string;
+  detail?: string;
+  status?: string;
+  financial?: { amount: number; paidAmount: number; dueDate?: string; status: string };
+};
+export type TaskLinkChanges = {
+  add?: TaskTargetRef[];
+  remove?: string[];
+  primary?: { linkId?: string; target?: TaskTargetRef } | null;
+};
+export type TaskInitialDraft = { title?: string; dueDate?: string; leadId?: string; contactId?: string; target?: TaskTargetRef };

@@ -1,0 +1,9 @@
+{
+  "passed": 1,
+  "results": [
+    {
+      "name": "Task export masks unauthorized target export while ordinary read remains independently authorized",
+      "passed": true
+    }
+  ]
+}

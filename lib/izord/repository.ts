@@ -104,10 +104,16 @@ export function createGeneratorRepository(client: SupabaseClient) {
     const { data, error } = await guarded(options.signal, () => client.from("izord_project_versions").select("project_id,revision,title,status,author_id,created_at").eq("project_id", projectId).order("revision", { ascending: false }));
     failure(error); return data || [];
   }
-  async function readProject(id: string, options: OperationOptions = {}): Promise<ProjectRecord> {
+  async function readProject(id: string, options: OperationOptions & { revision?: number } = {}): Promise<ProjectRecord> {
     const { data, error } = await guarded(options.signal, () => client.from("izord_projects").select("*").eq("id", id).single()); failure(error);
     if (!data) throw new Error("Dossier inaccessible.");
-    const versions = await guarded(options.signal, () => listVersions(id, options)); return { ...data, author_id: versions.find(version => version.revision === data.revision)?.author_id };
+    const versions = await guarded(options.signal, () => listVersions(id, options));
+    if (options.revision !== undefined) {
+      const version = await guarded(options.signal, () => client.from("izord_project_versions").select("*").eq("project_id", id).eq("revision", options.revision!).single()); failure(version.error);
+      if (!version.data) throw new Error("Révision inaccessible.");
+      return { ...data, title: version.data.title, payload: version.data.payload, revision: version.data.revision, status: version.data.status, author_id: version.data.author_id };
+    }
+    return { ...data, author_id: versions.find(version => version.revision === data.revision)?.author_id };
   }
   async function downloadAsset(asset: AssetRecord, options: OperationOptions = {}): Promise<Blob> {
     const who = await guarded(options.signal, () => actor(options.signal));
@@ -115,7 +121,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
     if (!data || data.size <= 0 || data.size > LIMITS.fileBytes) throw new Error("Document reçu invalide ou trop volumineux.");
     return data;
   }
-  async function loadProject(id: string, options: OperationOptions & { hydratePhotos?: boolean } = {}): Promise<LoadedProject> {
+  async function loadProject(id: string, options: OperationOptions & { hydratePhotos?: boolean; revision?: number } = {}): Promise<LoadedProject> {
     const who = await guarded(options.signal, () => actor(options.signal)), project = await guarded(options.signal, () => readProject(id, options)), assets = await guarded(options.signal, () => listAssets(id, options)), payload = stored(project.payload);
     await guarded(options.signal, () => sameActor(who, options.signal));
     if (!payload) return { project, data: createProjectData(), assets, sourceDocuments: [] };

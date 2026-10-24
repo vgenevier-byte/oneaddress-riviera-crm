@@ -1,9 +1,10 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useScopedOperations, isCancelled } from "@/lib/access/operations";
+import { useScopedOperations, isCancelled, type ScopedOperation } from "@/lib/access/operations";
 import type { AccessSnapshot } from "@/lib/access/modules";
 import type { Task as LegacyTask } from "@/lib/types";
-import type { Task, TaskApi } from "./types";
+import { searchTaskTargets } from "./targets";
+import type { Task, TaskApi, TaskTarget, TaskTargetPage } from "./types";
 import { effectiveTaskLeadId } from "./domain";
 
 export const TASKS_CHANGED = "oar-tasks-changed";
@@ -12,24 +13,90 @@ export const TASKS_CHANGED = "oar-tasks-changed";
 export function useTaskApi(): TaskApi {
   const begin = useScopedOperations("tasks");
   return useMemo(() => {
-    async function rpc<T>(name: string, args = {}): Promise<T> {
-      const op = await begin();
+    async function call<T>(op: ScopedOperation, name: string, args = {}): Promise<T> {
       const result = await op.run(() => op.client.rpc(name, args));
       if (result.error) throw new Error(result.error.message);
       return result.data as T;
     }
+    async function rpc<T>(name: string, args = {}): Promise<T> { return call(await begin(), name, args); }
+    async function publisher(op: ScopedOperation, ids?: string[], exporting = false): Promise<{ items: TaskTarget[]; forbidden?: boolean }> {
+      if (ids && ids.length > 100) {
+        const chunks = Array.from({ length: Math.ceil(ids.length / 100) }, (_, index) => ids.slice(index * 100, (index + 1) * 100));
+        const pages = await Promise.all(chunks.map(chunk => publisher(op, chunk, exporting)));
+        return { items: pages.flatMap(page => page.items), forbidden: pages.some(page => page.forbidden) };
+      }
+      return op.run(async () => {
+        const response = await fetch(`/api/tasks/publisher${exporting ? "?export=1" : ""}`, { method: ids ? "POST" : "GET", signal: op.signal,
+          headers: { Authorization: `Bearer ${op.token}`, ...(ids ? { "Content-Type": "application/json" } : {}) },
+          ...(ids ? { body: JSON.stringify({ ids }) } : {}) });
+        if (response.status === 403) return { items: [], forbidden: true };
+        if (!response.ok) throw new Error("Catalogue Publisher indisponible.");
+        const data = await response.json() as { items: TaskTarget[] };
+        return { items: data.items.filter(item => item?.ref?.type && item.ref.id) };
+      });
+    }
+    async function enrich(op: ScopedOperation, tasks: Task[], exporting = false): Promise<Task[]> {
+      const ids = [...new Set(tasks.flatMap(task => (task.links ?? []).flatMap(link => link.target?.type === "publisher_creation" ? [link.target.id] : [])))];
+      if (!ids.length) return tasks;
+      let current: { items: TaskTarget[]; forbidden?: boolean };
+      try { current = await publisher(op, ids, exporting); }
+      catch { current = { items: [], forbidden: true }; }
+      await op.check();
+      return tasks.map(task => ({ ...task, links: task.links?.map(link => {
+        if (link.target?.type !== "publisher_creation") return link;
+        const item = current.items.find(item => item.ref.id === link.target!.id);
+        if (item) return { ...link, target: item.ref, state: item.state ?? "available", label: item.label, detail: item.detail, status: item.status };
+        if (current.forbidden) return { id: link.id, primary: link.primary, state: "inaccessible" as const };
+        return { id: link.id, primary: link.primary, state: "deleted" as const, target: link.target };
+      }) }));
+    }
+    async function read(name: string, args = {}): Promise<Task[]> {
+      const op = await begin(); return enrich(op, await call<Task[]>(op, name, args), name === "crm_tasks_export");
+    }
     return {
-      list: () => rpc<Task[]>("crm_tasks_read"),
+      list: () => read("crm_tasks_read"),
       directory: () => rpc("crm_tasks_directory"),
-      export: () => rpc<Task[]>("crm_tasks_export"),
+      export: () => read("crm_tasks_export"),
+      resolveTargets: async refs => {
+        const op = await begin();
+        const ordinary = refs.filter(ref => ref.type !== "publisher_creation");
+        const resolved = ordinary.length ? await call<TaskTarget[]>(op, "crm_task_targets_resolve", { p_refs: ordinary }) : [];
+        const items = resolved.filter(item => item?.ref?.type && item.ref.id && item.state !== "inaccessible");
+        const ids = refs.filter(ref => ref.type === "publisher_creation").map(ref => ref.id);
+        return ids.length ? [...items, ...(await publisher(op, ids)).items] : items;
+      },
+      forTarget: async ref => {
+        const op = await begin();
+        if (ref.type === "publisher_creation") {
+          const confirmation = await publisher(op, [ref.id]);
+          if (!confirmation.items.some(item => item.ref.id === ref.id)) return [];
+        }
+        return enrich(op, await call<Task[]>(op, "crm_tasks_for_target", { p_ref: ref }));
+      },
+      searchTargets: async (query, type, offset = 0, limit = 40) => {
+        // Search the full authorized catalogue, then apply the common exact/fuzzy
+        // ranker before the display page. No candidate or label is browser-cached.
+        const op = await begin();
+        return searchTaskTargets(async (pageOffset, pageSize) => {
+          return call<TaskTargetPage>(op, "crm_task_targets_search", {
+            p_query: "", p_type: type || null, p_offset: pageOffset, p_limit: pageSize
+          });
+        }, query, offset, limit, async () => !type || type === "publisher_creation" ? (await publisher(op)).items : []);
+      },
       mutate: async request => {
-        const task = await rpc<Task | null>("crm_tasks_mutate", {
+        const op = await begin();
+        const publisherIds = [...new Set([...(request.patch.linkChanges?.add ?? []), ...(request.patch.linkChanges?.primary?.target ? [request.patch.linkChanges.primary.target] : [])].filter(ref => ref.type === "publisher_creation").map(ref => ref.id))];
+        if (publisherIds.length) {
+          const confirmation = await publisher(op, publisherIds);
+          if (publisherIds.some(id => !confirmation.items.some(item => item.ref.id === id))) throw new Error("Référence Publisher inaccessible ou supprimée.");
+        }
+        const task = await call<Task | null>(op, "crm_tasks_mutate", {
           p_request_id: request.requestId, p_id: request.id,
           p_revision: request.expectedRevision, p_patch: request.patch,
           p_delete: request.delete ?? false
         });
         window.dispatchEvent(new Event(TASKS_CHANGED));
-        return task;
+        return task ? (await enrich(op, [task]))[0] : null;
       }
     };
   }, [begin]);

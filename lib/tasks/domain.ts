@@ -1,5 +1,5 @@
 import { createSearchIndex, searchIndex, type SearchIndex } from "../search";
-import { taskPriorities, taskStatuses, type Task, type TaskDraft, type TaskMutation, type TaskPatch, type TaskPermissions, type TaskPriority } from "./types";
+import { taskPriorities, taskStatuses, type Task, type TaskDraft, type TaskMutation, type TaskPatch, type TaskPermissions, type TaskPriority, type TaskInitialDraft } from "./types";
 
 export const TASK_NOTE_LIMIT = 10_000;
 export const priorityLabels: Record<TaskPriority, string> = { normal: "Normale", important: "Importante", urgent: "Urgente" };
@@ -65,9 +65,9 @@ export function taskManagementLabel(task: Task): string {
   return `Gestionnaire : ${task.managerLabel || "Identité confirmée"}${task.managerActive === true ? "" : " · accès de gestion inactif, correction privée requise"}`;
 }
 
-export type TaskFilters = { relation: "related" | "created" | "assigned"; status: "all" | Task["status"]; priority: "all" | TaskPriority; query?: string };
+export type TaskFilters = { relation: "related" | "created" | "assigned"; status: "all" | Task["status"]; priority: "all" | TaskPriority; query?: string; targetType?: string; targetKey?: string };
 
-export const taskSearchFields = (task: Task) => [task.title, task.notes, task.createdByLabel, task.managerLabel, ...task.assignees.flatMap(value => [value.label, value.email, value.detail])];
+export const taskSearchFields = (task: Task) => [task.title, task.notes, task.createdByLabel, task.managerLabel, ...task.assignees.flatMap(value => [value.label, value.email, value.detail]), ...(task.links ?? []).filter(link => link.state !== "inaccessible").flatMap(link => [link.label, link.detail, link.status])];
 const taskIndexes = new WeakMap<Task[], SearchIndex<Task>>();
 function taskIndex(tasks: Task[]): SearchIndex<Task> {
   let index = taskIndexes.get(tasks);
@@ -83,7 +83,9 @@ export function filterAndSortTasks(tasks: Task[], userId: string, filters: TaskF
     const assigned = task.assignees.some(value => value.userId === userId && value.active);
     return (filters.relation === "created" ? creator : filters.relation === "assigned" ? assigned : creator || assigned)
       && (filters.status === "all" || task.status === filters.status)
-      && (filters.priority === "all" || task.priority === filters.priority);
+      && (filters.priority === "all" || task.priority === filters.priority)
+      && (!filters.targetType || (task.links ?? []).some(link => link.target?.type === filters.targetType && link.state !== "inaccessible"))
+      && (!filters.targetKey || (task.links ?? []).some(link => link.target && link.state !== "inaccessible" && taskTargetKey(link.target) === filters.targetKey));
   });
   if (query) {
     const eligibleIds = new Set(eligible.map(task => task.id));
@@ -100,8 +102,8 @@ export function filterAndSortTasks(tasks: Task[], userId: string, filters: TaskF
   });
 }
 
-export function draftForTask(task?: Task, initial?: { title?: string; leadId?: string; contactId?: string }): TaskDraft {
-  return { title: task?.title ?? initial?.title ?? "", notes: task?.notes ?? "", dueDate: task?.dueDate ?? "", priority: task?.priority ?? "normal", status: task?.status ?? "À faire", assigneeIds: task?.assignees.map(value => value.userId) ?? [], leadId: task ? effectiveTaskLeadId(task) : initial?.leadId ?? "", contactId: task?.contactId ?? initial?.contactId ?? "" };
+export function draftForTask(task?: Task, initial?: TaskInitialDraft): TaskDraft {
+  return { title: task?.title ?? initial?.title ?? "", notes: task?.notes ?? "", dueDate: task?.dueDate ?? initial?.dueDate ?? "", priority: task?.priority ?? "normal", status: task?.status ?? "À faire", assigneeIds: task?.assignees.map(value => value.userId) ?? [], leadId: task ? effectiveTaskLeadId(task) : initial?.leadId ?? "", contactId: task?.contactId ?? initial?.contactId ?? "", ...(!task && initial?.target ? { linkChanges: { add: [initial.target], primary: { target: initial.target } } } : {}) };
 }
 
 function sameIds(first: string[], second: string[]) {
@@ -127,6 +129,7 @@ export function buildTaskPatch(draft: TaskDraft, base?: Task, fields = true): Ta
     if (!base || draft.leadId !== effectiveTaskLeadId(base)) patch.leadId = draft.leadId;
     if (!base || draft.contactId !== (base.contactId ?? "")) patch.contactId = draft.contactId;
   }
+  if (fields && draft.linkChanges && (draft.linkChanges.add?.length || draft.linkChanges.remove?.length || Object.prototype.hasOwnProperty.call(draft.linkChanges, "primary"))) patch.linkChanges = draft.linkChanges;
   return patch;
 }
 
@@ -144,4 +147,10 @@ export class TaskRequestLedger {
   }
   confirmed(id: string) { this.requests.delete(id); }
   clear() { this.requests.clear(); }
+}
+
+/** Stable comparison key only; never stored instead of the real reference. */
+export function taskTargetKey(ref: import("./types").TaskTargetRef): string {
+  const context = Object.entries(ref.context ?? {}).sort(([left], [right]) => left.localeCompare(right));
+  return JSON.stringify([ref.type, ref.id, context]);
 }

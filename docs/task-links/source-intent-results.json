@@ -1,0 +1,18 @@
+{
+  "actualAuth": true,
+  "actualComponents": true,
+  "isolatedLoopback": true,
+  "businessWrites": 0,
+  "taskWrites": 0,
+  "results": [
+    {
+      "name": "StrictMode source draft admitted once and cancelled to preserved source 1440",
+      "passed": true
+    },
+    {
+      "name": "StrictMode source draft admitted once and cancelled to preserved source 390",
+      "passed": true
+    }
+  ],
+  "pageErrors": []
+}
