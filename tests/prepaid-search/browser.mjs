@@ -79,7 +79,7 @@ async function metric(panel, label, expected) {
 }
 async function openPurchase(app, label = 'Enregistrer un forfait payé') {
  await app.panel.getByRole('button', { name: label, exact: true }).click();
- return app.panel.locator('form').filter({ has: app.page.locator('input[name=capacityMinutes]') });
+ return app.panel.locator('form').filter({ has: app.page.locator('input[name=capacityHours]') });
 }
 let full, firstPackageId, secondPackageId, retryBodies;
 try {
@@ -126,7 +126,7 @@ try {
   await form.screenshot({ path: join(output, 'captures/payment-search-fr.png') });
  });
  await test('actual server commit then lost response: pending controls block edits, query-only/same-ID/reformatted retry retains request and payment IDs without duplicate credit', async () => {
-  const form = full.panel.locator('form').filter({ has: full.page.locator('input[name=capacityMinutes]') });
+  const form = full.panel.locator('form').filter({ has: full.page.locator('input[name=capacityHours]') });
   const house = picker(form, 'houseId'), invoice = picker(form, 'invoiceId'); full.transport.packageDelay = true; full.transport.loseNewPayment = true;
   const count = full.saves.length, click = form.getByRole('button', { name: 'Confirmer le forfait payé', exact: true }).dblclick();
   await form.locator('fieldset:disabled').waitFor(); assert.equal(await house.input.isDisabled(), true); assert.equal(await invoice.input.isDisabled(), true); assert.equal(await form.locator('select[name=source]').isDisabled(), true); await click;

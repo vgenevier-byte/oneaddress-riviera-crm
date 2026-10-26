@@ -1,0 +1,29 @@
+{
+  "app": "http://127.0.0.1:3198",
+  "mode": "production",
+  "hashesMatch": true,
+  "files": 21,
+  "sourceHashes": {
+    "lib/access/modules.ts": "34f8e9fd2c5cf6d53173cb9931266b8171c159bf71dc392a45b34bdb25944f5c",
+    "lib/access/collections.json": "1474cc7868dcf976eb9df6356ff9dd95134970e5cf8a4d4a9df16977cbea7030",
+    "components/AccessPortal.tsx": "387569c5236dbac5196f5f645754f12cc97eaf2bcc98c4fbb9880780a2ddcf59",
+    "components/ModuleWorkspace.tsx": "02cd93132c9a3e661a3841050b43ecda9650926cdfb6575b1bc60acd8005d1a4",
+    "components/CRMApp.tsx": "d6ff94cb84d45342006c5dac11ba072386d19f77d0361f1999c77a971736d62c",
+    "components/HouseTimeExpenseEditor.tsx": "caa23c1c99cf9e33ebfa289f7875a9155b508432f46b35016acfcbc652cd7b40",
+    "components/HousePrepaidPanel.tsx": "9768740d9a7b8fa25fe7aac343030df9d07f912245aa9d491852cc2bb007fd24",
+    "components/HousePrepaidPanel.module.css": "207585ce5a6da35b492bce2d5d7a526a3499a64eb93d84b95fc55016616eab67",
+    "lib/housePrepaid.ts": "8517f695e155491dc32ff4a2ccaea6a819b4e2c4bbf2024ad45c3cfd11caca72",
+    "lib/housePrepaidHours.ts": "f49963838a907b58ef26363db81e1f5e4ad26a8200d92a9f1002f2499ab29625",
+    "components/monthlyCharges/MonthlyChargesWorkspace.tsx": "f8d18122bf60ce0a0fee01c8ba9e325768146442403ceedfcccbc1d0cab03cef",
+    "components/monthlyCharges/MonthlyChargesWorkspace.module.css": "03267058239ed90e92129cd461c9baac2e7b08b1d4154e0b994a1a6ef495b55f",
+    "lib/monthlyCharges/client.ts": "6a8fb4149544162d268340a6332cdcb4bf6860d08345bc1cbd3420531af5875e",
+    "lib/monthlyCharges/calculations.ts": "6e5966f41f747af0d6c23d011fc46cd60c2f9e7dd55a65dfe6d5d34141390ae7",
+    "lib/monthlyCharges/types.ts": "5d613981c9930b3b9927fe9e31cd1c9e7635ed1f050b9db9bdbddf74fcdc04f3",
+    "lib/houseTracking.ts": "fcdd41789a5acebb0ec5b2dd97ab28bafdf6a998190834b8384e4ecf7965b797",
+    "lib/types.ts": "9a309f7a8f2c313fdbb5c33b2df22c1f5a54e347a04d23619fe983dbfa29f3ce",
+    "lib/i18n/catalogs/crm.ts": "5d1a28f66810d92c7bd1ac17b036917c2a7a77b9667a4a5af7fb1ea5e6a322a1",
+    "lib/i18n/catalogs/specialist.ts": "eacc6261ccef4bf0bf5f6aabb67e14a4ed60cd26c64cbe0fb62d55c6be04ba10",
+    "app/globals.css": "2098e1167214fd416476442e37ae06a48d1800f579f11f6eb66c87d2b663b7d6",
+    "app/charges/page.tsx": "224893343f5d6d87df8c304c28369bcb8c9a942f2727b3f8accf7a7cc04aceb5"
+  }
+}

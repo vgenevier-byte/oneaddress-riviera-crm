@@ -1,0 +1,83 @@
+{
+  "passed": 9,
+  "results": [
+    {
+      "name": "FR settings: 1800 stored minutes read as30h;30/30,0/30.00 commit and replay identical1800-minute settings",
+      "passed": true
+    },
+    {
+      "name": "FR settings comma fraction saves1830; fresh EN mobile rereads30.5 and dot fraction saves the same1830",
+      "passed": true
+    },
+    {
+      "name": "FR creation:30/30,0/30.00 keep one request/payment identity after two actual commits with lost responses; fresh reread30h",
+      "passed": true
+    },
+    {
+      "name": "EN mobile renewal:30,5/30.5 send1830 with identical replay/payment IDs; saved summaries/history show60h30 and28h30",
+      "passed": true
+    },
+    {
+      "name": "restricted EN mobile contributor rereads hour defaults/settings and reader preserves read-only controls",
+      "passed": true
+    },
+    {
+      "name": "existing1/59/1801-minute settings survive unedited save and prefill creation/renewal exactly; no quarter-hour restriction",
+      "passed": true
+    },
+    {
+      "name": "settings and purchase reject sub-minute fractions without silently rounding or sending any RPC",
+      "passed": true
+    },
+    {
+      "name": "fresh server reread preserves existing packages/prices/payments/source durations/rates and exact global totals",
+      "passed": true
+    },
+    {
+      "name": "explicit renewal30h and creation30h30 each save canonical minutes and reread through fresh Auth",
+      "passed": true
+    }
+  ],
+  "controls": {
+    "settingsReplay": {
+      "attempts": 3,
+      "canonicalMinutes": 1800,
+      "identicalRequestId": true,
+      "identicalPatch": true
+    },
+    "purchaseReplay": {
+      "attempts": 3,
+      "canonicalMinutes": 1800,
+      "identicalRequestId": true,
+      "identicalPatch": true,
+      "identicalPaymentId": true
+    },
+    "renewalReplay": {
+      "attempts": 2,
+      "canonicalMinutes": 1830,
+      "identicalRequestId": true,
+      "identicalPatch": true,
+      "identicalPaymentId": true
+    },
+    "legacyMinutes": [
+      {
+        "minutes": 1,
+        "displayed": "0 h 01",
+        "savedMinutes": 1
+      },
+      {
+        "minutes": 59,
+        "displayed": "0 h 59",
+        "savedMinutes": 59
+      },
+      {
+        "minutes": 1801,
+        "displayed": "30 h 01",
+        "savedMinutes": 1801
+      }
+    ]
+  },
+  "runtimeErrors": [],
+  "externalRequests": [],
+  "evidence": "Actual disposable loopback Auth/RPC/PostgreSQL with fictitious sources and payments only; production not exercised"
+}

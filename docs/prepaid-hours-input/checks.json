@@ -1,0 +1,76 @@
+{
+  "baseCommit": "3c76a2eeddfeac49da2c754b0d3b53531886c50c",
+  "branch": "codex/prepaid-hours-input",
+  "typescript": {
+    "command": "node node_modules/typescript/bin/tsc --noEmit --incremental false",
+    "passed": true
+  },
+  "lint": {
+    "scope": [
+      "components/HousePrepaidPanel.tsx",
+      "components/monthlyCharges/MonthlyChargesWorkspace.tsx",
+      "lib/housePrepaidHours.ts",
+      "tests/prepaid-hours/hours-input.test.ts",
+      "tests/prepaid-hours/hours-input.browser.mjs",
+      "tests/prepaid-hours/monthly-hours-display.browser.mjs",
+      "tests/prepaid-hours/serve.mjs",
+      "tests/prepaid-hours/browser.mjs",
+      "tests/prepaid-search/browser.mjs"
+    ],
+    "passed": true
+  },
+  "unitAndBusinessTests": {
+    "passed": 18,
+    "failed": 0,
+    "groups": {
+      "hoursInput": 5,
+      "prepaidCalculations": 8,
+      "reconciliation": 5
+    }
+  },
+  "persistenceBrowser": {
+    "passed": 9,
+    "actualFictitiousAuthRPCPostgres": true,
+    "realProductionAccess": false,
+    "report": "browser-results.json"
+  },
+  "monthlyDisplayContracts": {
+    "passed": 3,
+    "actualLocalReadAndInMemoryProjections": true,
+    "projectedDataPersisted": false,
+    "report": "monthly-display-results.json"
+  },
+  "productionBuild": {
+    "passed": true,
+    "compiler": "next build --webpack",
+    "sourceHashesMatch": true,
+    "verifiedSourceFiles": 21,
+    "log": "build.log"
+  },
+  "reactReview": {
+    "hooks": true,
+    "accessibleLabelAndUniqueDescription": true,
+    "draftPreservation": true,
+    "permissionsAndPendingGuards": true
+  },
+  "diffCheck": {
+    "passed": true,
+    "scope": "isolated correction checkout"
+  },
+  "preservation": {
+    "canonicalRPCUnits": "whole minutes",
+    "newMigrations": 0,
+    "serverCodeChanged": false,
+    "quarterHourRestrictionAdded": false,
+    "productionPaymentsCreated": 0,
+    "troyReconciliationPerformed": false,
+    "productionDeploymentPerformed": false,
+    "originalCheckoutHead": "40fe73c2c678b3f90e9a0066a166f5a2ac1497a3",
+    "originalCheckoutStatusUnchanged": true
+  },
+  "cleanup": {
+    "ownedPreview3198Stopped": true,
+    "ownedDisposableStackStopped": true,
+    "otherServicesTouched": false
+  }
+}

@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
 import { createHouseWorkerFieldResolver } from "@/lib/houseWorkerSearch";
 import type { HousePrepaidState, HousePrepaidSavePatch } from "@/lib/housePrepaid";
+import { formatPrepaidHours, parsePrepaidHours, prepaidHoursInput } from "@/lib/housePrepaidHours";
 import type { Contact, HousePayment, HouseTrackingHouse, HouseTrackingWorker, VendorInvoice } from "@/lib/types";
 import { BusinessButton, BusinessForm, useBusinessPermissions } from "./BusinessPermissions";
 import { SearchableSelect } from "./search/SearchableSelect";
@@ -27,7 +28,7 @@ export default function HousePrepaidPanel({ state, contacts, workers, houses, pa
   const { language, locale, formatDate } = useI18n();
   const text = (fr: string, en: string) => language === "en" ? en : fr;
   const money = (cents: number) => new Intl.NumberFormat(locale, { style: "currency", currency: "EUR" }).format(cents / 100);
-  const hours = (minutes: number) => `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(minutes / 60)} h`;
+  const hours = formatPrepaidHours;
   const [settingsWorkerId, setSettingsWorkerId] = useState("");
   const [settingsSaving, setSettingsSaving] = useState(false);
   const workerSearchFields = useMemo(() => createHouseWorkerFieldResolver(contacts), [contacts]);
@@ -79,7 +80,7 @@ function HousePrepaidSettings({ worker, state, onSave, onPendingChange }: { work
   const text = (fr: string, en: string) => language === "en" ? en : fr;
   const setting = state.settings.find(item => item.workerId === worker.id);
   const [mode, setMode] = useState(setting?.billingMode ?? "hourly");
-  const [minutes, setMinutes] = useState(String(setting?.defaultMinutes ?? 1800));
+  const [hours, setHours] = useState(() => prepaidHoursInput(setting?.defaultMinutes ?? 1800, language));
   const [price, setPrice] = useState(String((setting?.defaultPriceCents ?? 50000) / 100));
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -87,8 +88,9 @@ function HousePrepaidSettings({ worker, state, onSave, onPendingChange }: { work
   return <BusinessForm className="form-grid house-compact-form" pending={saving} onSubmit={event => {
     event.preventDefault();
     if (!onSave || pending.current || !state.canContribute) return;
-    const defaultMinutes = Number(minutes), defaultPriceCents = decimalCents(price);
-    if (!Number.isSafeInteger(defaultMinutes) || defaultMinutes <= 0 || defaultPriceCents === null || defaultPriceCents <= 0) { setMessage(text("Volume et prix doivent être strictement positifs.", "Volume and price must be positive.")); return; }
+    const defaultMinutes = parsePrepaidHours(hours), defaultPriceCents = decimalCents(price);
+    if (defaultMinutes === null || defaultMinutes <= 0) { setMessage(text("Saisissez un volume positif en heures, correspondant à des minutes entières (ex. : 30,5 ou 30 h 01).", "Enter positive hours representing whole minutes (e.g. 30.5 or 30 h 01).")); return; }
+    if (defaultPriceCents === null || defaultPriceCents <= 0) { setMessage(text("Le prix doit être strictement positif.", "The price must be positive.")); return; }
     const patch: HousePrepaidSavePatch = { workerId: worker.id, billingMode: mode, defaultMinutes, defaultPriceCents };
     const signature = JSON.stringify(patch);
     if (attempt.current?.signature !== signature) attempt.current = { signature, requestId: crypto.randomUUID() };
@@ -96,10 +98,18 @@ function HousePrepaidSettings({ worker, state, onSave, onPendingChange }: { work
     void onSave(state.revision, attempt.current.requestId, "settings", patch).then(() => { attempt.current = null; setMessage(text("Mode enregistré côté serveur.", "Mode saved on the server.")); }).catch(() => setMessage(text("Enregistrement non confirmé. Votre saisie est conservée ; réessayez après vérification.", "Save not confirmed. Your draft is preserved; check and retry."))).finally(() => { pending.current = false; setSaving(false); onPendingChange(false); });
   }}>
     <label>{text("Mode de suivi", "Billing mode")}<select name="billingMode" value={mode} onChange={event => setMode(event.target.value as "hourly" | "prepaid")}><option value="hourly">{text("Tarif horaire", "Hourly rate")}</option><option value="prepaid">{text("Forfait prépayé", "Prepaid package")}</option></select></label>
-    {mode === "prepaid" && <><label>{text("Volume du forfait (minutes)", "Package volume (minutes)")}<input name="defaultMinutes" type="number" min="1" step="1" value={minutes} onChange={event => setMinutes(event.target.value)} /></label><label>{text("Prix du forfait (€)", "Package price (€)")}<input name="defaultPrice" type="text" inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} /></label><p className="full muted-line">{text("Le forfait suit toutes les interventions de cet intervenant, y compris les cours antérieurs. Les anciens taux sont conservés comme provenance.", "The package covers this worker’s complete history, including earlier lessons. Historical hourly rates are retained as provenance.")}</p></>}
+    {mode === "prepaid" && <><PrepaidHoursField name="defaultHours" value={hours} onChange={setHours} /><label>{text("Prix du forfait (€)", "Package price (€)")}<input name="defaultPrice" type="text" inputMode="decimal" value={price} onChange={event => setPrice(event.target.value)} /></label><p className="full muted-line">{text("Le forfait suit toutes les interventions de cet intervenant, y compris les cours antérieurs. Les anciens taux sont conservés comme provenance.", "The package covers this worker’s complete history, including earlier lessons. Historical hourly rates are retained as provenance.")}</p></>}
     <BusinessButton permission="write" type="submit" className="primary-button" disabled={!state.canContribute || !onSave || saving}>{text("Enregistrer le mode", "Save mode")}</BusinessButton>
     {message && <p className="full" role="status">{message}</p>}
   </BusinessForm>;
+}
+
+function PrepaidHoursField({ name, value, defaultMinutes, onChange }: { name: string; value?: string; defaultMinutes?: number; onChange?: (value: string) => void }) {
+  const { language } = useI18n();
+  const helpId = useId();
+  const english = language === "en";
+  const label = english ? "Package volume (hours)" : "Volume du forfait (heures)";
+  return <label>{label}<input name={name} type="text" inputMode="decimal" required value={value} defaultValue={defaultMinutes === undefined ? undefined : prepaidHoursInput(defaultMinutes, language)} onChange={onChange ? event => onChange(event.target.value) : undefined} aria-label={label} aria-describedby={helpId} /><span id={helpId} className="muted-line">{english ? "30.5 or 30,5 = 30 h 30. For exact minutes: 30 h 01." : "30,5 ou 30.5 = 30 h 30. À la minute près : 30 h 01."}</span></label>;
 }
 
 function decimalCents(value: string) {
@@ -128,8 +138,9 @@ function HousePrepaidPurchase({ worker, state, houses, payments, invoices, onSav
     {open && <BusinessForm className={`form-grid house-compact-form ${styles.form}`} pending={saving} onSubmit={event => {
       event.preventDefault();
       if (!onSave || pending.current || !state.canContribute) return;
-      const form = new FormData(event.currentTarget), capacityMinutes = Number(form.get("capacityMinutes")), priceCents = decimalCents(String(form.get("price") ?? ""));
-      if (!Number.isSafeInteger(capacityMinutes) || capacityMinutes <= 0 || priceCents === null || priceCents <= 0) { setMessage(text("Volume et prix doivent être strictement positifs.", "Volume and price must be positive.")); return; }
+      const form = new FormData(event.currentTarget), capacityMinutes = parsePrepaidHours(String(form.get("capacityHours") ?? "")), priceCents = decimalCents(String(form.get("price") ?? ""));
+      if (capacityMinutes === null || capacityMinutes <= 0) { setMessage(text("Saisissez un volume positif en heures, correspondant à des minutes entières (ex. : 30,5 ou 30 h 01).", "Enter positive hours representing whole minutes (e.g. 30.5 or 30 h 01).")); return; }
+      if (priceCents === null || priceCents <= 0) { setMessage(text("Le prix doit être strictement positif.", "The price must be positive.")); return; }
       const invoiceId = String(form.get("invoiceId") ?? "");
       const patch: HousePrepaidSavePatch = { workerId: worker.id, capacityMinutes, priceCents, ...(invoiceId ? { invoiceId } : {}) };
       let paymentFields: Omit<NonNullable<HousePrepaidSavePatch["payment"]>, "id"> | undefined;
@@ -152,7 +163,7 @@ function HousePrepaidPurchase({ worker, state, houses, payments, invoices, onSav
       pending.current = true; setSaving(true); setMessage("");
       void onSave(state.revision, attempt.current.requestId, "package", patch).then(() => { attempt.current = null; setOpen(false); }).catch(() => setMessage(text("Paiement et forfait non confirmés. Le même essai peut être rejoué sans duplication.", "Payment and package not confirmed. The same attempt can be retried without duplication."))).finally(() => { pending.current = false; setSaving(false); });
     }}>
-      <label>{text("Volume (minutes)", "Volume (minutes)")}<input name="capacityMinutes" type="number" min="1" step="1" required defaultValue={setting?.defaultMinutes ?? 1800} /></label>
+      <PrepaidHoursField name="capacityHours" defaultMinutes={setting?.defaultMinutes ?? 1800} />
       <label>{text("Prix exact (€)", "Exact price (€)")}<input name="price" type="text" inputMode="decimal" required defaultValue={String((setting?.defaultPriceCents ?? 50000) / 100)} /></label>
       <label>{text("Règlement", "Payment")}<select name="source" value={source} onChange={event => setSource(event.target.value)}><option value="existing">{text("Rattacher un paiement existant", "Link an existing payment")}</option><option value="new">{text("Confirmer un nouveau paiement effectué", "Confirm a new completed payment")}</option></select></label>
       {source === "existing" ? <label>{text("Paiement existant", "Existing payment")}<SearchableSelect name="paymentId" required defaultValue=""><option value="">{text("Choisir", "Choose")}</option>{availablePayments.map(payment => <option key={payment.id} value={payment.id} data-search={[payment.date, formatDate(payment.date), String(payment.amount), money(payment.amount), payment.method, methodLabel(payment.method), payment.id, payment.houseName, payment.workerName, !business?.hiddenFields.some(field => field === "notes" || field === "note") ? payment.note : ""].filter(Boolean).join(" ")} data-secondary={payment.houseName}>{formatDate(payment.date)} · {money(payment.amount)} · {payment.method} · {payment.id}</option>)}</SearchableSelect></label> : <>

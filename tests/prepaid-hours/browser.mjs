@@ -72,7 +72,7 @@ try{
   const {page,panel,requests}=full;
   await panel.getByRole('button',{name:'Renouveler le forfait',exact:true}).click();
   const form=panel.locator('form').last();await form.locator('select[name=source]').selectOption('new');
-  assert.equal(await form.locator('input[name=capacityMinutes]').inputValue(),'1800');assert.equal(await form.locator('input[name=price]').inputValue(),'500');
+  assert.equal(await form.locator('input[name=capacityHours]').inputValue(),'30');assert.equal(await form.locator('input[name=price]').inputValue(),'500');
   await form.locator('input[name=date]').fill('2026-10-26');await form.locator('select[name=houseId]').selectOption('house-a');await form.locator('input[name=confirmed]').check();
   const count=requests.filter(r=>r.path.endsWith('/crm_save_house_prepaid')).length;
   await form.getByRole('button',{name:'Confirmer le forfait payé',exact:true}).dblclick();

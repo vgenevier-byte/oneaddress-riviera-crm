@@ -9,7 +9,12 @@ import { createHash } from 'node:crypto';
 
 assert.equal(process.env.PREPAID_HOURS_TEST_ACK, 'PREPAID_HOURS_LOCAL_ONLY');
 assert.ok(process.env.PREPAID_HOURS_STATUS_FILE, 'Owned local status file required');
-const repo = process.cwd(), root = dirname(process.env.PREPAID_HOURS_STATUS_FILE), app = 'http://127.0.0.1:3197';
+const port = Number(process.env.PREPAID_HOURS_APP_PORT ?? 3197);
+assert.ok([3197, 3198].includes(port), 'Only owned loopback preview ports are permitted');
+const repo = process.cwd(), stackRoot = dirname(process.env.PREPAID_HOURS_STATUS_FILE);
+const root = port === 3197 ? stackRoot : join(stackRoot, 'hours-input-preview');
+mkdirSync(root, { recursive: true, mode: 0o700 });
+const app = `http://127.0.0.1:${port}`;
 const status = JSON.parse(readFileSync(process.env.PREPAID_HOURS_STATUS_FILE, 'utf8'));
 assert.equal(status.API_URL, 'http://127.0.0.1:56031');
 const directory = join(root, 'app'), manifestFile = join(root, 'app.private.json');
@@ -29,7 +34,7 @@ for (const file of ['package.json', 'package-lock.json', 'tsconfig.json', 'next-
 if (!existsSync(join(directory, 'node_modules'))) symlinkSync(join(repo, 'node_modules'), join(directory, 'node_modules'), 'dir');
 const guard = join(root, 'network-guard.cjs');
 const originalGuard = readFileSync(join(repo, 'tests/izord/local-network-guard.cjs'), 'utf8');
-writeFileSync(guard, originalGuard.replaceAll("IZORD_TEST_ACK", "PREPAID_HOURS_TEST_ACK").replaceAll('IZORD_DISPOSABLE_LOCAL_ONLY', 'PREPAID_HOURS_LOCAL_ONLY').replace('new Set([3159, 55431])', 'new Set([3197, 56031, 56032])'), { mode: 0o600 });
+writeFileSync(guard, originalGuard.replaceAll("IZORD_TEST_ACK", "PREPAID_HOURS_TEST_ACK").replaceAll('IZORD_DISPOSABLE_LOCAL_ONLY', 'PREPAID_HOURS_LOCAL_ONLY').replace('new Set([3159, 55431])', `new Set([${port}, 56031, 56032])`), { mode: 0o600 });
 const dev = process.argv.includes('--dev');
 const env = {
   PATH: process.env.PATH, TMPDIR: process.env.TMPDIR, LANG: process.env.LANG || 'en_US.UTF-8',
@@ -38,7 +43,7 @@ const env = {
   NEXT_PUBLIC_SUPABASE_URL: status.API_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: status.ANON_KEY,
 };
 const hashes = {};
-for (const file of ['lib/access/modules.ts','lib/access/collections.json','components/AccessPortal.tsx','components/ModuleWorkspace.tsx','components/CRMApp.tsx','components/HouseTimeExpenseEditor.tsx','components/HousePrepaidPanel.tsx','components/HousePrepaidPanel.module.css','lib/housePrepaid.ts','components/monthlyCharges/MonthlyChargesWorkspace.tsx','components/monthlyCharges/MonthlyChargesWorkspace.module.css','lib/monthlyCharges/client.ts','lib/monthlyCharges/calculations.ts','lib/monthlyCharges/types.ts','lib/houseTracking.ts','lib/types.ts','lib/i18n/catalogs/crm.ts','lib/i18n/catalogs/specialist.ts','app/globals.css','app/charges/page.tsx']) {
+for (const file of ['lib/access/modules.ts','lib/access/collections.json','components/AccessPortal.tsx','components/ModuleWorkspace.tsx','components/CRMApp.tsx','components/HouseTimeExpenseEditor.tsx','components/HousePrepaidPanel.tsx','components/HousePrepaidPanel.module.css','lib/housePrepaid.ts','lib/housePrepaidHours.ts','components/monthlyCharges/MonthlyChargesWorkspace.tsx','components/monthlyCharges/MonthlyChargesWorkspace.module.css','lib/monthlyCharges/client.ts','lib/monthlyCharges/calculations.ts','lib/monthlyCharges/types.ts','lib/houseTracking.ts','lib/types.ts','lib/i18n/catalogs/crm.ts','lib/i18n/catalogs/specialist.ts','app/globals.css','app/charges/page.tsx']) {
   hashes[file] = createHash('sha256').update(readFileSync(join(directory, file))).digest('hex');
 }
 const manifest = { app, directory, sourceHashes: hashes, mode: dev ? 'development' : 'production', status: 'starting', launcherPID: process.pid, serverPID: null, auth: 'real local JWT/RPC', egress: 'loopback only', startedAt: new Date().toISOString() };
@@ -57,7 +62,7 @@ if (!dev) {
   const result = await launch(['build','--webpack'], 'build.private.log');
   if (result.code) { manifest.status = 'build-failed'; save(); throw new Error('Isolated build failed; inspect private build log.'); }
 }
-const running = launch(dev ? ['dev','--webpack','--hostname','127.0.0.1','--port','3197'] : ['start','--hostname','127.0.0.1','--port','3197'], 'server.private.log');
+const running = launch(dev ? ['dev','--webpack','--hostname','127.0.0.1','--port',String(port)] : ['start','--hostname','127.0.0.1','--port',String(port)], 'server.private.log');
 manifest.serverPID = child.pid; save();
 for (let attempt = 0; attempt < 150; attempt++) {
   try { const response = await fetch(app+'/charges', { signal: AbortSignal.timeout(1500) }); if (response.ok) { manifest.status = 'ready'; save(); break; } } catch { /* Starting. */ }

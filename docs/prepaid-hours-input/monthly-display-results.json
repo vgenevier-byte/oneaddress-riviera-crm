@@ -1,0 +1,27 @@
+{
+  "passed": 3,
+  "results": [
+    {
+      "variant": "actual-local-duration",
+      "passed": true,
+      "actualLocalRPCReads": 1,
+      "databaseWrites": 0
+    },
+    {
+      "variant": "exact-minute-projection",
+      "passed": true,
+      "actualLocalRPCReads": 1,
+      "databaseWrites": 0
+    },
+    {
+      "variant": "invalid-projection",
+      "passed": true,
+      "actualLocalRPCReads": 1,
+      "databaseWrites": 0
+    }
+  ],
+  "runtimeErrors": [],
+  "externalRequests": [],
+  "businessWrites": [],
+  "evidence": "Real disposable local Auth/RPC source reads, then in-memory response projections for display-only contract checks. No persistence claim for projected31minutes/invalidfields; production not exercised."
+}
