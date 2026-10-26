@@ -99,6 +99,7 @@ import { useConfirmedForm, type FormSave, type FormSaveResult } from "@/lib/acce
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import HouseWorkerEditor from "./HouseWorkerEditor";
 import HouseTimeExpenseEditor from "./HouseTimeExpenseEditor";
+import HouseTimeSelect from "./HouseTimeSelect";
 import QuickRepliesView from "./QuickRepliesView";
 import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
 import { AddressField } from "./address/AddressField";
@@ -4205,10 +4206,8 @@ function HouseTrackingView({
                   {sortSelectOptions(activeWorkers, worker => worker.contactName, language).map((worker) => <option key={worker.id} value={worker.id} data-search={workerSearchFields(worker).filter(Boolean).join(" ")} data-secondary={worker.role}>{worker.contactName}</option>)}
                 </SearchableSelect>
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.3c48aa2bdf")}<input type="time" step="900" required value={hourDraft.startTime} onChange={(event) => setHourDraft((current) => ({ ...current, startTime: event.target.value }))} />
-              </BusinessLabel>
-              <BusinessLabel>{t("crm.house.5a2af601e7")}<input type="time" step="900" required value={hourDraft.endTime} onChange={(event) => setHourDraft((current) => ({ ...current, endTime: event.target.value }))} />
-              </BusinessLabel>
+              <HouseTimeSelect label={t("crm.house.time.start")} value={hourDraft.startTime} onChange={startTime => setHourDraft(current => ({ ...current, startTime }))} />
+              <HouseTimeSelect label={t("crm.house.time.end")} value={hourDraft.endTime} onChange={endTime => setHourDraft(current => ({ ...current, endTime }))} />
               <BusinessLabel>{t("crm.house.286518b073")}<input type="number" min="0" value={hourDraft.breakMinutes} onChange={(event) => setHourDraft((current) => ({ ...current, breakMinutes: event.target.value }))} />
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.18e4968684")}<input type="text" inputMode="decimal" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />

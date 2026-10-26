@@ -1,6 +1,10 @@
 import type { Catalogue } from "../types";
 
 export const crmMessages: Catalogue = {
+  "crm.house.time.start": {"fr": "Heure de début", "en": "Start time"},
+  "crm.house.time.end": {"fr": "Heure de fin", "en": "End time"},
+  "crm.house.time.hour": {"fr": "Heure", "en": "Hour"},
+  "crm.house.time.minutes": {"fr": "Minutes", "en": "Minutes"},
   "crm.contacts.company.legacyPerson": {"fr": "Fiche historique — confirmer le rattachement", "en": "Historical record — confirm affiliation"},
   "crm.contacts.company.historicalCoordinates": {"fr": "Coordonnées historiques de cette fiche — attribution à l’entreprise ou à l’interlocuteur à confirmer", "en": "Historical contact details on this record — company or personal ownership needs confirmation"},
   "crm.contacts.company.newPerson": {"fr": "Nouvel interlocuteur", "en": "New contact person"},

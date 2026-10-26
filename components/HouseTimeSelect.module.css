@@ -1,0 +1,27 @@
+.time {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.time legend {
+  margin-bottom: 7px;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.parts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.parts label,
+.parts select {
+  min-width: 0;
+}
+
+.parts select {
+  width: 100%;
+}
