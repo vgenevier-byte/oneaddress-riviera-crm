@@ -1,0 +1,13 @@
+# Correctif ciblé des sélecteurs de forfaits
+
+Les cinq listes de fiches de `HousePrepaidPanel` utilisent le composant CRM partagé `SearchableSelect` : intervenant du paramétrage, paiement existant, maison du règlement et les deux listes de factures. Le mode de suivi, le type de règlement et son moyen restent des choix fermés.
+
+La recherche de l’intervenant réutilise `createHouseWorkerFieldResolver` sur les contacts déjà autorisés transmis par le même écran, y compris ses chemins complets et restreints. Les maisons, paiements et factures ajoutent uniquement leurs champs autorisés pertinents à l’index partagé. Toutes les options admissibles restent disponibles à la recherche avant la limite des suggestions. Les filtres métier ne changent pas.
+
+Le texte recherché demeure distinct de l’identifiant canonique sélectionné. Les noms de contrôles, la validation obligatoire, FormData et les blocages d’enregistrement sont conservés. Les clés de requête et de paiement reposent désormais sur le contenu métier normalisé soumis ; une recherche, une sélection identique ou un montant écrit `500,00` au lieu de `500` ne les réinitialisent pas. Le sélecteur externe d’intervenant est désactivé pendant l’enregistrement des paramètres.
+
+Le code applicatif change uniquement dans `components/HousePrepaidPanel.tsx` et la transmission du prop `contacts` dans `components/CRMApp.tsx`. Aucun changement des calculs, du registre, des migrations, des RPC, des droits ou des données de Troy ; aucune reprise supplémentaire ni aucun paiement de production n’est requis.
+
+Validation : 6 tests de callbacks du composant et 9 tests existants du résolveur d’intervenants réussis ; 9 parcours navigateur avec Auth/JWT/RPC réels et données fictives isolées, FR ordinateur et EN mobile, clavier/toucher, entreprises canoniques, accents et fautes légères, résultats lointains dans les cinq listes, droits restreints, rattachement d’un paiement existant, nouveau paiement fictif et relecture après authentification. Le rejeu après une réponse perdue et les doubles clics ne dupliquent ni paiement ni forfait. Aucun appel externe ni erreur navigateur n’a été observé.
+
+TypeScript, lint complet, build de production local et diff-check réussis. Le lint conserve deux avertissements préexistants dans AccessPortal et CRMApp. Les empreintes des deux composants testés correspondent au code final. Les preuves de ces essais sont dans `browser-results.json` ; elles ne constituent pas un parcours CRM authentifié de production. La publication est contrôlée séparément par le SHA complet, READY, les deux alias et leurs pages servies.

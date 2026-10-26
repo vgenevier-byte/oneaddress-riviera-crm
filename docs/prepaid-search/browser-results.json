@@ -1,0 +1,69 @@
+{
+  "passed": 9,
+  "results": [
+    {
+      "name": "worker selector searches132+rows, canonical company despite stale label, accents/inverted names/typo, explicit keyboard IDs",
+      "passed": true
+    },
+    {
+      "name": "settings save blocks the external worker selector and pending fields; double-click sends one canonical settings request",
+      "passed": true
+    },
+    {
+      "name": "existing payment and optional invoice selectors search full long lists; explicit attach preserves payment ID and creates no payment",
+      "passed": true
+    },
+    {
+      "name": "new payment house selector searches address/city/postcode beyond132rows and keeps empty/native IDs until explicit choice",
+      "passed": true
+    },
+    {
+      "name": "actual server commit then lost response: pending controls block edits, query-only/same-ID/reformatted retry retains request and payment IDs without duplicate credit",
+      "passed": true
+    },
+    {
+      "name": "EN mobile owner uses all five searchable selectors with keyboard/touch, reserved payment excluded and no search-only persistence",
+      "passed": true
+    },
+    {
+      "name": "history invoice selector searches complete list and persists the explicit canonical package/invoice link",
+      "passed": true
+    },
+    {
+      "name": "restricted EN mobile hides unauthorized canonical-company and invoice metadata while retaining authorized IDs; reader remains read-only",
+      "passed": true
+    },
+    {
+      "name": "fresh authentication rereads exactly two packages and one new payment, with source durations/legacy rates and hourly worker unchanged",
+      "passed": true
+    }
+  ],
+  "selectors": {
+    "worker": true,
+    "existingPayment": true,
+    "purchaseInvoice": true,
+    "paymentHouse": true,
+    "historyInvoice": true
+  },
+  "fixtureCounts": {
+    "workers": 138,
+    "houses": 135,
+    "targetPayments": 133,
+    "targetInvoices": 134
+  },
+  "targetSourceIndices": {
+    "worker": 137,
+    "house": 134,
+    "paymentWithinWorker": 132,
+    "invoiceWithinWorker": 132,
+    "historyInvoiceWithinWorker": 133
+  },
+  "lostResponseReplay": {
+    "requestIdUnchanged": true,
+    "paymentIdUnchanged": true,
+    "oneNewPaymentPersisted": true
+  },
+  "runtimeErrors": [],
+  "externalRequests": [],
+  "evidence": "Fictitious loopback data; actual Auth/JWT/RPC and server persistence; response loss simulated after actual local commit; Production not mutated"
+}

@@ -4196,7 +4196,7 @@ function HouseTrackingView({
         <BusinessButton className={houseSection === "settings" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("settings")}>{t("crm.house.4ed117e09c")}</BusinessButton>
       </nav>
 
-      <HousePrepaidPanel state={prepaidState} workers={workers} houses={houses} payments={payments} invoices={invoices} workerFilter={workerFilter} showSettings={houseSection === "settings"} error={prepaidError ? prepaidText("Lecture complète ou export des forfaits indisponible. Actualisez avant de poursuivre.", "Complete prepaid balances or export are unavailable. Refresh before continuing.") : ""} onSave={savePrepaid} onRefresh={() => setPrepaidEpoch(value => value + 1)} />
+      <HousePrepaidPanel state={prepaidState} contacts={contacts} workers={workers} houses={houses} payments={payments} invoices={invoices} workerFilter={workerFilter} showSettings={houseSection === "settings"} error={prepaidError ? prepaidText("Lecture complète ou export des forfaits indisponible. Actualisez avant de poursuivre.", "Complete prepaid balances or export are unavailable. Refresh before continuing.") : ""} onSave={savePrepaid} onRefresh={() => setPrepaidEpoch(value => value + 1)} />
 
       {selectedArchivedWorker && selectedArchivedWorkerHistory && houseSection !== "today" && (
         <section className="house-archived-filter-banner" aria-label={t("crm.house.d18c07c8ea", { value1: displayValue(selectedArchivedWorker.contactName) })}>
