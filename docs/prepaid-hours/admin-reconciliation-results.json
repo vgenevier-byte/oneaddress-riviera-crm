@@ -1,0 +1,22 @@
+{
+  "passed": true,
+  "fictitious": true,
+  "productionTouched": false,
+  "authenticAdministrativeConnection": true,
+  "impersonatedSession": false,
+  "sourceChangedRejected": true,
+  "identicalReplayCreatedOnePackage": true,
+  "existingPaymentOnly": true,
+  "sourceBackupPersisted": true,
+  "administrativeChannelPersisted": true,
+  "auditActorNull": true,
+  "summary": {
+    "workerId": "worker-admin-reprise",
+    "paidCents": 50000,
+    "coveredMinutes": 1800,
+    "availableMinutes": 0,
+    "performedMinutes": 1920,
+    "purchasedMinutes": 1800,
+    "uncoveredMinutes": 120
+  }
+}

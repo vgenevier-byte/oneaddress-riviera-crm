@@ -1,0 +1,32 @@
+{
+  "passed": 6,
+  "results": [
+    {
+      "name": "FR desktop first paid package:32h completed,30h covered,2h uncovered,500EUR paid",
+      "passed": true
+    },
+    {
+      "name": "date and house filters leave the global32h/2h balance intact; quarter-hour editor replaces hourly rate",
+      "passed": true
+    },
+    {
+      "name": "EN mobile and restricted reader show the same complete balance without write controls",
+      "passed": true
+    },
+    {
+      "name": "ledger error shows unavailable balance and never a global nothing-to-pay conclusion",
+      "passed": true
+    },
+    {
+      "name": "explicit real-payment confirmation renews once through the actual UI and shows28h available",
+      "passed": true
+    },
+    {
+      "name": "fresh Auth restricted contributor persists renewal, history/payment IDs and hourly worker still has its rate",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": [],
+  "externalRequests": [],
+  "evidence": "Actual local Auth/RPC with fictitious sources; production not exercised"
+}

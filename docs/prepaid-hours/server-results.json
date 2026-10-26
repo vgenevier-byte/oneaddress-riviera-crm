@@ -1,0 +1,59 @@
+{
+  "passed": 13,
+  "results": [
+    {
+      "name": "anonymous/no source access denied; restricted reader cannot mutate or export",
+      "passed": true
+    },
+    {
+      "name": "switch canonical worker to prepaid without rewriting source entries or legacy hourly rate",
+      "passed": true
+    },
+    {
+      "name": "existing500 payment attaches once:30h purchased,32h performed,2h uncovered,zero available",
+      "passed": true
+    },
+    {
+      "name": "restricted global read includes both houses/months; classic hourly worker/payments unchanged",
+      "passed": true
+    },
+    {
+      "name": "reserved payment cannot be changed/deleted by classic RPC or global workspace save",
+      "passed": true
+    },
+    {
+      "name": "second paid package concurrent double-click/retry creates one payment and28h available",
+      "passed": true
+    },
+    {
+      "name": "new authentication reloads persisted package links, global balance and original dates",
+      "passed": true
+    },
+    {
+      "name": "120 quarters consume1800 minutes and exactly50000 cents; linked invoice single economic source",
+      "passed": true
+    },
+    {
+      "name": "expenses independent; consumption stays on actual course months after November payment",
+      "passed": true
+    },
+    {
+      "name": "crossing package boundary, late entry, authorized correction/deletion recompute once",
+      "passed": true
+    },
+    {
+      "name": "different concurrent renewals require fresh revision and cannot duplicate payment credit",
+      "passed": true
+    },
+    {
+      "name": "hidden invoice link is retained and cannot be forged or exported beyond rights",
+      "passed": true
+    },
+    {
+      "name": "permission revocation closes existing JWT reads, writes and replay",
+      "passed": true
+    }
+  ],
+  "realLocalAuthJWT": true,
+  "productionTouched": false
+}

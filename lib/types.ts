@@ -242,6 +242,9 @@ export type HouseTrackingHouse = {
 };
 
 export type HouseTrackingWorker = {
+  billingMode?: "hourly" | "prepaid";
+  prepaidDefaultMinutes?: number;
+  prepaidDefaultPriceCents?: number;
   id: string;
   contactId: string;
   contactName: string;
@@ -260,6 +263,8 @@ export type HouseTrackingWorker = {
 };
 
 export type HouseTimeEntry = {
+  billingMode?: "hourly" | "prepaid";
+  prepaid?: import("./housePrepaid").HousePrepaidValue;
   id: string;
   houseId: string;
   houseName: string;
@@ -280,6 +285,7 @@ export type HouseTimeEntry = {
 };
 
 export type HousePayment = {
+  prepaidPackageId?: string;
   id: string;
   houseId: string;
   houseName: string;

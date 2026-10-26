@@ -1,0 +1,15 @@
+.panel { display: grid; gap: 1rem; }
+.header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: .75rem; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 0; }
+.metrics div { padding: .85rem; background: #f5f7f9; border: 1px solid #e0e6eb; border-radius: .75rem; }
+.metrics dt { color: #586775; font-size: .85rem; }
+.metrics dd { margin: .3rem 0 0; font-size: 1.25rem; font-weight: 700; }
+.notice { padding: .85rem 1rem; border-radius: .75rem; background: #fff5df; color: #6b4805; }
+.history { display: grid; gap: .65rem; margin-top: .8rem; }
+.history article { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; padding: .75rem; border-bottom: 1px solid #e0e6eb; }
+.history article div { display: grid; gap: .3rem; }
+.form { padding: 1rem; border: 1px solid #d9e1e7; border-radius: .75rem; }
+.checkbox { display: flex !important; flex-direction: row !important; align-items: flex-start; gap: .6rem; }
+.checkbox input { width: auto !important; margin-top: .2rem; }
+.reference { font-size: .75rem; overflow-wrap: anywhere; color: #657584; }
+@media (max-width: 650px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics dd { font-size: 1.1rem; } }

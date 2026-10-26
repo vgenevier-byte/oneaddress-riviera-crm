@@ -53,7 +53,11 @@ export function getHouseTimeHours(entry: Pick<HouseTimeEntry, "startTime" | "end
   return Math.max((endTotal - startTotal - breakMinutes) / 60, 0);
 }
 
-export function getHouseTimeAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate">) {
+export function getHouseTimeAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate" | "billingMode" | "prepaid">) {
+  if (entry.billingMode === "prepaid") {
+    if (!entry.prepaid || !Number.isSafeInteger(entry.prepaid.amountCents)) return 0;
+    return entry.prepaid.amountCents / 100;
+  }
   return getHouseTimeHours(entry) * Number(entry.hourlyRate || 0);
 }
 
@@ -62,7 +66,7 @@ export function getHouseTimeExpenseAmount(entry: Pick<HouseTimeEntry, "expenseAm
 }
 
 /** Keep the historical hours calculation unchanged, then add the intervention's expense once. */
-export function getHouseTimeTotalAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate" | "expenseAmount">) {
+export function getHouseTimeTotalAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate" | "expenseAmount" | "billingMode" | "prepaid">) {
   return getHouseTimeAmount(entry) + getHouseTimeExpenseAmount(entry);
 }
 
@@ -110,6 +114,10 @@ export function getHouseTrackingWorkerHistorySummary(
   const hours = workerEntries.reduce((sum, entry) => sum + getHouseTimeHours(entry), 0);
   const due = workerEntries.reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
   const paid = workerPayments.reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+  const prepaid = workerEntries.some(entry => entry.billingMode === "prepaid") || workerPayments.some(payment => payment.prepaidPackageId);
+  const billableDue = prepaid ? workerEntries.reduce((sum, entry) => sum +
+    (entry.billingMode === "prepaid" ? getHouseTimeExpenseAmount(entry) : getHouseTimeTotalAmount(entry)), 0) : due;
+  const billablePaid = prepaid ? workerPayments.filter(payment => !payment.prepaidPackageId).reduce((sum, payment) => sum + Number(payment.amount || 0), 0) : paid;
 
   return {
     timeEntries: workerEntries.length,
@@ -117,6 +125,7 @@ export function getHouseTrackingWorkerHistorySummary(
     hours,
     due,
     paid,
-    balance: due - paid
+    balance: billableDue - billablePaid,
+    ...(prepaid ? { prepaid: true, uncoveredMinutes: workerEntries.reduce((sum, entry) => sum + (entry.prepaid?.uncoveredMinutes ?? 0), 0) } : {})
   };
 }

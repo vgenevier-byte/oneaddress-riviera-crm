@@ -13,7 +13,7 @@ export default function HouseWorkerEditor({ worker, onSave, onCancel, onConfirme
   onCancel: () => void;
   onConfirmed: (rate: number) => void;
 }) {
-  const {t} = useI18n();
+  const {t,language} = useI18n();
 
   const business = useBusinessPermissions();
   const confirmation = useConfirmedForm(business?.markDirty);
@@ -38,9 +38,9 @@ export default function HouseWorkerEditor({ worker, onSave, onCancel, onConfirme
           if (!newerDraft) onConfirmed(hourlyRate);
         });
       }}>
-      <label>{t("modules.houseWorkerEditor.defaultHourlyRate")}
+      {worker.billingMode === "prepaid" ? <p className="full muted-line">{language === "en" ? "Prepaid package. Volume, price and global credit are managed in the prepaid tracking panel. The historical hourly rate is retained as provenance." : "Forfait prépayé. Le volume, le prix et le crédit global sont gérés dans le suivi des forfaits. L’ancien taux horaire est conservé comme provenance."}</p> : <label>{t("modules.houseWorkerEditor.defaultHourlyRate")}
         <input name="hourlyRate" type="text" inputMode="decimal" value={rate} onChange={event => setRate(event.target.value)} autoFocus />
-      </label>
+      </label>}
       {canEditNotes && <label>{t("modules.tasksWorkspace.notes")}
         <textarea name="notes" value={notes} maxLength={4000} onChange={event => setNotes(event.target.value)} />
       </label>}

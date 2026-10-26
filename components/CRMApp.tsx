@@ -98,6 +98,8 @@ import { BusinessForm, BusinessLabel, BusinessButton, BusinessSelect, useBusines
 import { useConfirmedForm, type FormSave, type FormSaveResult } from "@/lib/access/useConfirmedForm";
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import HouseWorkerEditor from "./HouseWorkerEditor";
+import HousePrepaidPanel, { type SaveHousePrepaid } from "./HousePrepaidPanel";
+import { buildHousePrepaidLedger, type HousePrepaidState, type HousePrepaidAllocation } from "@/lib/housePrepaid";
 import HouseTimeExpenseEditor from "./HouseTimeExpenseEditor";
 import HouseTimeSelect from "./HouseTimeSelect";
 import QuickRepliesView from "./QuickRepliesView";
@@ -608,6 +610,9 @@ function normalizeHouseTrackingWorker(value: unknown): HouseTrackingWorker | nul
     contactName: String(raw.contactName || "Intervenant à compléter"),
     role: String(raw.role || "Intervenant"),
     hourlyRate: hourlyRate !== undefined && Number.isFinite(hourlyRate) ? hourlyRate : undefined,
+    ...(raw.billingMode === "prepaid" || raw.billingMode === "hourly" ? { billingMode: raw.billingMode } : {}),
+    ...(Number.isSafeInteger(raw.prepaidDefaultMinutes) ? { prepaidDefaultMinutes: Number(raw.prepaidDefaultMinutes) } : {}),
+    ...(Number.isSafeInteger(raw.prepaidDefaultPriceCents) ? { prepaidDefaultPriceCents: Number(raw.prepaidDefaultPriceCents) } : {}),
     status: raw.status === "Inactif" ? "Inactif" : "Actif",
     notes: String(raw.notes || ""),
     createdAt: String(raw.createdAt || new Date().toISOString()),
@@ -635,6 +640,7 @@ function normalizeHouseTimeEntry(value: unknown): HouseTimeEntry | null {
     endTime: String(raw.endTime || ""),
     breakMinutes: Number.isFinite(breakMinutes) ? breakMinutes : 0,
     hourlyRate: Number.isFinite(hourlyRate) ? hourlyRate : 0,
+    ...(raw.billingMode === "prepaid" ? { billingMode: "prepaid" as const, prepaid: raw.prepaid as HouseTimeEntry["prepaid"] } : {}),
     note: String(raw.note || ""),
     ...(Object.hasOwn(raw, "expenseAmount") ? { expenseAmount: getHouseTimeExpenseAmount(raw as HouseTimeEntry) } : {}),
     ...(Object.hasOwn(raw, "expenseNote") ? { expenseNote: String(raw.expenseNote || "") } : {}),
@@ -655,6 +661,7 @@ function normalizeHousePayment(value: unknown): HousePayment | null {
 
   return {
     id: String(raw.id || makeId("payment")),
+    ...(typeof raw.prepaidPackageId === "string" ? { prepaidPackageId: raw.prepaidPackageId } : {}),
     houseId: String(raw.houseId || ""),
     houseName: String(raw.houseName || "Maison"),
     workerId: String(raw.workerId || ""),
@@ -3528,6 +3535,8 @@ function HouseTrackingView({
   workers,
   timeEntries,
   payments,
+  invoices,
+  onSavePrepaid,
   onAddHouse,
   onUpdateHouse,
   onDeleteHouse,
@@ -3550,6 +3559,8 @@ function HouseTrackingView({
   workers: HouseTrackingWorker[];
   timeEntries: HouseTimeEntry[];
   payments: HousePayment[];
+  invoices?: VendorInvoice[];
+  onSavePrepaid?: SaveHousePrepaid;
   onAddHouse: (house: HouseTrackingHouse) => FormSave;
   onUpdateHouse?: (house: HouseTrackingHouse) => FormSave;
   onDeleteHouse: (id: string) => void;
@@ -3572,6 +3583,47 @@ function HouseTrackingView({
   const business = useBusinessPermissions();
   const canEditTimeExpenses = access ? access.fullAccess || access.modules.houseTracking?.level === "contribute" : business?.write !== false;
   const { language } = useI18n();
+  const prepaidText = (fr: string, en: string) => language === "en" ? en : fr;
+  const beginPrepaidOperation = useScopedOperations("houseTracking");
+  const [prepaidState, setPrepaidState] = useState<HousePrepaidState | null>(null);
+  const [prepaidError, setPrepaidError] = useState("");
+  const [prepaidEpoch, setPrepaidEpoch] = useState(0);
+  useEffect(() => {
+    let live = true;
+    void (async () => {
+      await Promise.resolve();
+      if (!live) return;
+      setPrepaidState(null); setPrepaidError("");
+      try {
+        const op = await beginPrepaidOperation();
+        const result = await op.run(() => op.client.rpc("crm_house_prepaid_state"));
+        if (result.error || !result.data || result.data.complete !== true || !Array.isArray(result.data.allocations) || !Array.isArray(result.data.summaries)) throw new Error("prepaid_read_unavailable");
+        if (live) setPrepaidState(result.data as HousePrepaidState);
+      } catch (error) {
+        if (live && !isCancelled(error)) setPrepaidError("prepaid_read_unavailable");
+      }
+    })();
+    return () => { live = false; };
+  }, [beginPrepaidOperation, timeEntries, payments, workers, prepaidEpoch]);
+  const prepaidAllocationById = useMemo(() => new Map(prepaidState?.allocations.map(item => [item.entryId, item]) ?? []), [prepaidState]);
+  const prepaidWorkerIds = useMemo(() => new Set([
+    ...workers.filter(worker => worker.billingMode === "prepaid").map(worker => worker.id),
+    ...(prepaidState?.settings.filter(setting => setting.billingMode === "prepaid").map(setting => setting.workerId) ?? [])
+  ]), [workers, prepaidState]);
+  const reservedPaymentIds = useMemo(() => new Set([
+    ...payments.filter(payment => payment.prepaidPackageId).map(payment => payment.id),
+    ...(prepaidState?.packages.map(pack => pack.paymentId) ?? [])
+  ]), [payments, prepaidState]);
+  const prepaidAmount = (entry: HouseTimeEntry) => prepaidWorkerIds.has(entry.workerId)
+    ? (prepaidAllocationById.get(entry.id)?.amountCents ?? entry.prepaid?.amountCents ?? 0) / 100 : getHouseTimeAmount(entry);
+  const entryAmount = (entry: HouseTimeEntry) => prepaidAmount(entry) + getHouseTimeExpenseAmount(entry);
+  const prepaidEntryKnown = (entry: HouseTimeEntry) => !prepaidWorkerIds.has(entry.workerId) || prepaidAllocationById.has(entry.id) || Boolean(entry.prepaid);
+  const unpaidAmount = (entry: HouseTimeEntry) => prepaidWorkerIds.has(entry.workerId) ? getHouseTimeExpenseAmount(entry) : getHouseTimeTotalAmount(entry);
+  const savePrepaid: SaveHousePrepaid | undefined = onSavePrepaid ? async (...args) => {
+    const saved = await onSavePrepaid(...args);
+    setPrepaidState(saved); setPrepaidError("");
+    return saved;
+  } : undefined;
   const [editingHouse, setEditingHouse] = useState<HouseTrackingHouse | null>(null);
   const houseConfirmation = useConfirmedForm(business?.markDirty);
   const houseDraftId = useRef<string | null>(null);
@@ -3768,7 +3820,7 @@ function HouseTrackingView({
 
     selectedWorkerIds.forEach((workerId) => {
       let availablePaid = payments
-        .filter((payment) => payment.workerId === workerId)
+        .filter((payment) => payment.workerId === workerId && !reservedPaymentIds.has(payment.id))
         .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
       const orderedDebts = timeEntries
@@ -3789,7 +3841,7 @@ function HouseTrackingView({
         });
 
       orderedDebts.forEach((entry) => {
-        const debt = Math.max(getHouseTimeTotalAmount(entry), 0);
+        const debt = Math.max(unpaidAmount(entry), 0);
         const paidForThisDebt = Math.min(debt, Math.max(availablePaid, 0));
 
         if (selectedIds.has(entry.id)) {
@@ -3807,11 +3859,16 @@ function HouseTrackingView({
   const visiblePaymentEntries = showAllPaymentsHistory ? filteredPayments : filteredPayments.slice(0, 7);
 
   const totalHours = filteredEntries.reduce((sum, entry) => sum + getHouseTimeHours(entry), 0);
-  const totalDue = filteredEntries.reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
+  const totalDue = filteredEntries.reduce((sum, entry) => sum + unpaidAmount(entry), 0);
   const totalPaid = getAutoAllocatedPaidForSelectedEntries(filteredEntries);
   const totalBalance = totalDue - totalPaid;
+  const selectedPrepaidUncovered = (prepaidState?.summaries ?? []).filter(summary => workerFilter === "Tous" || summary.workerId === workerFilter).reduce((sum, summary) => sum + summary.uncoveredMinutes, 0);
+  const selectedConsumption = filteredEntries.reduce((sum, entry) => sum + entryAmount(entry), 0);
 
-  const currentRate = parseHouseHourlyRate(hourDraft.hourlyRate);
+  const draftPrepaid = prepaidWorkerIds.has(hourDraft.workerId);
+  const draftSetting = prepaidState?.settings.find(setting => setting.workerId === hourDraft.workerId);
+  const draftSummary = prepaidState?.summaries.find(summary => summary.workerId === hourDraft.workerId);
+  const currentRate = draftPrepaid ? 0 : parseHouseHourlyRate(hourDraft.hourlyRate);
   const currentExpense = parseHouseExpenseAmount(hourDraft.expenseAmount);
   const previewEntry = {
     startTime: hourDraft.startTime,
@@ -3821,15 +3878,24 @@ function HouseTrackingView({
     expenseAmount: currentExpense ?? 0
   };
   const previewHours = getHouseTimeHours(previewEntry);
-  const previewAmount = getHouseTimeAmount(previewEntry);
-  const previewTotal = getHouseTimeTotalAmount(previewEntry);
+  let previewAllocation: HousePrepaidAllocation | undefined;
+  if (draftPrepaid && prepaidState) {
+    try {
+      previewAllocation = buildHousePrepaidLedger(prepaidState.settings, prepaidState.packages, [...timeEntries, {
+        ...previewEntry, id: "prepaid-preview", houseId: hourDraft.houseId, houseName: "", workerId: hourDraft.workerId,
+        workerName: "", date: hourDraft.date, createdAt: new Date().toISOString()
+      }]).allocations.find(item => item.entryId === "prepaid-preview");
+    } catch { /* An incomplete time draft is not saved or valued. */ }
+  }
+  const previewAmount = draftPrepaid ? (previewAllocation?.amountCents ?? 0) / 100 : getHouseTimeAmount(previewEntry);
+  const previewTotal = previewAmount + (currentExpense ?? 0);
 
   const balanceRows = workers
     .map((worker) => {
       const workerEntries = filteredEntries.filter((entry) => entry.workerId === worker.id);
 
       const hours = workerEntries.reduce((sum, entry) => sum + getHouseTimeHours(entry), 0);
-      const due = workerEntries.reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
+      const due = workerEntries.reduce((sum, entry) => sum + unpaidAmount(entry), 0);
       const paid = getAutoAllocatedPaidForSelectedEntries(workerEntries);
       const balance = due - paid;
 
@@ -3932,6 +3998,7 @@ function HouseTrackingView({
     if (!house) return window.alert(dialogT("crm.house.b480a1ac0e"));
     if (!worker) return window.alert(dialogT("crm.house.448f15e3f4"));
     if (previewHours <= 0) return window.alert(dialogT("crm.house.5e7f7eb62a"));
+    if (draftPrepaid && !prepaidState) { setRateError(prepaidText("Actualisez le solde global avant d’enregistrer.", "Refresh the global balance before saving.")); return; }
     if (currentRate === null) { setRateError(screenNotice("crm.house.d09ba721d3")); return; }
     setRateError("");
     if (currentExpense === null) { setExpenseError(true); return; }
@@ -3947,7 +4014,7 @@ function HouseTrackingView({
       startTime: hourDraft.startTime,
       endTime: hourDraft.endTime,
       breakMinutes: Number(hourDraft.breakMinutes || 0),
-      hourlyRate: currentRate,
+      hourlyRate: draftPrepaid ? worker.hourlyRate ?? 0 : currentRate,
       expenseAmount: currentExpense,
       expenseNote: hourDraft.expenseNote.trim(),
       note: hourDraft.note.trim(),
@@ -3988,8 +4055,13 @@ function HouseTrackingView({
 
   async function exportHouseCsv() {
     if(business){try{await business.check();}catch{return;}}
+    if (!prepaidState) { setPrepaidError(prepaidText("Actualisez les forfaits avant l’export.", "Refresh prepaid packages before exporting.")); return; }
+    const exportOperation = await beginPrepaidOperation();
+    const exportCheck = await exportOperation.run(() => exportOperation.client.rpc("crm_house_prepaid_state", { p_export: true }));
+    if (exportCheck.error) { setPrepaidError(prepaidText("Export non autorisé ou non confirmé.", "Export not authorized or not confirmed.")); return; }
+    const exportAllocations = new Map<string, HousePrepaidAllocation>((exportCheck.data as HousePrepaidState).allocations.map(item => [item.entryId, item]));
     const rows = [
-      ["csv.type", "csv.date", "csv.house", "csv.worker", "csv.role", "csv.start", "csv.end", "csv.break", "csv.hours", "csv.rate", "hoursAmount", "expenseAmount", "totalDue", "csv.paid", "csv.method", "csv.note", "reason"].map(key => t(`crm.house.expenses.${key}`)),
+      ["csv.type", "csv.date", "csv.house", "csv.worker", "csv.role", "csv.start", "csv.end", "csv.break", "csv.hours", "csv.rate", "hoursAmount", "expenseAmount", "totalDue", "csv.paid", "csv.method", "csv.note", "reason"].map(key => key === "totalDue" && prepaidWorkerIds.size > 0 ? prepaidText("Consommation des heures + frais distincts", "Lesson consumption + separate expenses") : t(`crm.house.expenses.${key}`)).concat([prepaidText("Mode", "Mode"), prepaidText("Minutes couvertes", "Covered minutes"), prepaidText("Minutes à couvrir", "Uncovered minutes"), prepaidText("Valorisation indicative non couverte (€)", "Indicative uncovered value (€)"), prepaidText("Forfait / paiement réservé", "Package / reserved payment")]),
       ...filteredEntries.map((entry) => {
         const worker = workers.find((item) => item.id === entry.workerId);
         return [
@@ -4002,14 +4074,19 @@ function HouseTrackingView({
           entry.endTime,
           String(entry.breakMinutes),
           String(getHouseTimeHours(entry)),
-          String(entry.hourlyRate),
-          getHouseTimeAmount(entry).toFixed(2),
+          prepaidWorkerIds.has(entry.workerId) ? "" : String(entry.hourlyRate),
+          (prepaidWorkerIds.has(entry.workerId) ? (exportAllocations.get(entry.id)?.amountCents ?? 0) / 100 : getHouseTimeAmount(entry)).toFixed(2),
           getHouseTimeExpenseAmount(entry).toFixed(2),
-          getHouseTimeTotalAmount(entry).toFixed(2),
+          ((prepaidWorkerIds.has(entry.workerId) ? (exportAllocations.get(entry.id)?.amountCents ?? 0) / 100 : getHouseTimeAmount(entry)) + getHouseTimeExpenseAmount(entry)).toFixed(2),
           "",
           "",
           entry.note || "",
-          entry.expenseNote || ""
+          entry.expenseNote || "",
+          prepaidWorkerIds.has(entry.workerId) ? "prepaid" : "hourly",
+          String(exportAllocations.get(entry.id)?.coveredMinutes ?? ""),
+          String(exportAllocations.get(entry.id)?.uncoveredMinutes ?? ""),
+          exportAllocations.has(entry.id) ? ((exportAllocations.get(entry.id)?.uncoveredCents ?? 0) / 100).toFixed(2) : "",
+          exportAllocations.get(entry.id)?.allocations.map(item => item.packageId).join(" | ") ?? ""
         ];
       }),
       ...filteredPayments.map((payment) => {
@@ -4031,7 +4108,8 @@ function HouseTrackingView({
           payment.amount.toFixed(2),
           screen.enum(payment.method),
           payment.note || "",
-          ""
+          "", "", "", "", "",
+          payment.prepaidPackageId || prepaidState.packages.find(pack => pack.paymentId === payment.id)?.id || ""
         ];
       })
     ];
@@ -4061,8 +4139,10 @@ function HouseTrackingView({
           <StatCard label={t("crm.house.2aa022f972")} value={formatHours(totalHours)} caption={t("crm.house.7b4c244221")} />
           <StatCard label={t("crm.house.f86724b3a3")} value={screen.money(totalDue, 2)} caption={t("crm.house.986f5333cf")} />
           <StatCard label={t("crm.house.2542792ee0")} value={screen.money(totalPaid, 2)} caption={t("crm.house.a986ecc855")} />
-          <StatCard label={t("crm.house.caa3596424")} value={screen.balance(totalBalance)} caption={t("crm.house.efd45db922")} />
+          <StatCard label={t("crm.house.caa3596424")} value={prepaidWorkerIds.size > 0 && !prepaidState ? "—" : selectedPrepaidUncovered > 0 ? `${formatHours(selectedPrepaidUncovered / 60)} ${prepaidText("à couvrir", "to cover")}${totalBalance > 0 ? ` · ${screen.money(totalBalance, 2)}` : ""}` : screen.balance(totalBalance)} caption={prepaidText("Solde horaire et frais distincts", "Hourly balance and separate expenses")} />
         </div>
+
+        {prepaidWorkerIds.size > 0 && <p className="muted-line">{prepaidText("Consommation de la période", "Period consumption")} : {prepaidState ? screen.money(selectedConsumption, 2) : "—"}. {prepaidText("Les heures non couvertes sont valorisées à titre indicatif ; elles ne sont pas une dette facturée à l’heure.", "Uncovered hours have an indicative value; they are not an hourly invoice debt.")}</p>}
 
         <div className="house-filter-row">
           <BusinessLabel>{t("crm.house.f12d68908f")}<input
@@ -4116,6 +4196,8 @@ function HouseTrackingView({
         <BusinessButton className={houseSection === "settings" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("settings")}>{t("crm.house.4ed117e09c")}</BusinessButton>
       </nav>
 
+      <HousePrepaidPanel state={prepaidState} workers={workers} houses={houses} payments={payments} invoices={invoices} workerFilter={workerFilter} showSettings={houseSection === "settings"} error={prepaidError ? prepaidText("Lecture complète ou export des forfaits indisponible. Actualisez avant de poursuivre.", "Complete prepaid balances or export are unavailable. Refresh before continuing.") : ""} onSave={savePrepaid} onRefresh={() => setPrepaidEpoch(value => value + 1)} />
+
       {selectedArchivedWorker && selectedArchivedWorkerHistory && houseSection !== "today" && (
         <section className="house-archived-filter-banner" aria-label={t("crm.house.d18c07c8ea", { value1: displayValue(selectedArchivedWorker.contactName) })}>
           <div>
@@ -4125,7 +4207,7 @@ function HouseTrackingView({
             </div>
             <span>{t("crm.house.d401c40989")}{" "}{selectedArchivedWorker.role}</span>
             <small>
-              {selectedArchivedWorkerHistory.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(selectedArchivedWorkerHistory.hours)} · {selectedArchivedWorkerHistory.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(selectedArchivedWorkerHistory.paid, 2)}{" "}{t("crm.house.23cabccc65")}{" "}{screen.balance(selectedArchivedWorkerHistory.balance)}
+              {selectedArchivedWorkerHistory.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(selectedArchivedWorkerHistory.hours)} · {selectedArchivedWorkerHistory.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(selectedArchivedWorkerHistory.paid, 2)}{" "}{t("crm.house.23cabccc65")}{" "}{selectedArchivedWorkerHistory.prepaid && (selectedArchivedWorkerHistory.uncoveredMinutes ?? 0) > 0 ? `${formatHours((selectedArchivedWorkerHistory.uncoveredMinutes ?? 0) / 60)} ${prepaidText("à couvrir", "to cover")} · ${screen.balance(selectedArchivedWorkerHistory.balance)}` : screen.balance(selectedArchivedWorkerHistory.balance)}
             </small>
           </div>
           <div className="house-archived-filter-actions">
@@ -4155,7 +4237,7 @@ function HouseTrackingView({
             <div className="house-mini-panel">
               <p className="eyebrow" data-semantic-text={"À payer"}>{t("crm.house.f86724b3a3")}</p>
               {balanceRows.filter((row) => row.balance > 0 && activeWorkerIds.has(row.worker.id)).length === 0 ? (
-                <p className="muted-line">{t("crm.house.ecd02a3c6a")}</p>
+                <p className="muted-line">{prepaidWorkerIds.size > 0 && !prepaidState ? prepaidText("Solde global en cours de lecture.", "Loading global balance.") : selectedPrepaidUncovered > 0 ? prepaidText("Des heures restent à couvrir par un renouvellement de forfait.", "Some hours still need a package renewal.") : t("crm.house.ecd02a3c6a")}</p>
               ) : balanceRows.filter((row) => row.balance > 0 && activeWorkerIds.has(row.worker.id)).slice(0, 6).map((row) => (
                 <article className="mini-row house-compact-row" key={row.worker.id} data-notification-target={`house-worker-${row.worker.id}`}>
                   <div>
@@ -4210,8 +4292,8 @@ function HouseTrackingView({
               <HouseTimeSelect label={t("crm.house.time.end")} value={hourDraft.endTime} onChange={endTime => setHourDraft(current => ({ ...current, endTime }))} />
               <BusinessLabel>{t("crm.house.286518b073")}<input type="number" min="0" value={hourDraft.breakMinutes} onChange={(event) => setHourDraft((current) => ({ ...current, breakMinutes: event.target.value }))} />
               </BusinessLabel>
-              <BusinessLabel>{t("crm.house.18e4968684")}<input type="text" inputMode="decimal" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />
-              </BusinessLabel>
+              {draftPrepaid ? <p className="muted-line full">{prepaidText("Forfait prépayé", "Prepaid package")} : {draftSetting ? `${formatHours(draftSetting.defaultMinutes / 60)} / ${screen.money(draftSetting.defaultPriceCents / 100, 2)}` : "—"} · {prepaidText("Crédit global disponible", "Global available credit")} : {draftSummary ? formatHours(draftSummary.availableMinutes / 60) : "—"}</p> : <BusinessLabel>{t("crm.house.18e4968684")}<input type="text" inputMode="decimal" value={hourDraft.hourlyRate} onChange={(event) => setHourDraft((current) => ({ ...current, hourlyRate: event.target.value }))} />
+              </BusinessLabel>}
               <BusinessLabel>{t("crm.house.d8da2c49df")}<input value={hourDraft.note} onChange={(event) => setHourDraft((current) => ({ ...current, note: event.target.value }))} placeholder={t("crm.house.3189d156a1")} />
               </BusinessLabel>
               <BusinessLabel>{t("crm.house.expenses.amount")}<input name="expenseAmount" type="text" inputMode="decimal" value={hourDraft.expenseAmount} aria-invalid={expenseError} onChange={(event) => setHourDraft((current) => ({ ...current, expenseAmount: event.target.value }))} />
@@ -4224,9 +4306,10 @@ function HouseTrackingView({
                 {expenseError && <p role="alert">{t("crm.house.expenses.invalid")}</p>}
                 <ConfirmedFormMessage message={hourConfirmation.message} />
                 <p>{t("crm.house.0c61feeeed")} <strong>{formatHours(previewHours)}</strong></p>
-                <p>{t("crm.house.expenses.hoursAmount")}: <strong>{currentRate === null ? t("crm.house.8fbded43f0") : screen.money(previewAmount, 2)}</strong></p>
+                <p>{t("crm.house.expenses.hoursAmount")}: <strong>{draftPrepaid && !previewAllocation ? "—" : currentRate === null ? t("crm.house.8fbded43f0") : screen.money(previewAmount, 2)}</strong></p>
                 <p>{t("crm.house.expenses.expenseAmount")}: <strong>{currentExpense === null ? "—" : screen.money(currentExpense, 2)}</strong></p>
-                <p>{t("crm.house.expenses.totalDue")}: <strong>{currentRate === null || currentExpense === null ? "—" : screen.money(previewTotal, 2)}</strong></p>
+                {draftPrepaid && previewAllocation && <p>{formatHours(previewAllocation.coveredMinutes / 60)} {prepaidText("couvertes", "covered")} · {formatHours(previewAllocation.uncoveredMinutes / 60)} {prepaidText("à couvrir (valorisation indicative)", "to cover (indicative value)")}</p>}
+                <p>{draftPrepaid ? prepaidText("Consommation + frais distincts", "Consumption + separate expenses") : t("crm.house.expenses.totalDue")}: <strong>{currentRate === null || currentExpense === null ? "—" : screen.money(previewTotal, 2)}</strong></p>
               </div>
               <BusinessButton permission="write" className="primary-button planning-entry-submit" type="submit">{t("crm.house.36b6df45c3")}</BusinessButton>
             </BusinessForm>
@@ -4244,7 +4327,8 @@ function HouseTrackingView({
                       <strong>{entry.workerName}</strong>
                       {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
                       <span>{entry.date} · {entry.houseName} · {entry.startTime}{" "}{t("crm.house.b3fc9de526")}{" "}{entry.endTime} · {formatHours(getHouseTimeHours(entry))}</span>
-                      <p className="muted-line">{t("crm.house.expenses.hoursAmount")}: {screen.money(getHouseTimeAmount(entry), 2)} · {t("crm.house.expenses.expenseAmount")}: {screen.money(getHouseTimeExpenseAmount(entry), 2)} · <strong>{t("crm.house.expenses.totalDue")}: {screen.money(getHouseTimeTotalAmount(entry), 2)}</strong></p>
+                      {prepaidWorkerIds.has(entry.workerId) && <p className="muted-line">{prepaidText("Forfait prépayé", "Prepaid package")} · {prepaidEntryKnown(entry) ? <>{formatHours((prepaidAllocationById.get(entry.id)?.coveredMinutes ?? entry.prepaid?.coveredMinutes ?? 0) / 60)} {prepaidText("couvertes", "covered")} · {formatHours((prepaidAllocationById.get(entry.id)?.uncoveredMinutes ?? entry.prepaid?.uncoveredMinutes ?? 0) / 60)} {prepaidText("à couvrir (indicatif)", "to cover (indicative)")}</> : prepaidText("Affectation indisponible", "Allocation unavailable")}</p>}
+                      <p className="muted-line">{t("crm.house.expenses.hoursAmount")}: {prepaidEntryKnown(entry) ? screen.money(prepaidAmount(entry), 2) : "—"} · {t("crm.house.expenses.expenseAmount")}: {screen.money(getHouseTimeExpenseAmount(entry), 2)} · <strong>{prepaidWorkerIds.has(entry.workerId) ? prepaidText("Consommation + frais distincts", "Consumption + separate expenses") : t("crm.house.expenses.totalDue")}: {prepaidEntryKnown(entry) ? screen.money(entryAmount(entry), 2) : "—"}</strong></p>
                       {entry.expenseNote && <p className="muted-line" style={{ overflowWrap: "anywhere" }}>{t("crm.house.expenses.reason")}: {entry.expenseNote}</p>}
                     </div>
                     <div className="house-worker-actions">
@@ -4311,9 +4395,10 @@ function HouseTrackingView({
                   <TaskSourceActions reference={{type:"staff_payment",id:payment.id}} title="Contrôler le paiement enregistré" />
                     <strong>{payment.workerName}</strong>
                     {isArchivedWorker(payment.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
+                    {reservedPaymentIds.has(payment.id) && <span>{prepaidText("Règlement réservé au forfait prépayé", "Payment reserved for the prepaid package")}</span>}
                     <span>{payment.date} · {payment.houseName} · {screen.money(payment.amount, 2)} · {label(payment.method, "crm")}</span>
                   </div>
-                  <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.5bcaf17712")) && onDeletePayment(payment.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
+                  <BusinessButton permission="remove" className="danger-link" type="button" disabled={reservedPaymentIds.has(payment.id)} onClick={() => window.confirm(dialogT("crm.house.5bcaf17712")) && onDeletePayment(payment.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
                 </article>
               ))}
             </div>
@@ -4395,7 +4480,7 @@ function HouseTrackingView({
                       <strong>{worker.contactName}</strong>
                       <TaskSourceActions reference={{type:"worker",id:worker.id}} title="Vérifier le dossier intervenant" />
                       {isCivilDate(dateRange.start) && isCivilDate(dateRange.end) && dateRange.start <= dateRange.end && <TaskSourceActions reference={{type:"worker_period",id:worker.id,context:{startDate:dateRange.start,endDate:dateRange.end,...(houseFilter !== "Tous" ? {houseId:houseFilter} : {})}}} title="Vérifier ou compléter les heures" />}
-                      <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
+                      <span>{worker.role} · {prepaidWorkerIds.has(worker.id) ? prepaidText("Forfait prépayé", "Prepaid package") : worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
                       {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
                         <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)} data-crm-auto-scroll="true">{t("crm.house.39bb8b1625")}</button>
                       )}
@@ -4433,9 +4518,9 @@ function HouseTrackingView({
                         <TaskSourceActions reference={{type:"worker",id:worker.id}} title="Vérifier le dossier intervenant historique" />
                         {isCivilDate(dateRange.start) && isCivilDate(dateRange.end) && dateRange.start <= dateRange.end && <TaskSourceActions reference={{type:"worker_period",id:worker.id,context:{startDate:dateRange.start,endDate:dateRange.end,...(houseFilter !== "Tous" ? {houseId:houseFilter} : {})}}} title="Vérifier ou compléter les heures" />}
                         <strong>{worker.contactName} <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span></strong>
-                        <span>{worker.role} · {worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
+                        <span>{worker.role} · {prepaidWorkerIds.has(worker.id) ? prepaidText("Forfait prépayé", "Prepaid package") : worker.hourlyRate == null ? t("crm.house.7765db4922") : t("crm.house.eafcadd06b", { value1: displayValue(screen.money(worker.hourlyRate, 2)) })}</span>
                         <span>{history.timeEntries}{" "}{t("crm.house.a32a388110")}{" "}{formatHours(history.hours)} · {history.payments}{" "}{t("crm.house.46b89242b3")}{" "}{screen.money(history.paid, 2)}{" "}{t("crm.house.36e0bcfd26")}</span>
-                        <span>{t("crm.house.385da126a8")}{" "}{screen.money(history.due, 2)}{" "}{t("crm.house.8580f17f02")}{" "}{screen.balance(history.balance)}</span>
+                        <span>{history.prepaid ? prepaidText("Consommation (dont non couvert indicatif)", "Consumption (including indicative uncovered value)") : t("crm.house.385da126a8")}{" "}{screen.money(history.due, 2)}{" "}{t("crm.house.8580f17f02")}{" "}{screen.balance(history.balance)}{history.prepaid ? ` · ${formatHours((history.uncoveredMinutes ?? 0) / 60)} ${prepaidText("à couvrir", "to cover")}` : ""}</span>
                         {onOpenContact && access && readable(access, "contacts") && contacts.some(contact => contact.id === worker.contactId) && (
                           <button className="secondary-link" type="button" onClick={() => onOpenContact(worker.contactId)} data-crm-auto-scroll="true">{t("crm.house.39bb8b1625")}</button>
                         )}
@@ -4536,7 +4621,7 @@ function HouseTrackingView({
                       <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>
                     </span>
                     <span>{worker.role} · {formatHours(history.hours)} · {screen.money(history.paid, 2)}{" "}{t("crm.house.36e0bcfd26")}</span>
-                    <small>{history.timeEntries}{" "}{t("crm.house.c9bf8fc5fb")}{" "}{history.payments}{" "}{t("crm.house.63a6b30eb7")}{" "}{screen.balance(history.balance)}</small>
+                    <small>{history.timeEntries}{" "}{t("crm.house.c9bf8fc5fb")}{" "}{history.payments}{" "}{t("crm.house.63a6b30eb7")}{" "}{history.prepaid && (history.uncoveredMinutes ?? 0) > 0 ? `${formatHours((history.uncoveredMinutes ?? 0) / 60)} ${prepaidText("à couvrir", "to cover")}` : screen.balance(history.balance)}</small>
                   </BusinessButton>
                 );
               })}
@@ -5838,7 +5923,7 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
         .update({ payload, updated_by: verified.user.id })
         .eq("workspace_id", SHARED_WORKSPACE_ID)
         .eq("updated_at", write.revision)
-        .select("updated_at")
+        .select("updated_at, payload")
         .abortSignal(signal)
         .maybeSingle()
         .setHeader("Authorization", `Bearer ${token}`);
@@ -5853,8 +5938,31 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
         return false;
       }
       saved = true;
-      // Acknowledge exactly the payload sent; newer edits must remain dirty.
-      setAcceptedWorkspaceFingerprint(write.fingerprint);
+      // The server may reallocate remaining prepaid lessons after an authorized
+      // correction/deletion. Adopt only those derived fields, by canonical ID,
+      // and only while that lesson's source fields still match this write.
+      const originalEntries = new Map((payload.houseTimeEntries ?? []).map(entry => [entry.id, entry]));
+      const canonicalEntries = new Map<string, HouseTimeEntry>((Array.isArray(row.payload?.houseTimeEntries) ? row.payload.houseTimeEntries : []).map((entry: HouseTimeEntry) => [entry.id, entry]));
+      const lessonSource = (entry: HouseTimeEntry) => {
+        const { billingMode: _mode, prepaid: _prepaid, ...source } = entry;
+        return workspaceFingerprint(source);
+      };
+      const projectPrepaid = (value: CRMData): CRMData => {
+        let changed = false;
+        const entries = (value.houseTimeEntries ?? []).map(entry => {
+          const original = originalEntries.get(entry.id), canonical = canonicalEntries.get(entry.id);
+          if (!original || !canonical || (original.billingMode !== "prepaid" && canonical.billingMode !== "prepaid") || lessonSource(entry) !== lessonSource(original)) return entry;
+          const projected = { ...entry, billingMode: canonical.billingMode, prepaid: canonical.prepaid };
+          if (workspaceFingerprint(projected) === workspaceFingerprint(entry)) return entry;
+          changed = true;
+          return projected;
+        });
+        return changed ? { ...value, houseTimeEntries: entries } : value;
+      };
+      const acknowledged = projectPrepaid(payload);
+      workspaceSync.current.load(acknowledged, String(row.updated_at));
+      setAcceptedWorkspaceFingerprint(workspaceFingerprint(acknowledged));
+      if (acknowledged !== payload) setData(current => projectPrepaid(current));
       failedSaveFingerprint.current = null;
       setSharedWorkspaceStatus("connected");
       setSharedWorkspaceMessage(screenNotice("crm.shell.6159f4160c"));
@@ -5865,7 +5973,7 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
       if (!saved && !signal.aborted) failedSaveFingerprint.current = write.fingerprint;
       if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
     }
-  }, [sessionUserId, showWorkspaceConflict]);
+  }, [sessionUserId, showWorkspaceConflict, setData]);
 
 
   function setActiveTab(tab: Tab) {
@@ -6411,12 +6519,18 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
     houseWorkers.filter(isHouseTrackingWorkerActive).forEach((worker) => {
       const due = houseEntries
         .filter((entry) => entry.workerId === worker.id)
-        .reduce((sum, entry) => sum + getHouseTimeTotalAmount(entry), 0);
+        .reduce((sum, entry) => sum + (worker.billingMode === "prepaid" || entry.billingMode === "prepaid" ? getHouseTimeExpenseAmount(entry) : getHouseTimeTotalAmount(entry)), 0);
       const paid = housePayments
-        .filter((payment) => payment.workerId === worker.id)
+        .filter((payment) => payment.workerId === worker.id && !payment.prepaidPackageId)
         .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
       const balance = due - paid;
 
+      const uncoveredMinutes = houseEntries.filter(entry => entry.workerId === worker.id && entry.billingMode === "prepaid").reduce((sum, entry) => sum + (entry.prepaid?.uncoveredMinutes ?? 0), 0);
+      if (uncoveredMinutes > 0) items.push({
+        id: `house-renewal-${worker.id}`, title: language === "en" ? "Prepaid package renewal to arrange" : "Renouvellement de forfait à prévoir",
+        detail: `${worker.contactName} · ${formatHours(uncoveredMinutes / 60)} ${language === "en" ? "to cover" : "à couvrir"} · ${screen.money((worker.prepaidDefaultPriceCents ?? 0) / 100, 2)}`,
+        tab: "houseTracking" as Tab, tone: "warning", targetId: `house-worker-${worker.id}`
+      });
       if (balance > 0) {
         items.push({
           id: `house-balance-${worker.id}`,
@@ -6509,7 +6623,7 @@ const toneRank: Record<ActionNotification["tone"], number> = {
     return items
       .sort((first, second) => toneRank[first.tone] - toneRank[second.tone])
       .slice(0, 20);
-  }, [data, visibleTasks, t, screen]);
+  }, [data, visibleTasks, t, screen, language]);
 
   const leadSearchIndex = useMemo(() => createSearchIndex(data.leads, lead => [lead.id, lead.category, lead.contactName, lead.status, lead.nextAction, lead.rentalStartDate, lead.rentalEndDate], { getLabel: lead => lead.contactName }), [data.leads]);
   const propertySearchIndex = useMemo(() => createSearchIndex(data.properties, property => [property.id, property.name, property.city, property.type, property.owner, property.status], { getLabel: property => property.name }), [data.properties]);
@@ -7676,6 +7790,33 @@ const toneRank: Record<ActionNotification["tone"], number> = {
         p_id: id, p_patch: patch, p_revision: write.revision
       }));
       if (result.error) throw new Error(result.error.message);
+      if (kind === "hours" && (before.houseTrackingWorkers ?? []).some(worker => worker.id === (patch as HouseTimeEntry).workerId && worker.billingMode === "prepaid")) {
+        const shared = await op.run(() => op.client.from("crm_workspace_state")
+          .select("payload, updated_at").eq("workspace_id", SHARED_WORKSPACE_ID).single());
+        if (shared.error || !shared.data?.payload || !shared.data.updated_at) throw new Error("prepaid_persistence_not_confirmed");
+        const acknowledged = normalizeSharedCRMData(shared.data.payload);
+        workspaceSync.current.load(acknowledged, shared.data.updated_at);
+        setAcceptedWorkspaceFingerprint(workspaceFingerprint(acknowledged));
+        setSharedWorkspaceUpdatedAt(shared.data.updated_at);
+        failedSaveFingerprint.current = null;
+        setData(current => {
+          const merged = { ...acknowledged };
+          for (const key of Object.keys(current) as (keyof CRMData)[]) {
+            if (workspaceFingerprint(current[key]) !== workspaceFingerprint(before[key])) {
+              (merged as Record<string, unknown>)[key] = current[key];
+              if (key === "houseTimeEntries") {
+                const saved = acknowledged.houseTimeEntries?.find(entry => entry.id === id);
+                merged.houseTimeEntries = saved && !current.houseTimeEntries?.some(entry => entry.id === id)
+                  ? [saved, ...(current.houseTimeEntries ?? [])] : current.houseTimeEntries;
+                workspaceSync.current.conflict();
+              }
+            }
+          }
+          return merged;
+        });
+        setFormDirty(false);
+        return { ok: true, recordId: id };
+      }
       const merge = (value: CRMData): CRMData => kind === "worker" ? { ...value,
         houseTrackingWorkers: (value.houseTrackingWorkers ?? []).map(worker => worker.id === id ? { ...worker, ...result.data.worker } : worker)
       } : { ...value, houseTimeEntries: kind === "expenses"
@@ -7705,6 +7846,42 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   function updateHouseTrackingWorker(id: string, patch: HouseWorkerEdit) {
     return persistHouseRecord("worker", id, patch);
   }
+
+  const saveHousePrepaid: SaveHousePrepaid = async (revision, requestId, action, patch) => {
+    const before = currentBusinessData.current;
+    if (!sharedWorkspaceReady || workspaceBusy.current || workspaceSync.current.dirty(before)) throw new Error("workspace_sync_pending");
+    workspaceBusy.current = true;
+    try {
+      const op = await beginHouseOperation();
+      const result = await op.run(() => op.client.rpc("crm_save_house_prepaid", {
+        p_revision: revision, p_request_id: requestId, p_action: action, p_patch: patch
+      }));
+      if (result.error) throw new Error(result.error.message);
+      const shared = await op.run(() => op.client.from("crm_workspace_state")
+        .select("payload, updated_at").eq("workspace_id", SHARED_WORKSPACE_ID).single());
+      if (shared.error || !shared.data?.payload || !shared.data.updated_at) throw new Error("prepaid_persistence_not_confirmed");
+      const acknowledged = normalizeSharedCRMData(shared.data.payload);
+      workspaceSync.current.load(acknowledged, shared.data.updated_at);
+      setAcceptedWorkspaceFingerprint(workspaceFingerprint(acknowledged));
+      setSharedWorkspaceUpdatedAt(shared.data.updated_at);
+      failedSaveFingerprint.current = null;
+      setData(current => {
+        const merged = { ...acknowledged };
+        for (const key of Object.keys(current) as (keyof CRMData)[]) {
+          if (workspaceFingerprint(current[key]) !== workspaceFingerprint(before[key])) {
+            (merged as Record<string, unknown>)[key] = current[key];
+            if (["houseTrackingWorkers", "houseTimeEntries", "housePayments"].includes(key)) workspaceSync.current.conflict();
+          }
+        }
+        return merged;
+      });
+      setFormDirty(false);
+      return result.data as HousePrepaidState;
+    } finally {
+      workspaceBusy.current = false;
+      if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
+    }
+  };
 
   function archiveHouseTrackingWorker(id: string) {
     setData((current) => ({
@@ -9207,6 +9384,8 @@ function createQuoteDraftFromLead(lead: Lead) {
             onArchiveWorker={archiveHouseTrackingWorker}
             onReactivateWorker={reactivateHouseTrackingWorker}
             onPermanentlyDeleteWorker={permanentlyDeleteHouseTrackingWorkerSafely}
+            invoices={data.vendorInvoices ?? []}
+            onSavePrepaid={saveHousePrepaid}
             onAddTimeEntry={addHouseTimeEntry}
             onUpdateTimeExpenses={updateHouseTimeExpenses}
             onDeleteTimeEntry={deleteHouseTimeEntry}
@@ -11361,7 +11540,7 @@ function Dashboard({
   onCloudBackup: () => void;
   onDashboardAction: (tab: Tab, targetId?: string) => void;
 }) {
-  const { t, label, screen } = useCRMDisplay();
+  const { t, label, screen, language } = useCRMDisplay();
 
   const business = useBusinessPermissions();
   type DashboardItem = {
@@ -11479,10 +11658,10 @@ function Dashboard({
   houseTimeEntries.filter((entry) => activeHouseWorkerIds.has(entry.workerId)).forEach((entry) => {
     const key = entry.workerId || entry.workerName || entry.id;
     const current = houseDueByWorker.get(key) || { workerName: entry.workerName || "Intervenant", due: 0 };
-    current.due += getHouseTimeTotalAmount(entry);
+    current.due += entry.billingMode === "prepaid" || houseTrackingWorkers.some(worker => worker.id === entry.workerId && worker.billingMode === "prepaid") ? getHouseTimeExpenseAmount(entry) : getHouseTimeTotalAmount(entry);
     houseDueByWorker.set(key, current);
   });
-  housePayments.filter((payment) => activeHouseWorkerIds.has(payment.workerId)).forEach((payment) => {
+  housePayments.filter((payment) => activeHouseWorkerIds.has(payment.workerId) && !payment.prepaidPackageId).forEach((payment) => {
     const key = payment.workerId || payment.workerName || payment.id;
     const current = houseDueByWorker.get(key) || { workerName: payment.workerName || "Intervenant", due: 0 };
     current.due -= Number(payment.amount || 0);
@@ -11492,6 +11671,9 @@ function Dashboard({
     .filter((item) => item.due > 0.5)
     .sort((a, b) => b.due - a.due);
   const houseAmountToPay = houseDueItems.reduce((sum, item) => sum + item.due, 0);
+  const prepaidRenewals = houseTrackingWorkers.filter(worker => activeHouseWorkerIds.has(worker.id) && worker.billingMode === "prepaid").map(worker => ({
+    worker, minutes: houseTimeEntries.filter(entry => entry.workerId === worker.id).reduce((sum, entry) => sum + (entry.prepaid?.uncoveredMinutes ?? 0), 0)
+  })).filter(item => item.minutes > 0);
 
   const clientPaymentsToFollow = confirmedBookings.filter((quote) => {
     const status = quote.paymentStatus || "Non payé";
@@ -11567,6 +11749,11 @@ function Dashboard({
   const documentsToCheck = documents.filter((document) => !document.isFolder && document.status !== "À jour");
 
   const urgentItems: DashboardItem[] = [
+    ...prepaidRenewals.map(({ worker, minutes }) => ({
+      id: `prepaid-renewal-${worker.id}`, title: language === "en" ? "Prepaid package renewal to arrange" : "Renouvellement de forfait à prévoir",
+      detail: `${worker.contactName} · ${formatHours(minutes / 60)} ${language === "en" ? "to cover" : "à couvrir"} · ${screen.money((worker.prepaidDefaultPriceCents ?? 0) / 100, 2)}`,
+      tone: "warning" as const, tab: "houseTracking" as Tab, targetId: `house-worker-${worker.id}`
+    })),
     ...overdueVendorInvoices.slice(0, 3).map((invoice) => ({
       id: `vendor-late-${invoice.id}`,
       title: t("crm.dashboard.3dd08c5734"),
@@ -11792,7 +11979,7 @@ const todayItems: DashboardItem[] = todayPlanning.map((entry) => ({
             else onDashboardAction("vendorInvoices" as Tab);
           }} />
           <DashboardQuickTile moduleId="planning" label={t("crm.dashboard.f2de9e072a")} value={String(todayPlanning.length)} caption={t("crm.dashboard.358029e806")} onClick={() => onDashboardAction("planning" as Tab)} />
-          <DashboardQuickTile moduleId="houseTracking" label={t("crm.dashboard.3453f57f66")} value={screen.money(houseAmountToPay, 2)} caption={t("crm.dashboard.d332e9d924")} onClick={() => onDashboardAction("houseTracking" as Tab)} />
+          <DashboardQuickTile moduleId="houseTracking" label={t("crm.dashboard.3453f57f66")} value={prepaidRenewals.length > 0 ? `${formatHours(prepaidRenewals.reduce((sum, item) => sum + item.minutes, 0) / 60)} ${language === "en" ? "to cover" : "à couvrir"}` : screen.money(houseAmountToPay, 2)} caption={t("crm.dashboard.d332e9d924")} onClick={() => onDashboardAction("houseTracking" as Tab)} />
           <DashboardQuickTile moduleId="bookings" label={t("crm.dashboard.dbdbf99dae")} value={screen.money(clientAmountToReceive)} caption={t("crm.dashboard.4e1ae32840")} onClick={() => onDashboardAction("bookings" as Tab)} />
         </div>
       </div>

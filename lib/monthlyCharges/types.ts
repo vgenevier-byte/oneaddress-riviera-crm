@@ -21,11 +21,12 @@ export type MonthlyChargesPatch = {
 };
 export type MonthlyInvoiceSource = {
   id: string; personId: string; personLabel: string; title: string;
-  invoiceReference?: string; invoiceDate?: string; amount?: unknown; status?: string; houseAssigned?: boolean;
+  invoiceReference?: string; invoiceDate?: string; amount?: unknown; status?: string; houseAssigned?: boolean; prepaidPackageId?: string;
 };
 export type MonthlyTimeSource = {
   id: string; personId: string; personLabel: string; houseId?: string; houseName?: string;
   date?: string; startTime?: string; endTime?: string; breakMinutes?: unknown; hourlyRate?: unknown; expenseAmount?: unknown;
+  billingMode?: "hourly" | "prepaid"; prepaid?: import("../housePrepaid").HousePrepaidValue;
 };
 export type MonthlyChargesSnapshot = {
   revision: string;

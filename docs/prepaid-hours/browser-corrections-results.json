@@ -1,0 +1,16 @@
+{
+  "passed": 2,
+  "results": [
+    {
+      "name": "late15minute UI insertion refreshes all canonical allocations and mounted dashboard without source reload",
+      "passed": true
+    },
+    {
+      "name": "UI deletion through generic autosave restores canonical allocations and mounted dashboard without source reload",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": [],
+  "externalRequests": [],
+  "evidence": "Fictitious sources; actual local Auth/RPC, full production build UI; no production access"
+}

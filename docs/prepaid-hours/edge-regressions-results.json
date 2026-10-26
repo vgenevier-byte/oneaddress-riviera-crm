@@ -1,0 +1,10 @@
+{
+  "passed": 2,
+  "realLocalAuthJWT": true,
+  "productionTouched": false,
+  "mainDemoPreserved": true,
+  "results": [
+    "hourly mode settings preserve authorized empty-worker deletion",
+    "invoice-read without invoice-export redacts export IDs and preserves relation"
+  ]
+}
