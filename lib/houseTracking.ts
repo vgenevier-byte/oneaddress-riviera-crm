@@ -65,6 +65,13 @@ export function getHouseTimeExpenseAmount(entry: Pick<HouseTimeEntry, "expenseAm
   return parseHouseExpenseAmount(String(entry.expenseAmount ?? "")) ?? 0;
 }
 
+/** Summarize the complete authorised, filtered scope before limiting displayed history. */
+export function getHouseTimeExpenseSummary(timeEntries: HouseTimeEntry[]) {
+  const entries = timeEntries.filter(entry => getHouseTimeExpenseAmount(entry) > 0);
+  const totalCents = entries.reduce((sum, entry) => sum + Math.round(getHouseTimeExpenseAmount(entry) * 100), 0);
+  return { entries, total: totalCents / 100 };
+}
+
 /** Keep the historical hours calculation unchanged, then add the intervention's expense once. */
 export function getHouseTimeTotalAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate" | "expenseAmount" | "billingMode" | "prepaid">) {
   return getHouseTimeAmount(entry) + getHouseTimeExpenseAmount(entry);

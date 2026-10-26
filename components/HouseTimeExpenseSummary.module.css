@@ -1,0 +1,94 @@
+.summaryGrid {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+}
+
+.summaryCard {
+  min-width: 0;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.summaryCard:hover,
+.summaryCard[aria-expanded="true"] {
+  border-color: var(--accent, #b99355);
+}
+
+.summaryCard:focus-visible {
+  outline: 3px solid var(--accent, #b99355);
+  outline-offset: 3px;
+}
+
+.summaryCard .toggleLabel {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.details {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 2fr) minmax(0, 1fr);
+  align-items: start;
+  flex: 1 1 650px;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+}
+
+.fields div {
+  min-width: 0;
+}
+
+.fields dt {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.reason dd {
+  white-space: pre-wrap;
+}
+
+.editor {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 1180px) {
+  .summaryGrid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .reason {
+    grid-column: 1 / -1;
+  }
+}

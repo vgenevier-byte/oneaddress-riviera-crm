@@ -101,6 +101,8 @@ import HouseWorkerEditor from "./HouseWorkerEditor";
 import HousePrepaidPanel, { type SaveHousePrepaid } from "./HousePrepaidPanel";
 import { buildHousePrepaidLedger, type HousePrepaidState, type HousePrepaidAllocation } from "@/lib/housePrepaid";
 import HouseTimeExpenseEditor from "./HouseTimeExpenseEditor";
+import { HouseTimeExpenseSummaryCard, HouseTimeExpenseDetails } from "./HouseTimeExpenseSummary";
+import houseExpenseStyles from "./HouseTimeExpenseSummary.module.css";
 import HouseTimeSelect from "./HouseTimeSelect";
 import QuickRepliesView from "./QuickRepliesView";
 import { ContactPostalAddressField, ContactPostalAddressDetails } from "./ContactPostalAddress";
@@ -187,6 +189,7 @@ import {
 import {
   getHouseTimeAmount,
   getHouseTimeExpenseAmount,
+  getHouseTimeExpenseSummary,
   getHouseTimeTotalAmount,
   getHouseTimeHours,
   getHouseTrackingWorkerHistorySummary,
@@ -3649,6 +3652,8 @@ function HouseTrackingView({
   });
   const [editingWorkerId, setEditingWorkerId] = useState<string | null>(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [showExpenseDetails, setShowExpenseDetails] = useState(false);
+  const [expenseEditorInSummary, setExpenseEditorInSummary] = useState(false);
   const hourDraftId = useRef<string | null>(null);
   const [expenseError, setExpenseError] = useState(false);
   const [rateError, setRateError] = useState<ScreenNotice>("");
@@ -3859,6 +3864,7 @@ function HouseTrackingView({
   const visiblePaymentEntries = showAllPaymentsHistory ? filteredPayments : filteredPayments.slice(0, 7);
 
   const totalHours = filteredEntries.reduce((sum, entry) => sum + getHouseTimeHours(entry), 0);
+  const expenseSummary = getHouseTimeExpenseSummary(filteredEntries);
   const totalDue = filteredEntries.reduce((sum, entry) => sum + unpaidAmount(entry), 0);
   const totalPaid = getAutoAllocatedPaidForSelectedEntries(filteredEntries);
   const totalBalance = totalDue - totalPaid;
@@ -4135,11 +4141,12 @@ function HouseTrackingView({
           <BusinessButton permission="export" className="secondary-button" type="button" onClick={exportHouseCsv}>{t("crm.house.91f71c14c8")}</BusinessButton>
         </div>
 
-        <div className="stats-grid house-summary-grid">
+        <div className={`stats-grid house-summary-grid ${houseExpenseStyles.summaryGrid}`}>
           <StatCard label={t("crm.house.2aa022f972")} value={formatHours(totalHours)} caption={t("crm.house.7b4c244221")} />
           <StatCard label={t("crm.house.f86724b3a3")} value={screen.money(totalDue, 2)} caption={t("crm.house.986f5333cf")} />
           <StatCard label={t("crm.house.2542792ee0")} value={screen.money(totalPaid, 2)} caption={t("crm.house.a986ecc855")} />
           <StatCard label={t("crm.house.caa3596424")} value={prepaidWorkerIds.size > 0 && !prepaidState ? "—" : selectedPrepaidUncovered > 0 ? `${formatHours(selectedPrepaidUncovered / 60)} ${prepaidText("à couvrir", "to cover")}${totalBalance > 0 ? ` · ${screen.money(totalBalance, 2)}` : ""}` : screen.balance(totalBalance)} caption={prepaidText("Solde horaire et frais distincts", "Hourly balance and separate expenses")} />
+          <HouseTimeExpenseSummaryCard total={expenseSummary.total} empty={expenseSummary.entries.length === 0} expanded={showExpenseDetails} onToggle={() => setShowExpenseDetails(current => !current)} />
         </div>
 
         {prepaidWorkerIds.size > 0 && <p className="muted-line">{prepaidText("Consommation de la période", "Period consumption")} : {prepaidState ? screen.money(selectedConsumption, 2) : "—"}. {prepaidText("Les heures non couvertes sont valorisées à titre indicatif ; elles ne sont pas une dette facturée à l’heure.", "Uncovered hours have an indicative value; they are not an hourly invoice debt.")}</p>}
@@ -4186,6 +4193,8 @@ function HouseTrackingView({
           </div>
         </div>
       </section>
+
+      {showExpenseDetails && <HouseTimeExpenseDetails entries={expenseSummary.entries} editingId={expenseEditorInSummary ? editingExpenseId : null} onEdit={id => { setExpenseEditorInSummary(true); setEditingExpenseId(id); }} onClose={() => setEditingExpenseId(null)} onSave={canEditTimeExpenses ? onUpdateTimeExpenses : undefined} />}
 
       {workerFilter !== "Tous" && workers.some(worker => worker.id === workerFilter) && isCivilDate(dateRange.start) && isCivilDate(dateRange.end) && dateRange.start <= dateRange.end && <TaskSourceActions reference={{type:"worker_period",id:workerFilter,context:{startDate:dateRange.start,endDate:dateRange.end,...(houseFilter !== "Tous" ? {houseId:houseFilter} : {})}}} title="Vérifier ou compléter les heures" />}
 
@@ -4332,11 +4341,11 @@ function HouseTrackingView({
                       {entry.expenseNote && <p className="muted-line" style={{ overflowWrap: "anywhere" }}>{t("crm.house.expenses.reason")}: {entry.expenseNote}</p>}
                     </div>
                     <div className="house-worker-actions">
-                      {onUpdateTimeExpenses && canEditTimeExpenses && <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => setEditingExpenseId(entry.id)}>{t("crm.house.expenses.edit")}</BusinessButton>}
+                      {onUpdateTimeExpenses && canEditTimeExpenses && <BusinessButton permission="write" className="secondary-button" type="button" onClick={() => { setExpenseEditorInSummary(false); setEditingExpenseId(entry.id); }}>{t("crm.house.expenses.edit")}</BusinessButton>}
                       <BusinessButton permission="remove" className="danger-link" type="button" onClick={() => window.confirm(dialogT("crm.house.09ecd9edc3")) && onDeleteTimeEntry(entry.id)}>{t("crm.house.41e12b1333")}</BusinessButton>
                     </div>
                   </article>
-                  {editingExpenseId === entry.id && onUpdateTimeExpenses && canEditTimeExpenses && <HouseTimeExpenseEditor key={entry.id} entry={entry} onSave={onUpdateTimeExpenses} onCancel={() => setEditingExpenseId(null)} onConfirmed={() => setEditingExpenseId(null)} />}
+                  {!expenseEditorInSummary && editingExpenseId === entry.id && onUpdateTimeExpenses && canEditTimeExpenses && <HouseTimeExpenseEditor key={entry.id} entry={entry} onSave={onUpdateTimeExpenses} onCancel={() => setEditingExpenseId(null)} onConfirmed={() => setEditingExpenseId(null)} />}
                 </div>
               ))}
             </div>
