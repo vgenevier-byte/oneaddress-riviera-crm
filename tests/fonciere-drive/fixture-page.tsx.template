@@ -1,0 +1,26 @@
+"use client";
+/** Fictional projections and no business persistence. Actual production components are copied unchanged. */
+import { useMemo, useState } from "react";
+import ProjectsWorkspace from "@/components/fonciere/ProjectsWorkspace";
+import ProjectSourcePicker from "@/components/fonciere/ProjectSourcePicker";
+import AccessAdministration from "@/components/AccessAdministration";
+import { TaskLinksEditor } from "@/components/TaskLinks";
+import { I18nProvider, useI18n } from "@/lib/i18n/I18nProvider";
+import { createProjectData } from "@/lib/izord/model";
+import { searchTaskTargets } from "@/lib/tasks/targets";
+import { fixtureProjects, fixtureAdminAccess } from "@/lib/fonciere/fixtureClient";
+import type { TaskApi, TaskLinkChanges } from "@/lib/tasks/types";
+const noop = () => {};
+function Demo() {
+ const [mode, setMode] = useState("projects"), [changes, setChanges] = useState<TaskLinkChanges>({});
+ const { language, setLanguage } = useI18n();
+ const [controller] = useState(() => new AbortController());
+ const api = useMemo(() => ({ list: async () => [], directory: async () => [], mutate: async () => null, searchTargets: async (query: string) => searchTaskTargets(async () => ({ items: fixtureProjects.map(project => ({ ref: { type: "fonciere_project", id: project.id }, label: project.title, projectReference: project.project_reference, projectNumber: project.project_number })), hasMore: false }), query), resolveTargets: async () => [] }) as TaskApi, []);
+ return <main><header data-fixture-nav><p>Fictional projection · simulated Auth/RPC/Drive · no external requests</p><button onClick={() => setLanguage(language === "fr" ? "en" : "fr")}>FR / EN</button>{["projects", "presentations", "admin", "tasks"].map(value => <button key={value} onClick={() => setMode(value)} data-mode={value}>{value}</button>)}</header>
+ {mode === "projects" && <ProjectsWorkspace userId="fictional-user" canWrite canReadContacts={false} canManageAccess={false} canArchive canDownload accessRevision={1} accessSignal={controller.signal}/>}
+ {mode === "presentations" && <ProjectSourcePicker data={createProjectData()} sourceFiles={[]} draftId="fictional-draft" loadSourceFiles={async () => []} onBusyChange={noop} canWrite canReadProjects canWriteProjects canDownloadProjects disabled={false} accessSignal={controller.signal} onSelect={noop} onImport={noop} onLinked={noop}/>}
+ {mode === "admin" && <AccessAdministration onDirty={noop} onSaved={noop} userId="fictional-user" access={fixtureAdminAccess} onReconnect={async () => {}}/>}
+ {mode === "tasks" && <TaskLinksEditor api={api} links={[]} changes={changes} onChange={setChanges} disabled={false} scope="fictional"/>}
+ </main>;
+}
+export default function Fixture() { return <I18nProvider><Demo/></I18nProvider>; }

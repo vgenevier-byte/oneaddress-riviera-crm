@@ -19,7 +19,7 @@ export async function searchTaskTargets(
     pageOffset += page.items.length;
   }
   targets.push(...(await additional()).filter(item => item?.ref?.type && item.ref.id && item.state !== "inaccessible"));
-  const index = createSearchIndex(targets, target => [target.label, target.detail, target.status, target.ref.id, ...(target.searchFields ?? [])], { getId: target => taskTargetKey(target.ref), getLabel: target => target.label });
+  const index = createSearchIndex(targets, target => [target.projectReference, target.projectNumber, target.label, target.detail, target.status, target.ref.id, ...(target.searchFields ?? [])], { getId: target => taskTargetKey(target.ref), getLabel: target => target.label, getExactFields: target => [target.projectReference, target.projectNumber, target.projectReference?.replace(/^PRJ-/i, "")] });
   const ranked = searchIndex(index, query);
   return { items: ranked.slice(offset, offset + limit).map(hit => ({ ...hit.item, approximate: hit.approximate })), hasMore: ranked.length > offset + limit };
 }

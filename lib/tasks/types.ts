@@ -78,6 +78,8 @@ export type TaskTargetState = "available" | "archived" | "deleted" | "inaccessib
 export type TaskTarget = {
   ref: TaskTargetRef;
   label: string;
+  projectReference?: string;
+  projectNumber?: number;
   detail?: string;
   status?: string;
   state?: TaskTargetState;
@@ -94,6 +96,8 @@ export type TaskLink = {
   state: TaskTargetState;
   target?: TaskTargetRef;
   label?: string;
+  projectReference?: string;
+  projectNumber?: number;
   detail?: string;
   status?: string;
   financial?: { amount: number; paidAmount: number; dueDate?: string; status: string };

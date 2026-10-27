@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
+const { I18nProvider } = require('../../lib/i18n/I18nProvider');
 const GuidedProjectField = require('../../components/fonciere/GuidedProjectField').default;
 const { GUIDED_FIELD_DEFINITIONS: definitions, guidedSelectOptions, setGuidedField, GUIDED_CHECK_STATUSES, GUIDED_DIAGNOSTIC_STATUSES } = require('../../lib/fonciere/guided');
 const { createFonciereData, validateFonciereData } = require('../../lib/fonciere/model');
@@ -14,13 +15,13 @@ const { translateLabel } = require('../../lib/i18n/engine');
 
 function render(key, data, lang = 'fr', extra = {}) {
   let edits = 0;
-  const html = renderToStaticMarkup(React.createElement(GuidedProjectField, { field: { key, fr: key, en: key }, data, lang, onChange: () => { edits++; }, ...extra }));
+  const html = renderToStaticMarkup(React.createElement(I18nProvider, null, React.createElement(GuidedProjectField, { field: { key, fr: key, en: key }, data, lang, onChange: () => { edits++; }, ...extra })));
   assert.equal(edits, 0, 'rendering/reordering must never edit the record');
   return html;
 }
 function options(html, id) {
   const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const select = html.match(new RegExp(`<select[^>]*id="${escaped}"[^>]*>([\\s\\S]*?)</select>`));
+  const select = html.match(new RegExp(`<select[^>]*id="${escaped}(?:-native)?"[^>]*>([\\s\\S]*?)</select>`));
   assert.ok(select, id);
   return [...select[1].matchAll(/<option\b([^>]*)>(.*?)<\/option>/g)].map(([, attributes, label]) => ({ value: attributes.match(/value="([^"]*)"/)?.[1] ?? label, selected: attributes.includes('selected=""') }));
 }

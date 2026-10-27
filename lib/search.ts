@@ -15,6 +15,7 @@ type IndexedEntry<T> = {
   readonly words: readonly number[];
   readonly wordSet: ReadonlySet<string>;
   readonly label: string;
+  readonly exactFields: readonly string[];
 };
 export type SearchIndex<T> = {
   readonly entries: readonly IndexedEntry<T>[];
@@ -43,7 +44,7 @@ function tokensOf(value: string): string[] {
 export function createSearchIndex<T>(
   items: readonly T[],
   getFields: (item: T) => readonly Field[],
-  options: { getId?: (item: T) => string; getLabel?: (item: T) => string } = {}
+  options: { getId?: (item: T) => string; getLabel?: (item: T) => string; getExactFields?: (item: T) => readonly Field[] } = {}
 ): SearchIndex<T> {
   const entries: IndexedEntry<T>[] = [];
   const words: string[] = [];
@@ -62,7 +63,8 @@ export function createSearchIndex<T>(
       if (wordId === undefined) { wordId = words.length; words.push(word); dictionary.set(word, wordId); }
       return wordId;
     });
-    entries.push({ item, id, text, fields, words: wordIds, wordSet, label: normalizeSearch(options.getLabel?.(item) ?? fields[0] ?? "") });
+    const exactFields = (options.getExactFields?.(item) ?? []).filter(value => value !== null && value !== undefined && String(value).trim()).map(value => normalizeSearch(String(value)));
+    entries.push({ item, id, text, fields, words: wordIds, wordSet, exactFields, label: normalizeSearch(options.getLabel?.(item) ?? fields[0] ?? "") });
   }
   return { entries, words };
 }
@@ -130,11 +132,11 @@ function directScore<T>(entry: IndexedEntry<T>, token: string): Score | null {
 /** Rank the complete eligible index before applying the display cap. Fuzzy matches are suggestions only. */
 export function searchIndex<T>(
   index: SearchIndex<T>, query: string,
-  options: { limit?: number; includeFuzzy?: boolean } = {}
+  options: { limit?: number; includeFuzzy?: boolean; preserveEmptyOrder?: boolean } = {}
 ): SearchHit<T>[] {
   const tokens = tokensOf(query);
   const scoresByToken = new Map<string, Map<number, Score>>();
-  const candidates: { entry: IndexedEntry<T>; score: Score; exactLabel: number }[] = [];
+  const candidates: { entry: IndexedEntry<T>; score: Score; exactLabel: number; exactField: number }[] = [];
   const normalizedQuery = normalizeSearch(query);
   for (const entry of index.entries) {
     const total: Score = { edits: 0, relative: 0, prefixes: 0, interior: 0 };
@@ -162,9 +164,9 @@ export function searchIndex<T>(
       total.prefixes += best.prefixes;
       total.interior += best.interior;
     }
-    if (eligible) candidates.push({ entry, score: total, exactLabel: entry.label === normalizedQuery ? 0 : 1 });
+    if (eligible) candidates.push({ entry, score: total, exactLabel: entry.label === normalizedQuery ? 0 : 1, exactField: normalizedQuery && entry.exactFields.includes(normalizedQuery) ? 0 : 1 });
   }
-  candidates.sort((left, right) => left.score.edits - right.score.edits || left.exactLabel - right.exactLabel
+  if (tokens.length || !options.preserveEmptyOrder) candidates.sort((left, right) => left.exactField - right.exactField || left.score.edits - right.score.edits || left.exactLabel - right.exactLabel
     || compareScore(left.score, right.score) || left.entry.label.localeCompare(right.entry.label, "fr")
     || left.entry.id.localeCompare(right.entry.id, "fr"));
   const selected = options.limit === undefined ? candidates : candidates.slice(0, Math.max(0, options.limit));

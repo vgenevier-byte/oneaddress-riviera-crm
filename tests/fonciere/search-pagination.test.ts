@@ -23,7 +23,7 @@ test("Fonciere project source reads every authorized page with deterministic ord
   assert.equal(rows.length, records.length);
   assert.equal(rows.at(-1)?.id, "project-1250", "A source beyond the first 1000 rows remains searchable");
   assert.deepEqual(ranges, [[0,249], [250,499], [500,749], [750,999], [1000,1249], [1250,1499]]);
-  assert.deepEqual(orders, Array.from({ length: 6 }, () => ["updated_at", "id"]).flat());
+  assert.deepEqual(orders, Array.from({ length: 6 }, () => ["project_number", "id"]).flat());
 });
 
 test("a cancelled source search cannot admit a partially loaded project list", async () => {

@@ -1,0 +1,20 @@
+/** Deliberate test double. No authentication, database, storage or Google access. */
+import { createFonciereData, FONCIERE_SCHEMA } from "./model";
+import { emptyGrants } from "../access/modules";
+const make = (number: number, title: string, archived = false) => { const data = { ...createFonciereData(), name: title, city: "Cannes", agencyName: "Agence Riviera", agentName: "Clément Martin" }; data.presentationData.photos = Object.fromEntries(Object.keys(data.presentationData.photos).map(key => [key, ""])) as typeof data.presentationData.photos; return { id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`, owner_id: "fictional-user", ownerId: "fictional-user", title, project_number: number, project_reference: `PRJ-${String(number).padStart(6, "0")}`, status: archived ? "archived" : "active", revision: 1, payload: { schema: FONCIERE_SCHEMA, data, sourceDocuments: [] }, created_at: "2026-10-01T10:00:00Z", updated_at: "2026-10-27T10:00:00Z" }; };
+export const fixtureProjects = [make(10, "A PRJ-000002"), make(2, "Z Oliviers"), make(1, "C Riviera"), make(20, "Ancien projet", true)];
+const modules = emptyGrants(); modules.fonciere = { level: "contribute", sensitive: { delete: true, export: true } }; modules.izord = { level: "contribute", sensitive: {} };
+const user = { id: "fictional-user", email: "fictional@example.invalid", confirmed: true, active: true, generalAdmin: true, revision: 1, modules, izordRole: "admin", assignments: [], fonciereAssignments: [] };
+export const fixtureAdminAccess = { active: true, generalAdmin: true, revision: 1, modules, izordRole: "admin" } as never;
+const admin = { invitations: [], users: [user], projects: [], fonciereProjects: fixtureProjects, canAssignFonciere: true };
+export const fixtureClient = {
+ storage: { from: () => ({ download: async () => { throw Error("No storage in UI fixture"); } }) },
+ auth: { getUser: async () => ({ data: { user: { id: user.id } }, error: null }) },
+ rpc: (name: string) => { const result = name === "crm_admin_users" ? { data: admin, error: null } : name === "crm_admin_history_page" ? { data: { events: [], hasMore: false, nextCursor: null }, error: null } : null; if (!result) throw Error(`Unexpected fixture RPC: ${name}`); return Object.assign(Promise.resolve(result), { abortSignal: () => Promise.resolve(result) }); },
+ from: (table: string) => {
+  const filters: Record<string, unknown> = {};
+  const data = () => table === "fonciere_projects" ? fixtureProjects.filter(row => !filters.id || row.id === filters.id) : [];
+  const query = { select: () => query, eq: (field: string, value: unknown) => { filters[field] = value; return query; }, order: () => query, range: async (start: number, end: number) => ({ data: data().slice(start, end + 1), error: null }), single: async () => ({ data: data()[0], error: null }), maybeSingle: async () => ({ data: null, error: null }), then: (resolve: (value: unknown) => unknown) => Promise.resolve({ data: data(), error: null }).then(resolve) };
+  return query;
+ }
+};

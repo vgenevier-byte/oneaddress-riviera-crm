@@ -1,0 +1,8 @@
+"use client";
+/** Deliberate scoped-operation double. All business calls use fictional projections. */
+import { useCallback } from "react";
+import { fixtureClient } from "../fonciere/fixtureClient";
+const controller = new AbortController();
+const operation = { client: fixtureClient, token: "fictional-ui-only", signal: controller.signal, check: async () => {}, run: async <T,>(fn: () => PromiseLike<T>) => fn(), download: async () => { throw Error("No downloads in UI fixture"); } };
+export const useScopedOperations = () => useCallback(async () => operation, []);
+export const isCancelled = (value: unknown) => value instanceof DOMException && value.name === "AbortError";

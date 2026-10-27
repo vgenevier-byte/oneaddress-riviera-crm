@@ -17,3 +17,5 @@
   .moduleRow select { max-width: 100%; }
   .permissions { display: grid; }
 }
+
+.projectReference { display:block; color:#526f55; font-weight:600; margin-bottom:4px; }

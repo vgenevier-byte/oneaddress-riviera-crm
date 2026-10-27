@@ -6,9 +6,9 @@ import { createSearchIndex, searchIndex } from "@/lib/search";
 import { useSearchDismissal } from "./useSearchDismissal";
 import styles from "./search.module.css";
 
-type Option = { value: string; label: string; secondary: string; search: string; disabled: boolean };
-type OptionProps = { value?: string | number; label?: string; children?: ReactNode; disabled?: boolean; "data-search"?: string; "data-secondary"?: string };
-export type SearchableSelectProps = SelectHTMLAttributes<HTMLSelectElement> & { loading?: boolean; error?: string; placeholder?: string };
+type Option = { value: string; label: string; secondary: string; search: string; reference: string; number: string; disabled: boolean };
+type OptionProps = { value?: string | number; label?: string; children?: ReactNode; disabled?: boolean; "data-search"?: string; "data-secondary"?: string; "data-reference"?: string; "data-number"?: string | number };
+export type SearchableSelectProps = SelectHTMLAttributes<HTMLSelectElement> & { loading?: boolean; error?: string; placeholder?: string; preserveEmptyOrder?: boolean };
 
 function textOf(node: ReactNode): string {
   return Children.toArray(node).map(child => typeof child === "string" || typeof child === "number" ? String(child)
@@ -20,7 +20,7 @@ function optionsOf(children: ReactNode, parentDisabled = false): Option[] {
     if (child.type === "option") {
       const label = child.props.label ?? textOf(child.props.children);
       return [{ value: String(child.props.value ?? label), label, secondary: child.props["data-secondary"] ?? "",
-        search: child.props["data-search"] ?? "", disabled: parentDisabled || Boolean(child.props.disabled) }];
+        search: child.props["data-search"] ?? "", reference: child.props["data-reference"] ?? "", number: String(child.props["data-number"] ?? ""), disabled: parentDisabled || Boolean(child.props.disabled) }];
     }
     return optionsOf(child.props.children, parentDisabled || Boolean(child.props.disabled));
   });
@@ -28,7 +28,7 @@ function optionsOf(children: ReactNode, parentDisabled = false): Option[] {
 
 /** Native form value/validation with an explicit, searchable record choice. Typing never changes the value. */
 export const SearchableSelect = forwardRef<HTMLSelectElement, SearchableSelectProps>(function SearchableSelect({ children, value, defaultValue, id, className, style, disabled, required, loading = false,
-  error, placeholder, onChange, onInvalid, ...nativeProps }: SearchableSelectProps, forwardedRef) {
+  error, placeholder, preserveEmptyOrder = false, onChange, onInvalid, ...nativeProps }: SearchableSelectProps, forwardedRef) {
   const { language } = useI18n();
   const english = language === "en";
   const generatedId = useId();
@@ -51,13 +51,13 @@ export const SearchableSelect = forwardRef<HTMLSelectElement, SearchableSelectPr
   const [active, setActive] = useState(-1);
   const [limit, setLimit] = useState(12);
   const [invalid, setInvalid] = useState(false);
-  const index = useMemo(() => createSearchIndex(options.filter(option => !option.disabled), option => [option.label, option.secondary, option.search],
-    { getId: option => option.value, getLabel: option => option.label }), [options]);
-  const results = useMemo(() => searchIndex(index, query), [index, query]);
+  const index = useMemo(() => createSearchIndex(options.filter(option => !option.disabled), option => [option.label, option.secondary, option.search, option.reference, option.number],
+    { getId: option => option.value, getLabel: option => option.label, getExactFields: option => [option.reference, option.number, option.reference.replace(/^PRJ-/i, "")] }), [options]);
+  const results = useMemo(() => searchIndex(index, query, { preserveEmptyOrder }), [index, query, preserveEmptyOrder]);
   const visible = results.slice(0, limit);
   const expanded = open && !disabled;
   const clearOption = options.find(option => option.value === "" && !option.disabled);
-  const selectedLabel = selected?.label ?? (selectedValue ? english ? "Saved selection (unavailable)" : "Sélection conservée (indisponible)" : "");
+  const selectedLabel = (selected ? [selected.reference, selected.label].filter(Boolean).join(" · ") : undefined) ?? (selectedValue ? english ? "Saved selection (unavailable)" : "Sélection conservée (indisponible)" : "");
 
   useEffect(() => {
     const form = nativeRef.current?.form;
@@ -140,7 +140,7 @@ export const SearchableSelect = forwardRef<HTMLSelectElement, SearchableSelectPr
         // Retained historical values remain successful form controls. Disabled choices
         // stay excluded from the searchable index and cannot be explicitly selected.
         disabled={option.disabled && option.value !== selectedValue}
-        data-search={option.search} data-secondary={option.secondary}>{option.label}</option>)}
+        data-search={option.search} data-secondary={option.secondary} data-reference={option.reference} data-number={option.number}>{option.label}</option>)}
     </select>
     {invalid && <small id={`${inputId}-validation`} className={styles.validation} role="alert">{english ? "Select a result." : "Sélectionnez un résultat."}</small>}
     {expanded && <span className={styles.popup}>
@@ -153,6 +153,7 @@ export const SearchableSelect = forwardRef<HTMLSelectElement, SearchableSelectPr
             type="button" role="option" aria-selected={selectedValue === option.value} data-active={position === active}
             tabIndex={-1} className={styles.option} onPointerDown={event => { if (event.pointerType === "mouse") event.preventDefault(); }}
             onMouseEnter={() => setActive(position)} onClick={() => choose(option.value)}>
+            {option.reference && <small>{option.reference}</small>}
             <strong>{option.label || (english ? "None" : "Aucun")}</strong>
             {option.secondary && <small>{option.secondary}</small>}
             {approximate && <small className={styles.approximate}>{english ? "Approximate match" : "Correspondance approchée"}</small>}

@@ -1,5 +1,6 @@
 "use client";
 import { SearchMatchHint } from "@/components/search/SearchMatchHint";
+import { searchProjects, type ProjectIdentity } from "@/lib/fonciere/projectSearch";
 import { createSearchIndex, searchIndex } from "@/lib/search";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
@@ -23,7 +24,7 @@ const invitationErrorKeys: Record<string, string> = {
 };
 function invitationErrorKey(error: unknown) { return typeof error === "string" ? invitationErrorKeys[error] ?? "admin.sendUnconfirmed" : "admin.sendUnconfirmed"; }
 type User = { id: string; email: string; confirmed: boolean; active: boolean; generalAdmin: boolean; revision: number; modules: Record<ModuleId, ModuleGrant>; izordRole: string | null; assignments: string[]; fonciereAssignments: string[] };
-type Project = { id: string; title: string; ownerId?: string; status?: string };
+type Project = ProjectIdentity & { ownerId?: string; status?: string };
 type AdminData = { invitations: { id: string; email: string; expires_at: string }[]; users: User[]; projects: Project[]; fonciereProjects: Project[]; canAssignFonciere: boolean };
 const directModules = ["dashboard", "contacts", "tasks"] as const;
 
@@ -44,10 +45,9 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
   useEffect(() => { onDirty(dirty); return () => onDirty(false); }, [dirty, onDirty]);
   const userIndex = useMemo(() => createSearchIndex(data?.users ?? [], user => [user.email, user.id], { getId: user => user.id, getLabel: user => user.email }), [data]);
   const projectIndex = useMemo(() => createSearchIndex(data?.projects ?? [], project => [project.title, project.id], { getId: project => project.id, getLabel: project => project.title }), [data]);
-  const fonciereIndex = useMemo(() => createSearchIndex(data?.fonciereProjects ?? [], project => [project.title, project.id], { getId: project => project.id, getLabel: project => project.title }), [data]);
   const visibleUsers = useMemo(() => searchIndex(userIndex, userQuery), [userIndex, userQuery]);
   const visibleProjects = useMemo(() => searchIndex(projectIndex, projectQuery), [projectIndex, projectQuery]);
-  const visibleFonciere = useMemo(() => searchIndex(fonciereIndex, fonciereQuery), [fonciereIndex, fonciereQuery]);
+  const visibleFonciere = useMemo(() => searchProjects(data?.fonciereProjects ?? [], fonciereQuery), [data, fonciereQuery]);
   const update = (next: User) => { setEdit(next); setDirty(true); };
   async function save() {
     if (!edit) return;
@@ -100,7 +100,7 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
         {data && !data.canAssignFonciere && <p role="status">{t("admin.fonciereAssignmentAdminLimited")}</p>}
         <label>{t("modules.moduleWorkspace.search")}<input type="search" aria-label={`${t("modules.moduleWorkspace.search")} · ${t("navigation.module.fonciere")}`} value={fonciereQuery} onChange={event => setFonciereQuery(event.target.value)}/></label>
         {visibleFonciere.length === 0 && <p>{t("admin.noMatchingProjects")}</p>}
-        <div className={styles.assignmentList}>{visibleFonciere.map(({ item: project, approximate }) => <label className="unified-check" key={project.id}><input type="checkbox" data-fonciere-assignment={project.id} disabled={busy || !data?.canAssignFonciere} checked={edit.fonciereAssignments.includes(project.id)} onChange={event => update({ ...edit, fonciereAssignments: event.target.checked ? [...edit.fonciereAssignments, project.id] : edit.fonciereAssignments.filter(id => id !== project.id) })}/><span>{project.title}<SearchMatchHint approximate={approximate}/>{project.status === "archived" && <small> · {t("admin.archivedProject")}</small>}{project.ownerId === edit.id && <small className={styles.accountHint}>{t("admin.projectOwnerHint")}</small>}</span></label>)}</div>
+        <div className={styles.assignmentList}>{visibleFonciere.map(({ item: project, approximate }) => <label className="unified-check" key={project.id}><input type="checkbox" data-fonciere-assignment={project.id} disabled={busy || !data?.canAssignFonciere} checked={edit.fonciereAssignments.includes(project.id)} onChange={event => update({ ...edit, fonciereAssignments: event.target.checked ? [...edit.fonciereAssignments, project.id] : edit.fonciereAssignments.filter(id => id !== project.id) })}/><span>{project.project_reference && <small className={styles.projectReference}>{project.project_reference}</small>}{project.title}<SearchMatchHint approximate={approximate}/>{project.status === "archived" && <small> · {t("admin.archivedProject")}</small>}{project.ownerId === edit.id && <small className={styles.accountHint}>{t("admin.projectOwnerHint")}</small>}</span></label>)}</div>
       </section>
       <section className={styles.assignments} aria-labelledby="admin-presentation-assignments-title"><h3 id="admin-presentation-assignments-title">{t("admin.presentationAssignments")}</h3><p>{t("admin.presentationAssignmentsHint")}</p>
         <label>{t("modules.moduleWorkspace.search")}<input type="search" aria-label={`${t("modules.moduleWorkspace.search")} · ${t("navigation.module.izord")}`} value={projectQuery} onChange={event => setProjectQuery(event.target.value)}/></label>
