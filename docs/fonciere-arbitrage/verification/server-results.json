@@ -1,0 +1,19 @@
+{
+  "passed": 10,
+  "checks": [
+    "Initial projects have no attributed opinions; server config requires two distinct real CRM accounts",
+    "Read-only designated users vote independently; missing or blank required remarks fail on direct RPC",
+    "All sixteen opinion combinations produce the specified ordered server status, including disagreement",
+    "Contributor/admin/stranger and impersonation parameters cannot submit either designated opinion",
+    "Private remarks/history never enter ordinary reader/admin/list/project responses or direct table grants",
+    "Votes survive fresh Auth; opinion changes preserve prior history and never alter project revision or Drive jobs",
+    "Simultaneous opinions serialize without invalidating or losing the first opinion",
+    "Concurrent business edit rejects the old fingerprint, retains historical approvals, and requires reconfirmation",
+    "Finalized saved document changes require reconfirmation; pending uploads and Drive bookkeeping do not",
+    "Revoked project access denies current JWT reads and votes; replacement account receives no old validation"
+  ],
+  "matrixCases": 16,
+  "services": "Real local Auth/PostgREST/PostgreSQL/Storage",
+  "externalRequests": 0,
+  "productionWrites": 0
+}

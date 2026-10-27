@@ -1,0 +1,16 @@
+{
+  "passed": 7,
+  "checks": [
+    "Administration searchable accounts stay distinct and persist real authenticated configuration saves",
+    "FR read-only Vincent has exactly four exclusive own choices, required remark, and persistence after reload/re-auth",
+    "A business conflict keeps the in-progress remark until explicit dossier re-reading",
+    "EN mobile Ann Charlotte keyboard radio navigation saves only her opinion with no horizontal overflow",
+    "Ordinary contributor sees only global status and waiting state; private controls/history remain unavailable",
+    "Project list has a four-status filter applied to server-authorized projects",
+    "Actual browser JSON and PowerPoint exports contain no private remarks in any slide, notes or metadata XML"
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "mobile": "Chromium 390px touch emulation",
+  "auth": "Real local password Auth and PostgREST"
+}

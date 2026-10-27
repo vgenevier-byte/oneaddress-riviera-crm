@@ -8,6 +8,7 @@ import AdminHistory from "@/lib/access/AdminHistory";
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import type { AccessSnapshot } from "@/lib/access/modules";
 import GoogleDriveDiagnostic from "./GoogleDriveDiagnostic";
+import ArbitrageAdministration from "./fonciere/ArbitrageAdministration";
 import { emptyGrants, moduleItems, moduleSensitivePermissions, sensitiveNeedsContribution, type AccessLevel, type ModuleGrant, type ModuleId } from "@/lib/access/modules";
 import { navigationGroups } from "./unifiedNavigationStructure";
 import styles from "./AccessAdministration.module.css";
@@ -33,6 +34,7 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
   const begin = useScopedOperations("admin");
   const loadRequest = useRef({ sequence: 0 });
   const [historyReload, setHistoryReload] = useState(0);
+  const [arbitrageConfigDirty, setArbitrageConfigDirty] = useState(false);
   const [data, setData] = useState<AdminData | null>(null), [edit, setEdit] = useState<User | null>(null), [message, setMessage] = useState(""), [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [inviteEmail, setInviteEmail] = useState("");
   const [userQuery, setUserQuery] = useState(""), [projectQuery, setProjectQuery] = useState(""), [fonciereQuery, setFonciereQuery] = useState("");
   const load = useCallback(async () => {
@@ -42,7 +44,7 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
   }, [begin]);
   async function reload() { setHistoryReload(value => value + 1); await load(); }
   useEffect(() => { const lease = loadRequest.current, sequence = lease.sequence; void Promise.resolve().then(() => { if (sequence === lease.sequence) void load(); }); return () => { lease.sequence++; }; }, [load]);
-  useEffect(() => { onDirty(dirty); return () => onDirty(false); }, [dirty, onDirty]);
+  useEffect(() => { onDirty(dirty || arbitrageConfigDirty); return () => onDirty(false); }, [dirty, arbitrageConfigDirty, onDirty]);
   const userIndex = useMemo(() => createSearchIndex(data?.users ?? [], user => [user.email, user.id], { getId: user => user.id, getLabel: user => user.email }), [data]);
   const projectIndex = useMemo(() => createSearchIndex(data?.projects ?? [], project => [project.title, project.id], { getId: project => project.id, getLabel: project => project.title }), [data]);
   const visibleUsers = useMemo(() => searchIndex(userIndex, userQuery), [userIndex, userQuery]);
@@ -118,6 +120,7 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
       <button disabled={busy} onClick={() => { setEdit(null); setDirty(false); void reload(); }}>{t("admin.cancelReload")}</button>
     </section>}
     </div>
+    {data && <ArbitrageAdministration users={data.users} onDirty={setArbitrageConfigDirty}/>}
     <section className="panel"><h2>{t("admin.pendingInvitations")}</h2>{data?.invitations?.map(invitation => <p key={invitation.id}>{invitation.email} · {t("admin.expires", { date: formatDate(invitation.expires_at, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) })} <button disabled={busy} onClick={async () => {
       if (!window.confirm(t("admin.confirmRevoke"))) return;
       try { const op = await begin(); const result = await op.run(() => op.client.rpc("crm_invite_revoke", { p_id: invitation.id })); if (result.error) throw result.error; setMessage("admin.revoked"); await op.check(); await reload(); }

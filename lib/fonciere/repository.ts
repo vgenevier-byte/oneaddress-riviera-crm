@@ -12,7 +12,7 @@ export type FonciereProjectRecord = { id: string; owner_id: string; title: strin
 export type FonciereDocumentCategory = "agency" | "plans" | "photos" | "other";
 export type FonciereAssetRecord = { id: string; project_id: string; object_path: string; kind: "pdf" | "photo" | "attachment"; lifecycle: "pending" | "finalized" | "withdrawn"; created_by: string; created_at: string; expected_size: number; expected_mime: string; original_name: string; drive_category?: FonciereDocumentCategory };
 export type StoredFoncierePayload = { schema: typeof FONCIERE_SCHEMA; data: FonciereData; sourceDocuments: string[]; creationRequestHash?: string; creationIntentHash?: string };
-export type LoadedFonciereProject = { project: FonciereProjectRecord; data: FonciereData; assets: FonciereAssetRecord[]; sourceDocuments: string[] };
+export type LoadedFonciereProject = { project: FonciereProjectRecord; data: FonciereData; assets: FonciereAssetRecord[]; sourceDocuments: string[]; arbitrationFingerprint?: string };
 export type ContactOption = ProjectContact;
 export type { ContactCreateInput } from "./contacts";
 export class FonciereConflictError extends Error { constructor() { super("Une autre modification a été enregistrée. Votre saisie est conservée ; rechargez la fiche avant de rapprocher les changements."); this.name = "FonciereConflictError"; } }
@@ -100,7 +100,13 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     const result = await guarded(options.signal, () => store.download(asset.object_path)); failure(result.error);
     if (!result.data || result.data.size !== asset.expected_size || result.data.size > LIMITS.fileBytes || result.data.type !== asset.expected_mime) throw new Error("Document reçu invalide ou incomplet."); return result.data;
   }
-  async function loadProject(id: string, options: OperationOptions & { purpose?: "transfer" } = {}): Promise<LoadedFonciereProject> {
+  async function arbitrationToken(id: string, options: OperationOptions): Promise<{ fingerprint: string; revision: number }> {
+    const result = await guarded(options.signal, () => client.rpc("fonciere_arbitrage_read", { p_project: id })); failure(result.error);
+    if (!result.data || typeof result.data.fingerprint !== "string" || !Number.isInteger(result.data.revision)) throw new FonciereConflictError();
+    return { fingerprint: result.data.fingerprint, revision: result.data.revision };
+  }
+  async function loadProject(id: string, options: OperationOptions & { purpose?: "transfer"; arbitration?: boolean } = {}): Promise<LoadedFonciereProject> {
+    const beforeArbitration = options.arbitration ? await arbitrationToken(id, options) : null;
     if (options.purpose === "transfer") await authorizeTransfer(id, null, options);
     const project = await readProject(id, options), saved = payload(project.payload), assets = await listAssets(id, options);
     const link = await guarded(options.signal, () => client.from("fonciere_project_contacts").select("contact_id,agency_contact_id").eq("project_id", id).maybeSingle()); failure(link.error);
@@ -121,7 +127,11 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     for (const photo of data.presentationData.importGallery) photo.data = await hydrate(photo.data, empty.photos.main);
     for (const ref of saved.sourceDocuments) if (!assets.some(asset => asset.id === ref && asset.project_id === id && ["pdf", "attachment"].includes(asset.kind))) throw new Error("Un document source est inaccessible. La fiche n’a pas été chargée partiellement.");
     if (options.purpose === "transfer") await authorizeTransfer(id, project.revision, options);
-    return { project, data: validateFonciereData(data), assets, sourceDocuments: [...saved.sourceDocuments] };
+    if (beforeArbitration) {
+      const afterArbitration = await arbitrationToken(id, options);
+      if (beforeArbitration.fingerprint !== afterArbitration.fingerprint || beforeArbitration.revision !== project.revision || afterArbitration.revision !== project.revision) throw new FonciereConflictError();
+    }
+    return { project, data: validateFonciereData(data), assets, sourceDocuments: [...saved.sourceDocuments], ...(beforeArbitration ? { arbitrationFingerprint: beforeArbitration.fingerprint } : {}) };
   }
   async function uploadAsset(project: FonciereProjectRecord, file: Blob, kind: FonciereAssetRecord["kind"], name: string, options: OperationOptions, category: FonciereDocumentCategory = kind === "photo" ? "photos" : kind === "pdf" ? "agency" : "other"): Promise<FonciereAssetRecord> {
     if (kind === "attachment" && file.type === "image/webp") {
@@ -164,7 +174,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       }
     },
     loadProject, listAssets, downloadAsset, authorizeTransfer,
-    async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; creationKey?: string; creationReconciled?: boolean; sourceFiles?: File[]; sourceFileCategories?: FonciereDocumentCategory[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions = {}): Promise<LoadedFonciereProject> {
+    async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; creationKey?: string; creationReconciled?: boolean; sourceFiles?: File[]; sourceFileCategories?: FonciereDocumentCategory[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions & { arbitration?: boolean } = {}): Promise<LoadedFonciereProject> {
       const data = validateFonciereData(input.data), persisted = structuredClone(data), empty = createProjectData();
       // Contact identity has a separate Contacts-protected projection in SQL.
       delete (persisted as Partial<FonciereData>).agentContactId;
@@ -218,6 +228,11 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       const saved = await guarded(options.signal, () => client.rpc("fonciere_save_project", { p_id: target.id, p_expected_revision: target.revision, p_payload: value, p_contact: data.agentContactId, p_agency_contact: data.agencyContactId })); failure(saved.error);
       const confirmed = await readProject(target.id, options);
       if (confirmed.revision !== target.revision + 1) throw new FonciereConflictError();
+      if (options.arbitration) {
+        const reviewed = await loadProject(target.id, options);
+        if (reviewed.project.revision !== confirmed.revision) throw new FonciereConflictError();
+        return reviewed;
+      }
       options.onProgress?.({ stage: "save", completed: 1, total: 1, label: "Projet enregistré" });
       return { project: confirmed, data, assets: await listAssets(target.id, options), sourceDocuments };
     },

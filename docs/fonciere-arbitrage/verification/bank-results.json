@@ -1,0 +1,14 @@
+{
+  "passed": 5,
+  "checks": [
+    "Read-only voters keep approval when bank preparation is denied by separate transfer/presentation permissions",
+    "Snapshot remains exact across a later source edit; lost finalization response and concurrent retry create one draft",
+    "Bank JSON metadata, presentation state and PowerPoint speaker notes exclude private family remarks; source PDF copied exactly",
+    "A worked presentation survives new double approval and retry without silent overwrite or duplicate",
+    "Withdrawing an opinion recalculates the project while preserving the bank draft and opinion history"
+  ],
+  "services": "Real local Auth/PostgREST/PostgreSQL/Storage",
+  "simulatedBoundary": "One response lost after actual committed finalization",
+  "productionWrites": 0,
+  "googleRequests": 0
+}

@@ -234,3 +234,11 @@
 .fileCategory { min-width:150px; max-width:220px; display:grid; gap:4px; flex:1; }
 .fileCategory>span { font-size:10px; color:#71807a; }
 @media(max-width:600px) { .fileCategory { min-width:100%; max-width:none; } }
+
+.arbitrageFilter { min-width:150px; max-width:210px; display:grid; gap:4px; font-size:10px; color:#6c7f63; }
+.workspace .arbitrageFilter select { min-height:39px; padding:8px 28px 8px 10px; font-size:12px !important; }
+.arbitrageBadge { display:inline-block; font-size:11px; line-height:1.5; padding:4px 8px; border-radius:5px; color:#647653; background:#f0f4ea; margin:0 0 10px; }
+.arbitrageBadge[data-arbitrage-status=approved] { background:#e9f4e2; color:#3c672e; }
+.arbitrageBadge[data-arbitrage-status=refused] { background:#fceee8; color:#8d4a35; }
+.arbitrageBadge[data-arbitrage-status=deepen] { background:#fbf4df; color:#80683a; }
+@media(max-width:600px) { .arbitrageFilter { order:3; max-width:none; width:100%; } }

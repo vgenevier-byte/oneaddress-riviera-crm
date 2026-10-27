@@ -1,0 +1,11 @@
+{
+  "passed": 4,
+  "checks": [
+    "Whitespace-only remarks are rejected including tab/newline; exported comments remain independently owned",
+    "Business edit followed by exact revert never revives a previous approval",
+    "Checked repository loading captures server fingerprint and rejects a business change during hydration",
+    "A user-edited reserved presentation shell blocks automatic overwrite and exposes intervention state"
+  ],
+  "services": "Real local Auth/PostgREST/PostgreSQL; deterministic mutation timing on actual repository hydration",
+  "productionWrites": 0
+}

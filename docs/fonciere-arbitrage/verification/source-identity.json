@@ -1,0 +1,8 @@
+{
+  "mode": "production",
+  "verifiedSourceFiles": 256,
+  "differingFiles": [],
+  "application": "127.0.0.1:3197",
+  "network": "Owned loopback Auth/RPC/Storage only",
+  "productionRequests": 0
+}

@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "fullMigrationCompiled": true,
+  "configAuditActorSource": true,
+  "privateTables": 7,
+  "guardedPublicWrappers": 8,
+  "uncallableInternalHelpers": 4,
+  "rolledBack": true,
+  "services": "Real isolated PostgreSQL; no production writes"
+}
