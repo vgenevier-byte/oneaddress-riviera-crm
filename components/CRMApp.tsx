@@ -1,4 +1,6 @@
 "use client";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
+import { beginPageRefreshOperation } from "@/lib/pageRefresh";
 
 import { SearchableSelect } from "./search/SearchableSelect";
 import { SearchableInput } from "./search/SearchableInput";
@@ -2952,8 +2954,10 @@ function DocumentsView({
   const [connectedEmail, setConnectedEmail] = useState("");
   const [uploadingDocument, setUploadingDocument] = useState(false);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  usePageRefreshGuard({ dirty: false, busy: uploadingDocument || creatingFolder });
   const [dragActive, setDragActive] = useState(false);
   const [trashingDocumentId, setTrashingDocumentId] = useState("");
+  usePageRefreshGuard({ dirty: false, busy: Boolean(trashingDocumentId) });
   const trashInFlight = useRef(false);
   const [trashMessage, setTrashMessage] = useState<ScreenNotice>("");
 
@@ -4693,6 +4697,7 @@ function VendorInvoicesView({
     return () => window.clearTimeout(timer);
   }, [taskTarget, invoices]);
   const [uploadingInvoiceDocument, setUploadingInvoiceDocument] = useState(false);
+  usePageRefreshGuard({ dirty: false, busy: uploadingInvoiceDocument });
   const [duplicateDecision, setDuplicateDecision] = useState<{
     duplicates: VendorInvoiceDuplicate[]; reference?: string; form: HTMLFormElement;
   } | null>(null);
@@ -5899,12 +5904,10 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
 
   useEffect(() => { onUnsavedChange?.(hasUnsavedChanges || formDirty); }, [hasUnsavedChanges, formDirty, onUnsavedChange]);
   useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
-  useEffect(() => {
-    if (!hasUnsavedChanges && !formDirty) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [hasUnsavedChanges, formDirty]);
+  usePageRefreshGuard(() => ({
+    dirty: hasUnsavedChanges || formDirty || Boolean(quickEntryOpen && quickEntryText.trim()),
+    busy: workspaceBusy.current || pendingTaskStatus.current.size > 0,
+  }));
 
   const acceptSharedWorkspace = useCallback((payload: CRMData, revision: string) => {
     workspaceSync.current.load(payload, revision);
@@ -7672,43 +7675,46 @@ const toneRank: Record<ActionNotification["tone"], number> = {
 
     if (!confirmed || signal.aborted) return;
 
-    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    const finish = beginPageRefreshOperation();
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser(token);
 
-    if (signal.aborted) return;
-    if (userError || !userData.user || userData.user.id !== sessionUserId) {
-      window.alert(dialogT("crm.shell.8a52595800"));
-      return;
-    }
+      if (signal.aborted) return;
+      if (userError || !userData.user || userData.user.id !== sessionUserId) {
+        window.alert(dialogT("crm.shell.8a52595800"));
+        return;
+      }
 
-    if (!await writeSharedWorkspace(currentDataWithVisibleQuotes, signal, token) || signal.aborted) return;
+      if (!await writeSharedWorkspace(currentDataWithVisibleQuotes, signal, token) || signal.aborted) return;
 
-    const payload = {
-      version: "oneaddress-riviera-crm-v1",
-      savedAt: new Date().toISOString(),
-      data: currentDataWithVisibleQuotes
-    };
+      const payload = {
+        version: "oneaddress-riviera-crm-v1",
+        savedAt: new Date().toISOString(),
+        data: currentDataWithVisibleQuotes
+      };
 
-    const { error } = await supabase.from("crm_backups").insert({
-      user_id: userData.user.id,
-      payload,
-      contacts_count: contactsCount,
-      leads_count: leadsCount,
-      properties_count: propertiesCount,
-      vehicles_count: vehiclesCount,
-      boats_count: boatsCount,
-      tasks_count: tasksCount,
-      quotes_count: quotesCount
-    })
-      .setHeader("Authorization", `Bearer ${token}`)
-      .abortSignal(signal);
+      const { error } = await supabase.from("crm_backups").insert({
+        user_id: userData.user.id,
+        payload,
+        contacts_count: contactsCount,
+        leads_count: leadsCount,
+        properties_count: propertiesCount,
+        vehicles_count: vehiclesCount,
+        boats_count: boatsCount,
+        tasks_count: tasksCount,
+        quotes_count: quotesCount
+      })
+        .setHeader("Authorization", `Bearer ${token}`)
+        .abortSignal(signal);
 
-    if (signal.aborted) return;
-    if (error) {
-      window.alert(dialogText(safeCRMError(error)));
-      return;
-    }
+      if (signal.aborted) return;
+      if (error) {
+        window.alert(dialogText(safeCRMError(error)));
+        return;
+      }
 
-    window.alert(dialogT("crm.shell.ea1c9c32f9"));
+      window.alert(dialogT("crm.shell.ea1c9c32f9"));
+    } finally { finish(); }
   }
 
   async function exportCsv() {

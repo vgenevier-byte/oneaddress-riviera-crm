@@ -7,6 +7,8 @@ import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { sortSelectOptions } from "@/lib/selectOptions";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
+import { beginPageRefreshOperation } from "@/lib/pageRefresh";
 
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {useScopedOperations,isCancelled} from "@/lib/access/operations";
@@ -31,6 +33,7 @@ export function ContactDocumentCards({access,documents,onChanged,onReplace,appro
   const begin=useScopedOperations("documents");
   const [message,setMessage]=useState(""),[working,setWorking]=useState(""),[preview,setPreview]=useState<{doc:ContactDocument;url:string}|null>(null);
   const [sharing,setSharing]=useState<ContactDocument|null>(null),[recipients,setRecipients]=useState<Recipient[]>([]),[recipient,setRecipient]=useState("");
+  usePageRefreshGuard({ dirty: Boolean(sharing && recipient), busy: Boolean(working) });
   const previewDialog=useRef<HTMLDivElement>(null),shareDialog=useRef<HTMLDivElement>(null),previewReads=useRef(new ContactDocumentReadSequence());
   const closePreview=useCallback(()=>{previewReads.current.invalidate();setPreview(null);setWorking("");},[]);
   const fail=(error:unknown)=>{if(!isCancelled(error))setMessage(contactDocumentError(error));};
@@ -97,6 +100,7 @@ export default function ContactDocuments({contactId,access}:{contactId:string;ac
 
   const begin=useScopedOperations("documents"),[projection,setProjection]=useState<ContactDocumentProjection|null>(null),[queue,setQueue]=useState<Queued[]>([]),[message,setMessage]=useState(""),[busy,setBusy]=useState(false);
   const revision=useRef<string|null>(null),runController=useRef<AbortController|null>(null),inFlight=useRef(false),alive=useRef(true),queueRef=useRef<Queued[]>([]),reads=useRef(new ContactDocumentReadSequence());
+  usePageRefreshGuard({ dirty: queue.some(item => item.status !== "confirmed"), busy });
   const permitted=allowed(access),canAdd=writable(access),identity=JSON.stringify(access);
   function updateQueue(next:Queued[]|((rows:Queued[])=>Queued[])){const value=typeof next==="function"?next(queueRef.current):next;queueRef.current=value;setQueue(value);}
   const refresh=useCallback(async()=>{if(!permitted)return;const request=reads.current.start();try{const op=await begin();const result=await op.run(()=>op.client.rpc("crm_contact_documents",{p_contact:contactId}));if(result.error)throw result.error;await op.check();if(alive.current&&reads.current.current(request)){const value=result.data as ContactDocumentProjection;revision.current=value.revision;setProjection(value);const reconciled=queueRef.current.map(item=>{const confirmed=value.documents.find(doc=>doc.operation_id===item.operationId&&doc.lifecycle==="active");const previous=item.previous?value.documents.find(doc=>doc.resource_id===item.previous!.resource_id):null;return confirmed&&(!item.previous||previous?.superseded_by===confirmed.resource_id)?{...item,status:"confirmed" as const,message:"Confirmé par le serveur"}:item;});queueRef.current=reconciled;setQueue(reconciled);}}catch(error){if(alive.current&&reads.current.current(request)&&!isCancelled(error)){setProjection(null);setMessage(contactDocumentError(error));}}},[begin,contactId,permitted]);
@@ -136,8 +140,11 @@ export default function ContactDocuments({contactId,access}:{contactId:string;ac
     finally{inFlight.current=false;runController.current=null;if(alive.current)setBusy(false);}
   }
   async function discard(item:Queued){
-    if(item.locked&&item.status!=="confirmed"){try{const op=await begin();const result=await op.run(()=>op.client.rpc("crm_contact_document_cancel",{p_operation:item.operationId}));if(result.error)throw result.error;await op.check();}catch(error){if(!isCancelled(error))setMessage(contactDocumentError(error));await refresh();return;}}
-    updateQueue(rows=>rows.filter(row=>row.operationId!==item.operationId));
+    const finished=beginPageRefreshOperation();
+    try {
+      if(item.locked&&item.status!=="confirmed"){try{const op=await begin();const result=await op.run(()=>op.client.rpc("crm_contact_document_cancel",{p_operation:item.operationId}));if(result.error)throw result.error;await op.check();}catch(error){if(!isCancelled(error))setMessage(contactDocumentError(error));await refresh();return;}}
+      updateQueue(rows=>rows.filter(row=>row.operationId!==item.operationId));
+    } finally { finished(); }
   }
   if(!permitted)return <section className={styles.section} data-contact-documents><h4>{t("modules.contactDocuments.contactDocuments")}</h4><p>{t("modules.contactDocuments.readAccessToContactsAndDocumentsIsRequired")}</p></section>;
   return <section className={styles.section} data-contact-documents aria-label={t("modules.contactDocuments.contactDocuments")}>

@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n/I18nProvider";
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import CRMRefreshButton from "./CRMRefreshButton";
 import {
   isCRMTabSearchable,
   type CRMTab
@@ -78,7 +79,7 @@ export default function MobileCRMHeader({
   return (
     <>
       <header className="mobile-crm-header">
-        <Image src="/oar-logo-paysage-crm.png" alt="One Address Riviera" width={96} height={84} priority />
+        <CRMRefreshButton><Image src="/oar-logo-paysage-crm.png" alt="One Address Riviera" width={96} height={84} priority /></CRMRefreshButton>
         <div className="mobile-crm-header-title">
           <span>One Address · CRM</span>
           <h1>{t(`navigation.module.${activeTab}`)}</h1>

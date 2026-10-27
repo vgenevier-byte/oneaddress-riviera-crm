@@ -1,4 +1,5 @@
 "use client";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { createSearchIndex, searchIndex } from "@/lib/search";
 import { SearchMatchHint } from "@/components/search/SearchMatchHint";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
@@ -46,6 +47,7 @@ export default function ModuleWorkspace({module,access,userId,onDirty,draft,onDr
  const tasksProjection=useTaskProjection(taskApi,JSON.stringify(access),taskRights.read);
  const begin=useScopedOperations(module),[data,setData]=useState<Projection|null>(null),[refs,setRefs]=useState<Record<string,Row[]>>({}),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  const saving=useRef(false);
+ usePageRefreshGuard(() => ({ dirty: false, busy: saving.current || busy || pendingTaskWrites.current.size > 0 }));
  const permissionFingerprint=JSON.stringify(access);
  const stableAccess=useMemo(()=>JSON.parse(permissionFingerprint) as AccessSnapshot,[permissionFingerprint]);
  const current=useRef<Projection|null>(null);const staged=useRef(new Map<string,{file:File;collection:string;id:string;operation:ScopedOperation}>());

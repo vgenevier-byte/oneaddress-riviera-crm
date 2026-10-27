@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
 import { createArbitrageRepository } from "@/lib/fonciere/arbitrage";
 import styles from "./ProjectArbitrage.module.css";
@@ -17,6 +18,7 @@ export default function ArbitrageAdministration({ users, onDirty }: { users: Acc
   const [busy, setBusy] = useState(false), [message, setMessage] = useState("");
   const live = useRef(true);
   const dirty = Boolean(draft && saved && (draft.vincent !== saved.vincent || draft.annCharlotte !== saved.annCharlotte));
+  usePageRefreshGuard({ dirty, busy });
   const distinct = !draft?.vincent || !draft?.annCharlotte || draft.vincent !== draft.annCharlotte;
   useEffect(() => {
     live.current = true;

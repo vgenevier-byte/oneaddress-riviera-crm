@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FolderOpen, RefreshCw } from "lucide-react";
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import styles from "./ProjectsWorkspace.module.css";
 
 type CopyState = "pending" | "copying" | "synced" | "retry";
@@ -24,6 +25,7 @@ export default function ProjectDriveSync({ projectId, revision, lang, accessSign
   const [snapshot, setSnapshot] = useState<DriveStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  usePageRefreshGuard({ busy });
   const epoch = useRef(0);
   const tr = (fr: string, en: string) => lang === "en" ? en : fr;
   const refresh = useCallback(async (signal: AbortSignal) => {

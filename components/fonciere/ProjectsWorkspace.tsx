@@ -2,6 +2,8 @@
 
 import { TaskSourceActions } from "@/components/TaskLinkProvider";
 import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
+import { beginPageRefreshOperation } from "@/lib/pageRefresh";
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Archive, ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, Download, FileText, FolderOpen, ImagePlus, MapPin, Plus, RefreshCw, Save, Search, Upload } from "lucide-react";
@@ -146,7 +148,8 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     const identity = draftLease.current?.identity;
     if (!identity || !data || !draftReady) return;
     const snapshot = { data, loaded, sourceFiles, sourceFileCategories, creationReconciled, updatedAt: new Date().toISOString() };
-    draftPersistence.current = draftPersistence.current.catch(() => {}).then(() => saveFonciereLocalDraft(identity, snapshot));
+    const finished = beginPageRefreshOperation();
+    draftPersistence.current = draftPersistence.current.catch(() => {}).then(() => saveFonciereLocalDraft(identity, snapshot)).finally(finished);
     await draftPersistence.current;
   }
   useEffect(() => {
@@ -157,10 +160,15 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       const lease = await claimFonciereDraft(creationScope, candidate, controller.signal);
       if (controller.signal.aborted || generation !== draftEpoch.current) { lease.release(); return; }
       draftLease.current = lease;
-      window.history.replaceState(null, "", draftUrl(lease.identity.draftId));
+      // Restoring a draft keeps the full requested route, including its anchor.
+      const restoredUrl = new URL(window.location.href);
+      if (restoredUrl.searchParams.get("draft") !== lease.identity.draftId) {
+        restoredUrl.searchParams.set("draft", lease.identity.draftId);
+        window.history.replaceState(null, "", restoredUrl.pathname + restoredUrl.search + restoredUrl.hash);
+      }
       const restored = await readFonciereLocalDraft(lease.identity);
       if (controller.signal.aborted || generation !== draftEpoch.current || draftLease.current !== lease) return;
-      if (!restored && lease.identity.confirmedProjectId) { lease.release(); draftLease.current = null; await open(lease.identity.confirmedProjectId); return; }
+      if (!restored && lease.identity.confirmedProjectId) { lease.release(); draftLease.current = null; await open(lease.identity.confirmedProjectId, true); return; }
       if (restored) { setData(restored.data); setLoaded(restored.loaded); setSourceFiles(restored.sourceFiles); setSourceFileCategories(restored.sourceFileCategories); setCreationReconciled(restored.creationReconciled); setDirty(true); }
       else setData(createFonciereData());
       setDraftReady(true);
@@ -198,7 +206,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     return () => { alive = false; window.clearTimeout(timer); stop(); accessSignal?.removeEventListener("abort", stop); };
   }, [userId, accessRevision, reload, accessSignal]);
   useEffect(() => { onUnsavedChange?.(dirty || importPending || accessBusy || contactPending || arbitrageDirty); return () => onUnsavedChange?.(false); }, [dirty, importPending, accessBusy, contactPending, arbitrageDirty, onUnsavedChange]);
-  useEffect(() => { if (!dirty && !importPending && !contactPending && !arbitrageDirty) return; const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; }; window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn); }, [dirty, importPending, contactPending, arbitrageDirty]);
+  usePageRefreshGuard({ dirty: dirty || sourceFiles.length > 0 || importPending || contactPending || arbitrageDirty, busy: busy || accessBusy });
   useEffect(() => {
     if (!importPending) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -255,12 +263,12 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     } catch (failure) { if (generation === draftEpoch.current) setError(draftError(failure)); }
     finally { if (generation === draftEpoch.current) setBusy(false); }
   }
-  async function open(id: string) {
+  async function open(id: string, preserveUrl = false) {
     if (busy || !leave()) return;
     draftEpoch.current++;
     setBusy(true); setError(""); setReview(null);
     let op: Awaited<ReturnType<typeof operation>> | undefined;
-    try { op = await operation(); const value = await op.scoped.run(() => op!.repository.loadProject(id, { signal: op!.signal, arbitration: true })); if (current(op.id)) { window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(value.project.id)}`); draftLease.current?.release(); draftLease.current = null; setDraftReady(false); setCreationReconciled(false); setCreationConflict(null); setReconciliation(null); setLoaded(value); setData(value.data); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setNotice(""); setActiveSection("identity"); } }
+    try { op = await operation(); const value = await op.scoped.run(() => op!.repository.loadProject(id, { signal: op!.signal, arbitration: true })); if (current(op.id)) { if (!preserveUrl) window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(value.project.id)}`); draftLease.current?.release(); draftLease.current = null; setDraftReady(false); setCreationReconciled(false); setCreationConflict(null); setReconciliation(null); setLoaded(value); setData(value.data); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setNotice(""); setActiveSection("identity"); } }
     catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) setError(messageOf(failure)); }
     finally { if (!op || current(op.id)) setBusy(false); }
   }
@@ -270,7 +278,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     const id = new URL(window.location.href).searchParams.get("project");
     if (!id) return;
     const timer = window.setTimeout(() => {
-      if (projects.some(project => project.id === id)) void open(id);
+      if (projects.some(project => project.id === id)) void open(id, true);
       else setError(t("Ce projet est inaccessible ou n’existe plus.", "This project is unavailable or no longer exists."));
     }, 0);
     return () => window.clearTimeout(timer);
@@ -284,7 +292,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     if (!id || handledTaskFocus.current === key) return;
     const timer = window.setTimeout(() => {
       handledTaskFocus.current = key;
-      if (loaded?.project.id !== id) void open(id);
+      if (loaded?.project.id !== id) void open(id, true);
     }, 0);
     return () => window.clearTimeout(timer);
     // Open through the authorized repository; retain source form during task composition.

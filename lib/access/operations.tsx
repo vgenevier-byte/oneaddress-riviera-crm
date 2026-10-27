@@ -1,4 +1,5 @@
 "use client";
+import {beginPageRefreshOperation} from "@/lib/pageRefresh";
 import {createContext,useContext,useLayoutEffect,useMemo,useCallback,useRef} from 'react';
 import {createClient,type SupabaseClient} from '@supabase/supabase-js';
 import {supabase} from '@/lib/supabase';
@@ -33,7 +34,7 @@ export function useScopedOperations(module:ModuleId|'admin'){
   // No shared session lookup on later business requests: all use the captured actor.
   const client=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,{accessToken:async()=>token,auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false},global:{fetch:(input,init)=>fetch(input,{...init,signal})}});
   async function check(){signal.throwIfAborted();const {data:{session:current}}=await supabase.auth.getSession();signal.throwIfAborted();if(current?.user.id!==scope!.userId)throw new DOMException('Compte changé.','AbortError');const r=await client.rpc('crm_access_snapshot').abortSignal(signal);signal.throwIfAborted();if(r.error||!r.data?.active||r.data.revision!==scope!.access.revision||JSON.stringify(r.data.modules)!==JSON.stringify(scope!.access.modules)||(module==='admin'&&!r.data.generalAdmin))throw new DOMException('Droits modifiés.','AbortError');}
-  const run=async<T,>(fn:()=>PromiseLike<T>)=>{await check();const value=await fn();await check();return value;};
+  const run=async<T,>(fn:()=>PromiseLike<T>)=>{const finish=beginPageRefreshOperation();try{await check();const value=await fn();await check();return value;}finally{finish();}};
   await check();
   return {client,token,signal,check,run,download:async(blob,name)=>{await check();const url=URL.createObjectURL(blob);try{signal.throwIfAborted();const a=document.createElement('a');a.href=url;a.download=name;a.click();}finally{URL.revokeObjectURL(url);}}};
  },[scope,lifetime,module]);

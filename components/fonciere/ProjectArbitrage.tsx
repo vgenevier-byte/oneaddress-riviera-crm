@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw, Save, ArrowUpRight } from "lucide-react";
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { createArbitrageRepository, type ArbitrationChoice, type ArbitrationSlot, type ArbitrationState } from "@/lib/fonciere/arbitrage";
 import { taskTargetHref } from "@/lib/tasks/navigation";
 import { prepareBankPresentation } from "@/lib/fonciere/bankPresentation";
@@ -35,6 +36,7 @@ export default function ProjectArbitrage({ projectId, userId, loadedRevision, lo
   const own = rawOwn?.authorId === userId && !(rawOwn.stale && rawOwn.fingerprint === state?.fingerprint) ? rawOwn : undefined;
   const reviewedFingerprint = useRef<string | null>(loadedFingerprint || null);
   const dirty = Boolean(state?.canVote && (draft.choice !== (own?.choice || "pending") || draft.remark !== (own?.remark || "")));
+  usePageRefreshGuard({ dirty, busy });
   useEffect(() => { draftChanged.current = dirty; }, [dirty]);
   const label = (choice: ArbitrationChoice) => { const pair = ARBITRAGE_LABELS[choice]; return t(pair[0], pair[1]); };
   const needsRemark = draft.choice === "refused" || draft.choice === "deepen";

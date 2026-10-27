@@ -5,6 +5,7 @@ import { createSearchIndex, searchIndex } from "@/lib/search";
 import { SearchMatchHint } from "@/components/search/SearchMatchHint";
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
 import { useFonciereLocale } from "@/lib/fonciere/locale";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import styles from "./ProjectAccess.module.css";
 
 type AccessOption = { userId: string; email: string; role: "admin" | "partner" | "contributor" | "reader"; assigned: boolean; inherited: boolean };
@@ -15,6 +16,7 @@ export default function ProjectAccess({ projectId, userId, accessSignal, onDirty
   const [query, setQuery] = useState("");
   const [options, setOptions] = useState<AccessOption[]>([]), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  usePageRefreshGuard({ busy });
   const controller = useRef<AbortController | null>(null);
   const t = (fr: string, en: string) => locale === "fr" ? fr : en;
   const read = useCallback(async (local: AbortController) => {

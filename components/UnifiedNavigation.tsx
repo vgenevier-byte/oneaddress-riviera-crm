@@ -1,5 +1,6 @@
 "use client";
 import Image from "next/image";
+import CRMRefreshButton from "./CRMRefreshButton";
 import { useEffect, useRef, useState } from "react";
 import crmLogo from "../public/oar-logo-paysage-crm.png";
 import { type AccessSnapshot, type ModuleId } from "@/lib/access/modules";
@@ -101,7 +102,7 @@ export default function UnifiedNavigation({ access, active, accountId, navigatio
    </div>;
   });
  }
- return <><aside className={`sidebar ${styles.rail}`}><div className={`brand-block brand-block-logo ${styles.brand}`}><Image src={crmLogo} alt="One Address Riviera" className="crm-sidebar-logo" /></div><nav className={`nav-list ${styles.tree}`} aria-label={t("navigation.main")}>{tree("desktop")}</nav><footer className={styles.footer}><LanguageSelector compact />
+ return <><aside className={`sidebar ${styles.rail}`}><div className={`brand-block brand-block-logo ${styles.brand}`}><CRMRefreshButton><Image src={crmLogo} alt="One Address Riviera" className="crm-sidebar-logo" /></CRMRefreshButton></div><nav className={`nav-list ${styles.tree}`} aria-label={t("navigation.main")}>{tree("desktop")}</nav><footer className={styles.footer}><LanguageSelector compact />
   {access.generalAdmin && button(administrationItem, "desktop")}
   <button type="button" className={`${styles.row} ${styles.signout}`} onClick={onLogout}>{t("navigation.signOut")}</button>
  </footer></aside>

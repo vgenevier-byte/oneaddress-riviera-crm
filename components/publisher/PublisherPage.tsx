@@ -4,6 +4,7 @@ import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
 import { sortSelectOptions } from "@/lib/selectOptions";
 import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { specialistMessage } from "@/lib/i18n/catalogs/specialist";
 import { useEffect, useRef, useState } from 'react';
 import type { ModuleGrant } from '@/lib/access/modules';
@@ -214,6 +215,7 @@ export default function PublisherPage({ userId, grant, accessRevision, onUnsaved
   const requestId = useRef(pendingRequestId);
   const generationLock = useRef(false);
   const generationTracker = useRef(0);
+  usePageRefreshGuard({ dirty: musicDirty || Boolean(direction.universe || direction.moment || direction.style), busy: generating });
 
   useEffect(() => {
     // An admitted request takes priority over a recovered creative draft.
@@ -530,6 +532,7 @@ function PostEditor({ post, api, userId, accessRevision, canWrite, canGenerate, 
   const [remote, setRemote] = useState<PublisherPost | null>(null);
   const mutations = useRef(new Map<string, string>(Object.entries(readPublisherDraft(userId, accessRevision)?.requests || {})));
   const mutationLock = useRef(false);
+  usePageRefreshGuard({ busy: Boolean(busy) });
   const previousMusic = useRef({ id: post.id, used: post.music_used_id, primary: post.primary_music_id, selected: post.selected_music_id });
   const published = post.status === 'published';
   const copyBlock = `${post.caption}\n\n${post.hashtags.join(' ')}`;

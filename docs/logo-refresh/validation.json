@@ -1,0 +1,156 @@
+{
+  "mode": "production-built local application; browser HTTP fixture only",
+  "data": "fictitious; no production Auth, database, Storage, Drive or Publisher request",
+  "origin": "http://127.0.0.1:3199",
+  "results": [
+    {
+      "name": "Desktop FR classic CRM: actual reload retains full URL, account, language, logo image dimensions; no business save",
+      "passed": true
+    },
+    {
+      "name": "Desktop EN native Administration: Space and Enter reload; dirty cancel preserves input, confirmed refresh gives exactly one warning",
+      "passed": true
+    },
+    {
+      "name": "Classic contact dirty input: cancel keeps complete value and URL; confirm reloads once without business autosave",
+      "passed": true
+    },
+    {
+      "name": "Existing browser reload protection remains active after cancelling a logo refresh",
+      "passed": true
+    },
+    {
+      "name": "Mobile/tablet 768px EN full CRM: existing mobile logo, native button semantics, keyboard focus and Enter reload",
+      "passed": true
+    },
+    {
+      "name": "Phone 390px: existing header remains compact with no newly displayed logo or overflow",
+      "passed": true
+    },
+    {
+      "name": "Restricted desktop CRM: common navigation logo actually reloads and retains account/module/URL",
+      "passed": true
+    },
+    {
+      "name": "Native Fonciere: rapid repeated logo clicks reload only once and retain project URL/record",
+      "passed": true
+    },
+    {
+      "name": "Clean visible Administration still warns for an arbitration remark retained in the background Fonciere view",
+      "passed": true
+    },
+    {
+      "name": "Retained Project → Contact (full): hidden project remark, edits and pending file survive cancel; confirmed reload warns once",
+      "passed": true
+    },
+    {
+      "name": "Retained Project → Contact (restricted): hidden project remark, edits and pending file survive cancel; confirmed reload warns once",
+      "passed": true
+    },
+    {
+      "name": "Drive transfer retry request: logo blocks while POST is pending and refresh never replays the admitted retry",
+      "passed": true
+    },
+    {
+      "name": "Full CRM house save: refresh blocked while request is pending; failed response retains form and refresh warning without retry",
+      "passed": true
+    },
+    {
+      "name": "Saving Administration: repeated logo clicks are blocked; admitted save finishes once, no silent interruption or replay after later refresh",
+      "passed": true
+    }
+  ],
+  "errors": [],
+  "audits": [
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [
+        "drive-retry"
+      ],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [
+        "workspace-update"
+      ],
+      "signIns": 1,
+      "signOuts": 0
+    },
+    {
+      "unexpectedRequests": [],
+      "businessWrites": [
+        "crm_admin_save"
+      ],
+      "signIns": 1,
+      "signOuts": 0
+    }
+  ]
+}

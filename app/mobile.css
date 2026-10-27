@@ -144,7 +144,7 @@
     backdrop-filter: blur(16px);
   }
 
-  .mobile-crm-header > img {
+  .mobile-crm-header > [data-crm-refresh] > img {
     width: 48px;
     height: 42px;
     object-fit: contain;
@@ -1426,7 +1426,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .mobile-crm-header > img {
+  .mobile-crm-header > button[data-crm-refresh] {
     display: none;
   }
 }

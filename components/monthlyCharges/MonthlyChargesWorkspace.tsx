@@ -1,4 +1,5 @@
 "use client";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { TaskSourceActions } from "@/components/TaskLinkProvider";
 import { useTaskTargetFocus } from "@/lib/tasks/navigation";
 import { SearchMatchHint } from "@/components/search/SearchMatchHint";
@@ -151,6 +152,7 @@ export default function MonthlyChargesWorkspace({ access, userId, onDirtyChange,
   const allEntries = useMemo(() => snapshot ? evaluateMonthlyChargeEntries(snapshot) : [], [snapshot]);
   const periodLabel = `${monthLabel(startMonth)} – ${monthLabel(endMonth)}`;
   const dirty = isDraftDirty(draft);
+  usePageRefreshGuard(() => ({ dirty, busy: saving || exporting || savePending.current || exportPending.current }));
   const draftKind = draft?.kind;
   const hasProjection = Boolean(snapshot);
 

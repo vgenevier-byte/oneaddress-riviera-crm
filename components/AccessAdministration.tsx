@@ -4,6 +4,7 @@ import { searchProjects, type ProjectIdentity } from "@/lib/fonciere/projectSear
 import { createSearchIndex, searchIndex } from "@/lib/search";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import AdminHistory from "@/lib/access/AdminHistory";
 import { useScopedOperations, isCancelled } from "@/lib/access/operations";
 import type { AccessSnapshot } from "@/lib/access/modules";
@@ -37,6 +38,7 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
   const [arbitrageConfigDirty, setArbitrageConfigDirty] = useState(false);
   const [data, setData] = useState<AdminData | null>(null), [edit, setEdit] = useState<User | null>(null), [message, setMessage] = useState(""), [dirty, setDirty] = useState(false), [busy, setBusy] = useState(false), [inviteEmail, setInviteEmail] = useState("");
   const [userQuery, setUserQuery] = useState(""), [projectQuery, setProjectQuery] = useState(""), [fonciereQuery, setFonciereQuery] = useState("");
+  usePageRefreshGuard({ dirty: dirty || arbitrageConfigDirty, busy });
   const load = useCallback(async () => {
     const lease = loadRequest.current, sequence = ++lease.sequence;
     try { const op = await begin(); const r = await op.run(() => op.client.rpc("crm_admin_users")); if (sequence !== lease.sequence) return; if (r.error) throw r.error; setData(r.data); }
@@ -123,8 +125,10 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
     {data && <ArbitrageAdministration users={data.users} onDirty={setArbitrageConfigDirty}/>}
     <section className="panel"><h2>{t("admin.pendingInvitations")}</h2>{data?.invitations?.map(invitation => <p key={invitation.id}>{invitation.email} · {t("admin.expires", { date: formatDate(invitation.expires_at, { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) })} <button disabled={busy} onClick={async () => {
       if (!window.confirm(t("admin.confirmRevoke"))) return;
+      setBusy(true);
       try { const op = await begin(); const result = await op.run(() => op.client.rpc("crm_invite_revoke", { p_id: invitation.id })); if (result.error) throw result.error; setMessage("admin.revoked"); await op.check(); await reload(); }
       catch (error) { if (!isCancelled(error)) setMessage("admin.revokeFailed"); }
+      finally { setBusy(false); }
     }}>{t("admin.revokeInvitation")}</button></p>)}</section><AdminHistory key={userId + ":" + JSON.stringify(access) + ":" + historyReload} users={data?.users ?? []}/>
   </div>;
 }

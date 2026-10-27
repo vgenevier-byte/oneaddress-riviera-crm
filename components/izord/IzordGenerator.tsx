@@ -3,6 +3,7 @@ import { SearchMatchHint } from "@/components/search/SearchMatchHint";
 import { createSearchIndex, searchIndex } from "@/lib/search";
 import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { specialistMessage } from "@/lib/i18n/catalogs/specialist";
 
 import { TaskSourceActions } from "@/components/TaskLinkProvider";
@@ -85,11 +86,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
     return ()=>{stop();accessSignal.removeEventListener("abort",stop);};
   },[userId,invalidate,accessSignal]);
   useEffect(()=>{onUnsavedChange(dirty);return()=>onUnsavedChange(false);},[dirty,onUnsavedChange]);
-  useEffect(()=>{
-    if(!dirty)return;
-    const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();};
-    window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);
-  },[dirty]);
+  usePageRefreshGuard({ dirty: dirty || sourceFiles.length > 0 || reports.length > 0 || pdfFiles.length > 0, busy });
   function begin(){accessSignal.throwIfAborted();controller.current?.abort();controller.current=new AbortController();return {id:++epoch.current,signal:AbortSignal.any([controller.current.signal,accessSignal])};}
   function current(id:number){return !accessSignal.aborted&&id===epoch.current;}
   function leave(){return !dirty||window.confirm(t("izord.ce_brouillon_n_est_pas_enregistre_exportez_s_e4fdd1"));}
@@ -98,7 +95,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
   function fresh(next=createProjectData(),files:File[]=[]){const sourceAttemptUrl=new URL(window.location.href);sourceAttemptUrl.searchParams.delete("sourceDraft");window.history.replaceState(null,"",sourceAttemptUrl.pathname+sourceAttemptUrl.search+sourceAttemptUrl.hash);setHistoricalRevision(null);begin();setDraftId(crypto.randomUUID());setData(next);setLoaded(null);setVersions([]);setSourceFiles(files);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setWorkflow("draft");setDirty(true);setBusy(false);setError("");setConflict(false);setRemote(null);setNotice("Nouveau brouillon — non enregistré");}
   async function refreshList(){const operation=begin();try{const list=await repository.listProjects({signal:operation.signal});if(current(operation.id))setProjects(list);}catch{if(current(operation.id))setError("Liste indisponible.");}}
   async function open(project:ProjectRecord, revision?:number, preserveTarget=false, preserveCreationAttempt=false){
-    if(!leave())return;const pendingSourceDraft=preserveCreationAttempt?new URL(window.location.href).searchParams.get("sourceDraft"):null;if(!preserveCreationAttempt){const sourceAttemptUrl=new URL(window.location.href);sourceAttemptUrl.searchParams.delete("sourceDraft");window.history.replaceState(null,"",sourceAttemptUrl.pathname+sourceAttemptUrl.search+sourceAttemptUrl.hash);}setHistoricalRevision(revision ?? null);const operation=begin();setDraftId(crypto.randomUUID());setData(null);setLoaded(null);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setBusy(true);setError("");setNotice("Ouverture…");
+    if(!leave())return;const pendingSourceDraft=preserveCreationAttempt?new URL(window.location.href).searchParams.get("sourceDraft"):null;if(!preserveCreationAttempt&&!preserveTarget){const sourceAttemptUrl=new URL(window.location.href);sourceAttemptUrl.searchParams.delete("sourceDraft");window.history.replaceState(null,"",sourceAttemptUrl.pathname+sourceAttemptUrl.search+sourceAttemptUrl.hash);}setHistoricalRevision(revision ?? null);const operation=begin();setDraftId(crypto.randomUUID());setData(null);setLoaded(null);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setBusy(true);setError("");setNotice("Ouverture…");
     try{const value=await repository.loadProject(project.id,{signal:operation.signal,hydratePhotos:roleCanWrite && revision === undefined,revision});const history=await repository.listVersions(project.id,{signal:operation.signal});
       if(current(operation.id)){
         if(!preserveTarget){
@@ -122,7 +119,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
       if (!project) { setError(language === "en" ? "This presentation is unavailable." : "Cette présentation est inaccessible."); return; }
       const raw = taskFocus.context?.revision;
       const revision = raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined;
-      if (loaded?.project.id !== id || revision !== (historicalRevision ?? undefined)) void open(project, revision, taskFocus.type === "document", Boolean(new URL(window.location.href).searchParams.get("sourceDraft")));
+      if (loaded?.project.id !== id || revision !== (historicalRevision ?? undefined)) void open(project, revision, true, Boolean(new URL(window.location.href).searchParams.get("sourceDraft")));
     }, 0);
     return () => window.clearTimeout(timer);
     // The repository rechecks RLS for the project, revision and assets.

@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { clearPublisherDrafts } from "@/lib/publisher/draftRecovery";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { OperationProvider } from "@/lib/access/operations";
 import UnifiedNavigation, { type UnifiedTab } from "./UnifiedNavigation";
 import { moduleItems, readable, type AccessSnapshot, type ModuleId } from "@/lib/access/modules";
@@ -11,7 +12,7 @@ import type { ContactCreateIntent } from "@/lib/contacts/createIntent";
 import type { ProjectContactReturn } from "@/lib/fonciere/contactCreation";
 const ModuleWorkspace = dynamic(() => import("./ModuleWorkspace"), { ssr: false });
 const AccessAdministration = dynamic(() => import("./AccessAdministration"), { ssr: false });
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { draftTarget, reducedIzordRole, resumeGeneratorDraft, temporaryAccessFailure,
@@ -68,10 +69,19 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "fonc
   const setCRMDirty = useCallback((dirty: boolean) => setHostDirty(old => old.crm === dirty ? old : { ...old, crm: dirty }), []);
   const setContactsDirty = useCallback((dirty: boolean) => setHostDirty(old => old.contacts === dirty ? old : { ...old, contacts: dirty }), []);
   const setProjectDirty = useCallback((dirty: boolean) => setHostDirty(old => old.project === dirty ? old : { ...old, project: dirty }), []);
+  // Each retained module owns its flag: a clean hidden view cannot clear
+  // another view's draft. Callback identities also keep mounted editors stable.
+  const [moduleDirty, setModuleDirty] = useState<Partial<Record<UnifiedTab, boolean>>>({});
+  const moduleDirtyCallbacks = useMemo(() => Object.fromEntries(
+    [...moduleItems.map(item => item.tab), "admin" as const].map(module => [module, (dirty: boolean) =>
+      setModuleDirty(current => current[module] === dirty ? current : { ...current, [module]: dirty })])
+  ) as Record<UnifiedTab, (dirty: boolean) => void>, []);
+  const hasUnsavedChanges = Object.values(moduleDirty).some(Boolean);
   const clearContactHosts = useCallback(() => {
     contactJourneyRef.current = null; setContactJourney(null); setContactReturn(undefined);
     setRetainedCRM(null); setRetainedContacts(null);
     setHostDirty({ crm: false, contacts: false, project: false });
+    setModuleDirty({});
   }, []);
   const [invitation,setInvitation] = useState<string | null>(null);
   const [invitationReady,setInvitationReady] = useState(false);
@@ -115,7 +125,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "fonc
     if(!alive)return;
     setInvitationReady(true);
     const target=readTaskTarget(url.href);
-    const requested=target?taskTargetModule(target):query.get("module");if(requested === "fonciere" || moduleItems.some(m=>m.tab===requested))setView(requested as UnifiedTab);
+    const requested=target?taskTargetModule(target):query.get("module");if(requested === "admin" || requested === "fonciere" || moduleItems.some(m=>m.tab===requested))setView(requested as UnifiedTab);
     const prefix = requested === "vendorInvoices" ? "#vendor-invoice-" : requested === "houseTracking" ? "#house-time-" : null;
     if (prefix && url.hash.startsWith(prefix)) {
       try { setSourceFocus({ module: requested as "vendorInvoices" | "houseTracking", id: decodeURIComponent(url.hash.slice(prefix.length)) }); } catch { /* Invalid anchors do not open a record. */ }
@@ -135,7 +145,6 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "fonc
     return()=>window.removeEventListener("popstate",restore);
   }, []);
   const [cacheTransition, setCacheTransition] = useState<PersistentCRMCacheState | null>(null);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [generatorHost, setGeneratorHost] = useState<GeneratorHost | null>(null);
   const generatorRef = useRef<GeneratorHost | null>(null);
   const draftRecovery = useRef<DraftRecovery | null>(null);
@@ -146,14 +155,17 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "fonc
     generatorRef.current?.controller.abort();
     generatorRef.current = null;
     setGeneratorHost(null);
-    if (!retain) { clearPublisherDrafts(); draftRecovery.current = null; setHasUnsavedChanges(false); }
-  }, []);
+    if (!retain) { clearPublisherDrafts(); draftRecovery.current = null; moduleDirtyCallbacks.izord(false); }
+  }, [moduleDirtyCallbacks]);
 
-  useEffect(() => {
-    const warn = (event: BeforeUnloadEvent) => { const draft = draftRecovery.current?.draft; if (hasUnsavedChanges || Object.values(hostDirty).some(Boolean) || draft?.dirty || draft?.reports.length || draft?.sourceFiles.length) { event.preventDefault(); event.returnValue = ""; } };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [hasUnsavedChanges, hostDirty]);
+  usePageRefreshGuard(() => {
+    const draft = draftRecovery.current?.draft;
+    return {
+      dirty: hasUnsavedChanges || Object.values(hostDirty).some(Boolean) || Boolean(contactJourneyRef.current)
+        || Boolean(draft?.dirty || draft?.reports.length || draft?.sourceFiles.length || draft?.pdfFiles.length),
+      busy,
+    };
+  });
 
   useEffect(() => { currentView.current = view; retryAccess.current(); }, [view]);
 
@@ -341,7 +353,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "fonc
     if (!confirmLeaving()) return;
     stopGenerator();
     setBusinessDraft(null);
-    setHasUnsavedChanges(false);
+    setModuleDirty({});
     setAccess(initial);
     clearCRMCache();
     await supabase.auth.signOut({ scope: "local" });
@@ -417,7 +429,7 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "fonc
     } else if (tab !== "contacts") {
       setRetainedCRM(null); setRetainedContacts(null);
     }
-    stopGenerator(); setHasUnsavedChanges(false); setView(tab);
+    stopGenerator(); setView(tab);
     setNavigationRevision(value => value + 1);
     const focus = recordId && (tab === "vendorInvoices" || tab === "houseTracking") ? { module: tab, id: recordId } : undefined;
     setSourceFocus(focus);
@@ -474,13 +486,13 @@ export default function AccessPortal({ space }: { space: "oar" | "izord" | "fonc
       {message&&<p role="status">{t(message)}</p>}
       {!selected && <div className="module-workspace"><h1>{chargesDenied ? t("access.chargesDenied") : t("access.noAccess")}</h1><p>{chargesDenied ? t("access.moduleDenied") : t("access.contactAdmin")}</p><button onClick={logout}>{t("access.signOut")}</button></div>}
       {(selected === "fonciere" || selected === "izord") && !izord && <div className="module-workspace"><h1>{t(`navigation.module.${selected}`)}</h1><p role="alert">{t("access.businessRoleRequired")}</p></div>}
-      {selected==="admin"&&<AccessAdministration key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onReconnect={reconnectForDriveDiagnostic} onDirty={setHasUnsavedChanges} onSaved={()=>retryAccess.current()}/>}
+      {selected==="admin"&&<AccessAdministration key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onReconnect={reconnectForDriveDiagnostic} onDirty={moduleDirtyCallbacks.admin} onSaved={()=>retryAccess.current()}/>}
       {readable(permissions,"fonciere") && izord && <RetainedTaskView active={selected==="fonciere" || Boolean(journey)}><div hidden={selected!=="fonciere"} inert={selected!=="fonciere"} data-retained-project-host><ProjectsWorkspace canArchive={permissions.modules.fonciere?.level==='contribute'&&["admin","partner","contributor"].includes(izord.role)&&Boolean(permissions.modules.fonciere?.sensitive.delete)} canDownload={Boolean(permissions.modules.fonciere?.sensitive.export)} canReadContacts={readable(permissions,"contacts")} canWriteContacts={permissions.modules.contacts?.level==='contribute'} canManageAccess={["admin","partner"].includes(izord.role)&&permissions.modules.fonciere?.level==='contribute'} key={hostScope} userId={access.session.user.id} accessRevision={permissions.revision} canWrite={permissions.modules.fonciere?.level==='contribute'&&["admin","partner","contributor"].includes(izord.role)} onUnsavedChange={setProjectDirty} onCreateContact={openProjectContactCreation} contactReturn={contactReturn?.scope === hostScope ? contactReturn : undefined} onContactReturnConsumed={() => setContactReturn(undefined)} onOpenContact={id=>{if(readable(permissions,"contacts")&&navigate("contacts"))setBusinessDraft({user:access.session!.user.id,revision:permissions.revision,module:"contacts",value:{contactId:id}});}}/></div></RetainedTaskView>}
-      {readable(permissions,"izord")&&izord&&generatorHost&&<RetainedTaskView active={selected==="izord"}><div className="module-workspace"><h1>{t("navigation.module.izord")}</h1><IzordGenerator key={generatorHost.key} role={permissions.modules.izord?.level==='read'?'reader':izord.role} canExport={Boolean(permissions.modules.izord?.sensitive.export)} canReadProjects={readable(permissions,"fonciere")} canDownloadProjects={Boolean(permissions.modules.fonciere?.sensitive.export)} canWriteProjects={permissions.modules.fonciere?.level==='contribute'&&["admin","partner","contributor"].includes(izord.role)} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={setHasUnsavedChanges}/></div></RetainedTaskView>}
-      {readable(permissions,"publisher")&&permissions.modules.publisher&&<RetainedTaskView active={selected==="publisher"}><PublisherPage key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} grant={permissions.modules.publisher} accessRevision={permissions.revision} onUnsavedChange={setHasUnsavedChanges}/></RetainedTaskView>}
-      {readable(permissions,"monthlyCharges")&&<RetainedTaskView active={selected==="monthlyCharges"}><MonthlyChargesWorkspace key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onDirtyChange={setHasUnsavedChanges} onNavigateSource={(source, recordId)=>{ if (readable(permissions, source)) navigate(source, recordId); }}/></RetainedTaskView>}
+      {readable(permissions,"izord")&&izord&&generatorHost&&<RetainedTaskView active={selected==="izord"}><div className="module-workspace"><h1>{t("navigation.module.izord")}</h1><IzordGenerator key={generatorHost.key} role={permissions.modules.izord?.level==='read'?'reader':izord.role} canExport={Boolean(permissions.modules.izord?.sensitive.export)} canReadProjects={readable(permissions,"fonciere")} canDownloadProjects={Boolean(permissions.modules.fonciere?.sensitive.export)} canWriteProjects={permissions.modules.fonciere?.level==='contribute'&&["admin","partner","contributor"].includes(izord.role)} userId={access.session.user.id} accessSignal={generatorHost.controller.signal} recovery={generatorHost.recovery} onDraft={generatorHost.capture} onUnsavedChange={moduleDirtyCallbacks.izord}/></div></RetainedTaskView>}
+      {readable(permissions,"publisher")&&permissions.modules.publisher&&<RetainedTaskView active={selected==="publisher"}><PublisherPage key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} grant={permissions.modules.publisher} accessRevision={permissions.revision} onUnsavedChange={moduleDirtyCallbacks.publisher}/></RetainedTaskView>}
+      {readable(permissions,"monthlyCharges")&&<RetainedTaskView active={selected==="monthlyCharges"}><MonthlyChargesWorkspace key={access.session.user.id+":"+permissions.revision} userId={access.session.user.id} access={permissions} onDirtyChange={moduleDirtyCallbacks.monthlyCharges} onNavigateSource={(source, recordId)=>{ if (readable(permissions, source)) navigate(source, recordId); }}/></RetainedTaskView>}
       {!permissions.fullAccess && readable(permissions,"contacts") && <RetainedTaskView key={hostScope+":contacts"} active={selected === "contacts" || retainedContacts === hostScope}><div hidden={selected !== "contacts"} inert={selected !== "contacts"} data-retained-contacts-host><ModuleWorkspace module="contacts" userId={access.session.user.id} key={hostScope} access={permissions} onDirty={setContactsDirty} contactCreateIntent={journey?.intent} onContactCreateReturn={returnToProject} draft={businessDraft?.user===access.session.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module==="contacts"?businessDraft.value:undefined} onDraftConsumed={()=>setBusinessDraft(null)} onNavigate={(tab,value)=>{if(navigate(tab))setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);}}/></div></RetainedTaskView>}
-      {!permissions.fullAccess && moduleItems.filter(item=>!["contacts","monthlyCharges","fonciere","izord","publisher"].includes(item.tab)&&readable(permissions,item.tab)).map(item=><RetainedTaskView key={hostScope+":"+item.tab} active={selected===item.tab}><ModuleWorkspace onDraftConsumed={()=>setBusinessDraft(null)} userId={access.session!.user.id} module={item.tab} sourceFocus={sourceFocus} access={permissions} onDirty={setHasUnsavedChanges} draft={businessDraft?.user===access.session!.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===item.tab?businessDraft.value:undefined} onNavigate={(tab,value)=>{if(navigate(tab))setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);}}/></RetainedTaskView>)}
+      {!permissions.fullAccess && moduleItems.filter(item=>!["contacts","monthlyCharges","fonciere","izord","publisher"].includes(item.tab)&&readable(permissions,item.tab)).map(item=><RetainedTaskView key={hostScope+":"+item.tab} active={selected===item.tab}><ModuleWorkspace onDraftConsumed={()=>setBusinessDraft(null)} userId={access.session!.user.id} module={item.tab} sourceFocus={sourceFocus} access={permissions} onDirty={moduleDirtyCallbacks[item.tab]} draft={businessDraft?.user===access.session!.user.id&&businessDraft.revision===permissions.revision&&businessDraft.module===item.tab?businessDraft.value:undefined} onNavigate={(tab,value)=>{if(navigate(tab))setBusinessDraft(value?{user:access.session!.user.id,revision:permissions.revision,module:tab,value}:null);}}/></RetainedTaskView>)}
     </section></main></PortalTaskLinks></OperationProvider>;
   }
   return <main className={styles.shell}><div role="banner" className={styles.header}><span className={styles.wordmark}>ONE ADDRESS RIVIERA</span><span>{t("access.privateCRM")}</span><LanguageSelector /></div><section className={styles.card}><h1>{t("access.signInTitle")}</h1>

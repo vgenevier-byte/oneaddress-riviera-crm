@@ -6,6 +6,7 @@ import { TASKS_CHANGED } from "@/lib/tasks/client";
 import { taskTargetKey } from "@/lib/tasks/domain";
 import type { Task, TaskApi, TaskInitialDraft, TaskPermissions, TaskTargetRef } from "@/lib/tasks/types";
 import TasksWorkspace from "./TasksWorkspace";
+import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 
 type TaskLinksContext = {
   api: TaskApi; permissions: TaskPermissions; sessionKey: string;
@@ -33,11 +34,7 @@ export default function TaskLinkProvider({ api, userId, sessionKey, permissions,
   }, [scope, permissions.contribute, en]);
   const openTask = useCallback((id: string) => { if (permissions.read) { setDirty(false); setPanel({ scope, key: crypto.randomUUID(), taskId: id }); } }, [scope, permissions.read]);
   const closed = useCallback(() => { setPanel(null); setDirty(false); }, []);
-  useEffect(() => {
-    if (!dirty || !visiblePanel) return;
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
-    window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty, visiblePanel]);
+  usePageRefreshGuard({ dirty: dirty && Boolean(visiblePanel) });
   const openTarget = useCallback((reference: TaskTargetRef) => { closed(); onOpenTarget?.(reference); }, [closed, onOpenTarget]);
   const title = visiblePanel?.draft ? en ? "Create a linked task" : "Créer une tâche liée" : en ? "Linked task" : "Tâche liée";
   return <Context.Provider value={{ api, permissions, sessionKey: scope, create, openTask, openTarget }}>{children}
