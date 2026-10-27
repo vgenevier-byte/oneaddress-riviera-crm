@@ -37,6 +37,14 @@ Git and the report directory.
 - `FONCIERE_SENSITIVE_MIGRATION`: optional override of the final
   `*_fonciere_sensitive_permissions.sql` filename
 
+The validated SQL is stored as
+`supabase/migrations/20261027161223_fonciere_sensitive_permissions.sql`, matching the
+version assigned by the Production migration registry. Its byte-identical SHA-256 is
+`2606278ea6ff29c11b5f4e586d1e049b3f37e918e4ba526516da8d09e0053aef`.
+The private recovery journal intentionally keeps the stable logical key
+`20261027155027_fonciere_sensitive_permissions`. The filename alignment does not
+execute a second migration or rewrite server migration history.
+
 Initialize the fictitious historical baseline and apply the migration once:
 
 ```sh
