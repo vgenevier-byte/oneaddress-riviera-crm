@@ -190,6 +190,8 @@ import {
   getHouseTimeAmount,
   getHouseTimeExpenseAmount,
   getHouseTimeExpenseSummary,
+  getHouseTimeFinancialSummary,
+  getHouseTimeSettlementSummary,
   getHouseTimeTotalAmount,
   getHouseTimeHours,
   getHouseTrackingWorkerHistorySummary,
@@ -3617,11 +3619,13 @@ function HouseTrackingView({
     ...payments.filter(payment => payment.prepaidPackageId).map(payment => payment.id),
     ...(prepaidState?.packages.map(pack => pack.paymentId) ?? [])
   ]), [payments, prepaidState]);
-  const prepaidAmount = (entry: HouseTimeEntry) => prepaidWorkerIds.has(entry.workerId)
-    ? (prepaidAllocationById.get(entry.id)?.amountCents ?? entry.prepaid?.amountCents ?? 0) / 100 : getHouseTimeAmount(entry);
+  const prepaidAllocation = (entry: HouseTimeEntry) => prepaidAllocationById.get(entry.id) ?? entry.prepaid;
+  const isPrepaidEntry = (entry: HouseTimeEntry) => prepaidWorkerIds.has(entry.workerId) || entry.billingMode === "prepaid";
+  const prepaidAmount = (entry: HouseTimeEntry) => isPrepaidEntry(entry)
+    ? (prepaidAllocation(entry)?.amountCents ?? 0) / 100 : getHouseTimeAmount(entry);
   const entryAmount = (entry: HouseTimeEntry) => prepaidAmount(entry) + getHouseTimeExpenseAmount(entry);
-  const prepaidEntryKnown = (entry: HouseTimeEntry) => !prepaidWorkerIds.has(entry.workerId) || prepaidAllocationById.has(entry.id) || Boolean(entry.prepaid);
-  const unpaidAmount = (entry: HouseTimeEntry) => prepaidWorkerIds.has(entry.workerId) ? getHouseTimeExpenseAmount(entry) : getHouseTimeTotalAmount(entry);
+  const prepaidEntryKnown = (entry: HouseTimeEntry) => !isPrepaidEntry(entry) || Number.isSafeInteger(prepaidAllocation(entry)?.amountCents);
+  const unpaidAmount = (entry: HouseTimeEntry) => isPrepaidEntry(entry) ? getHouseTimeExpenseAmount(entry) : getHouseTimeTotalAmount(entry);
   const savePrepaid: SaveHousePrepaid | undefined = onSavePrepaid ? async (...args) => {
     const saved = await onSavePrepaid(...args);
     setPrepaidState(saved); setPrepaidError("");
@@ -3867,9 +3871,13 @@ function HouseTrackingView({
   const expenseSummary = getHouseTimeExpenseSummary(filteredEntries);
   const totalDue = filteredEntries.reduce((sum, entry) => sum + unpaidAmount(entry), 0);
   const totalPaid = getAutoAllocatedPaidForSelectedEntries(filteredEntries);
-  const totalBalance = totalDue - totalPaid;
-  const selectedPrepaidUncovered = (prepaidState?.summaries ?? []).filter(summary => workerFilter === "Tous" || summary.workerId === workerFilter).reduce((sum, summary) => sum + summary.uncoveredMinutes, 0);
-  const selectedConsumption = filteredEntries.reduce((sum, entry) => sum + entryAmount(entry), 0);
+  const selectedPrepaidEntries = filteredEntries.filter(isPrepaidEntry);
+  const selectionHasPrepaid = selectedPrepaidEntries.length > 0 || prepaidWorkerIds.has(workerFilter);
+  const selectedPrepaidUncoveredKnown = selectedPrepaidEntries.every(entry => Number.isSafeInteger(prepaidAllocation(entry)?.uncoveredMinutes));
+  const selectedPrepaidUncovered = selectedPrepaidEntries.reduce((sum, entry) => sum + (prepaidAllocation(entry)?.uncoveredMinutes ?? 0), 0);
+  const financialSummary = getHouseTimeFinancialSummary(filteredEntries, entry => prepaidEntryKnown(entry) ? prepaidAmount(entry) : null);
+  const debtSummary = getHouseTimeFinancialSummary(filteredEntries, entry => isPrepaidEntry(entry) ? 0 : getHouseTimeAmount(entry));
+  const settlementSummary = getHouseTimeSettlementSummary(debtSummary.totalAmount ?? 0, totalDue, totalPaid);
 
   const draftPrepaid = prepaidWorkerIds.has(hourDraft.workerId);
   const draftSetting = prepaidState?.settings.find(setting => setting.workerId === hourDraft.workerId);
@@ -4141,15 +4149,17 @@ function HouseTrackingView({
           <BusinessButton permission="export" className="secondary-button" type="button" onClick={exportHouseCsv}>{t("crm.house.91f71c14c8")}</BusinessButton>
         </div>
 
-        <div className={`stats-grid house-summary-grid ${houseExpenseStyles.summaryGrid}`}>
-          <StatCard label={t("crm.house.2aa022f972")} value={formatHours(totalHours)} caption={t("crm.house.7b4c244221")} />
-          <StatCard label={t("crm.house.f86724b3a3")} value={screen.money(totalDue, 2)} caption={t("crm.house.986f5333cf")} />
-          <StatCard label={t("crm.house.2542792ee0")} value={screen.money(totalPaid, 2)} caption={t("crm.house.a986ecc855")} />
-          <StatCard label={t("crm.house.caa3596424")} value={prepaidWorkerIds.size > 0 && !prepaidState ? "—" : selectedPrepaidUncovered > 0 ? `${formatHours(selectedPrepaidUncovered / 60)} ${prepaidText("à couvrir", "to cover")}${totalBalance > 0 ? ` · ${screen.money(totalBalance, 2)}` : ""}` : screen.balance(totalBalance)} caption={prepaidText("Solde horaire et frais distincts", "Hourly balance and separate expenses")} />
+        <div className={`stats-grid house-summary-grid ${houseExpenseStyles.summaryGrid}`} role="group" aria-label={t("crm.house.summary.selection")}>
+          <StatCard label={t("crm.house.summary.hoursCompleted")} value={formatHours(totalHours)} caption={t("crm.house.7b4c244221")} />
+          <StatCard label={t("crm.house.expenses.hoursAmount")} value={financialSummary.hoursAmount === null ? "—" : screen.money(financialSummary.hoursAmount, 2)} caption={t("crm.house.summary.excludingExpenses")} />
           <HouseTimeExpenseSummaryCard total={expenseSummary.total} empty={expenseSummary.entries.length === 0} expanded={showExpenseDetails} onToggle={() => setShowExpenseDetails(current => !current)} />
+          <StatCard label={t("crm.house.summary.hoursAndExpenses")} value={financialSummary.totalAmount === null ? "—" : screen.money(financialSummary.totalAmount, 2)} caption={t("crm.house.summary.beforePayments")} />
+          {selectionHasPrepaid && <StatCard label={t("crm.house.f86724b3a3")} value={screen.money(debtSummary.totalAmount ?? 0, 2)} caption={t("crm.house.summary.billableDebt")} />}
+          <StatCard label={t("crm.house.2542792ee0")} value={screen.money(settlementSummary.paidAmount, 2)} caption={t("crm.house.a986ecc855")} />
+          <StatCard label={t("crm.house.caa3596424")} value={!selectedPrepaidUncoveredKnown ? "—" : selectedPrepaidUncovered > 0 ? `${formatHours(selectedPrepaidUncovered / 60)} ${prepaidText("à couvrir", "to cover")}${settlementSummary.balanceAmount > 0 ? ` · ${screen.money(settlementSummary.balanceAmount, 2)}` : ""}` : screen.balance(settlementSummary.balanceAmount)} caption={selectionHasPrepaid ? t("crm.house.summary.prepaidBalance") : t("crm.house.efd45db922")} />
         </div>
 
-        {prepaidWorkerIds.size > 0 && <p className="muted-line">{prepaidText("Consommation de la période", "Period consumption")} : {prepaidState ? screen.money(selectedConsumption, 2) : "—"}. {prepaidText("Les heures non couvertes sont valorisées à titre indicatif ; elles ne sont pas une dette facturée à l’heure.", "Uncovered hours have an indicative value; they are not an hourly invoice debt.")}</p>}
+        {selectionHasPrepaid && <p className="muted-line">{t("crm.house.summary.prepaidValuation")}</p>}
 
         <div className="house-filter-row">
           <BusinessLabel>{t("crm.house.f12d68908f")}<input
@@ -4205,7 +4215,7 @@ function HouseTrackingView({
         <BusinessButton className={houseSection === "settings" ? "primary-button house-tab active" : "secondary-button house-tab"} type="button" onClick={() => changeHouseSection("settings")}>{t("crm.house.4ed117e09c")}</BusinessButton>
       </nav>
 
-      <HousePrepaidPanel state={prepaidState} contacts={contacts} workers={workers} houses={houses} payments={payments} invoices={invoices} workerFilter={workerFilter} showSettings={houseSection === "settings"} error={prepaidError ? prepaidText("Lecture complète ou export des forfaits indisponible. Actualisez avant de poursuivre.", "Complete prepaid balances or export are unavailable. Refresh before continuing.") : ""} onSave={savePrepaid} onRefresh={() => setPrepaidEpoch(value => value + 1)} />
+      {(houseSection === "settings" || workerFilter === "Tous" || prepaidWorkerIds.has(workerFilter)) && <HousePrepaidPanel state={prepaidState} contacts={contacts} workers={workers} houses={houses} payments={payments} invoices={invoices} workerFilter={workerFilter} showSettings={houseSection === "settings"} error={prepaidError ? prepaidText("Lecture complète ou export des forfaits indisponible. Actualisez avant de poursuivre.", "Complete prepaid balances or export are unavailable. Refresh before continuing.") : ""} onSave={savePrepaid} onRefresh={() => setPrepaidEpoch(value => value + 1)} />}
 
       {selectedArchivedWorker && selectedArchivedWorkerHistory && houseSection !== "today" && (
         <section className="house-archived-filter-banner" aria-label={t("crm.house.d18c07c8ea", { value1: displayValue(selectedArchivedWorker.contactName) })}>
@@ -4336,8 +4346,8 @@ function HouseTrackingView({
                       <strong>{entry.workerName}</strong>
                       {isArchivedWorker(entry.workerId) && <span className="status-pill house-archived-badge" data-semantic-text={"Archivé"}>{t("crm.house.19dd658159")}</span>}
                       <span>{entry.date} · {entry.houseName} · {entry.startTime}{" "}{t("crm.house.b3fc9de526")}{" "}{entry.endTime} · {formatHours(getHouseTimeHours(entry))}</span>
-                      {prepaidWorkerIds.has(entry.workerId) && <p className="muted-line">{prepaidText("Forfait prépayé", "Prepaid package")} · {prepaidEntryKnown(entry) ? <>{formatHours((prepaidAllocationById.get(entry.id)?.coveredMinutes ?? entry.prepaid?.coveredMinutes ?? 0) / 60)} {prepaidText("couvertes", "covered")} · {formatHours((prepaidAllocationById.get(entry.id)?.uncoveredMinutes ?? entry.prepaid?.uncoveredMinutes ?? 0) / 60)} {prepaidText("à couvrir (indicatif)", "to cover (indicative)")}</> : prepaidText("Affectation indisponible", "Allocation unavailable")}</p>}
-                      <p className="muted-line">{t("crm.house.expenses.hoursAmount")}: {prepaidEntryKnown(entry) ? screen.money(prepaidAmount(entry), 2) : "—"} · {t("crm.house.expenses.expenseAmount")}: {screen.money(getHouseTimeExpenseAmount(entry), 2)} · <strong>{prepaidWorkerIds.has(entry.workerId) ? prepaidText("Consommation + frais distincts", "Consumption + separate expenses") : t("crm.house.expenses.totalDue")}: {prepaidEntryKnown(entry) ? screen.money(entryAmount(entry), 2) : "—"}</strong></p>
+                      {isPrepaidEntry(entry) && <p className="muted-line">{prepaidText("Forfait prépayé", "Prepaid package")} · {prepaidEntryKnown(entry) ? <>{formatHours((prepaidAllocationById.get(entry.id)?.coveredMinutes ?? entry.prepaid?.coveredMinutes ?? 0) / 60)} {prepaidText("couvertes", "covered")} · {formatHours((prepaidAllocationById.get(entry.id)?.uncoveredMinutes ?? entry.prepaid?.uncoveredMinutes ?? 0) / 60)} {prepaidText("à couvrir (indicatif)", "to cover (indicative)")}</> : prepaidText("Affectation indisponible", "Allocation unavailable")}</p>}
+                      <p className="muted-line">{t("crm.house.expenses.hoursAmount")}: {prepaidEntryKnown(entry) ? screen.money(prepaidAmount(entry), 2) : "—"} · {t("crm.house.expenses.expenseAmount")}: {screen.money(getHouseTimeExpenseAmount(entry), 2)} · <strong>{isPrepaidEntry(entry) ? prepaidText("Consommation + frais distincts", "Consumption + separate expenses") : t("crm.house.expenses.totalDue")}: {prepaidEntryKnown(entry) ? screen.money(entryAmount(entry), 2) : "—"}</strong></p>
                       {entry.expenseNote && <p className="muted-line" style={{ overflowWrap: "anywhere" }}>{t("crm.house.expenses.reason")}: {entry.expenseNote}</p>}
                     </div>
                     <div className="house-worker-actions">

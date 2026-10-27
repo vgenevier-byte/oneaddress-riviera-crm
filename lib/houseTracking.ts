@@ -72,6 +72,44 @@ export function getHouseTimeExpenseSummary(timeEntries: HouseTimeEntry[]) {
   return { entries, total: totalCents / 100 };
 }
 
+function houseSummaryMoneyAmount(amount: number) {
+  return Number(new Intl.NumberFormat("en", {
+    useGrouping: false, minimumFractionDigits: 2, maximumFractionDigits: 2
+  }).format(amount));
+}
+
+/** Presentation totals for the complete filtered scope. Keep historical hourly
+ * fractions until the aggregate is formatted, exactly as the existing money
+ * cards do; rounding each intervention would change historical totals. */
+export function getHouseTimeFinancialSummary(
+  timeEntries: HouseTimeEntry[],
+  resolveHoursAmount: (entry: HouseTimeEntry) => number | null = entry =>
+    entry.billingMode === "prepaid" && !Number.isSafeInteger(entry.prepaid?.amountCents) ? null : getHouseTimeAmount(entry)
+) {
+  const expenseAmount = getHouseTimeExpenseSummary(timeEntries).total;
+  let hours = 0;
+  for (const entry of timeEntries) {
+    const amount = resolveHoursAmount(entry);
+    if (amount === null || !Number.isFinite(amount)) {
+      return { hoursAmount: null, expenseAmount, totalAmount: null };
+    }
+    hours += amount;
+  }
+  // Match Intl's existing two-decimal screen rounding, including half cents.
+  const hoursAmount = houseSummaryMoneyAmount(hours);
+  const totalAmount = (Math.round(hoursAmount * 100) + Math.round(expenseAmount * 100)) / 100;
+  return { hoursAmount, expenseAmount, totalAmount };
+}
+
+/** Present already-allocated payments against the displayed aggregate debt.
+ * This does not allocate payments or alter the underlying historical amounts. */
+export function getHouseTimeSettlementSummary(dueAmount: number, rawDue: number, rawPaid: number) {
+  const tolerance = Number.EPSILON * Math.max(1, Math.abs(rawDue)) * 8;
+  const paidAmount = rawPaid >= rawDue - tolerance ? dueAmount : houseSummaryMoneyAmount(rawPaid);
+  const balanceAmount = (Math.round(dueAmount * 100) - Math.round(paidAmount * 100)) / 100;
+  return { paidAmount, balanceAmount };
+}
+
 /** Keep the historical hours calculation unchanged, then add the intervention's expense once. */
 export function getHouseTimeTotalAmount(entry: Pick<HouseTimeEntry, "startTime" | "endTime" | "breakMinutes" | "hourlyRate" | "expenseAmount" | "billingMode" | "prepaid">) {
   return getHouseTimeAmount(entry) + getHouseTimeExpenseAmount(entry);
