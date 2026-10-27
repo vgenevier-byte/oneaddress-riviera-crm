@@ -1,0 +1,17 @@
+.editor { min-width: 0; }
+.moduleGroups { display: grid; gap: 8px; margin: 22px 0; }
+.moduleGroup { min-width: 0; border-top: 1px solid #ded8ca; padding-top: 12px; }
+.moduleGroup h3 { margin: 0 0 6px; }
+.moduleRow { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(125px, 165px); gap: 8px 16px; padding: 12px 0; border-bottom: 1px solid #e9e1d4; align-items: start; }
+.moduleName { overflow-wrap: anywhere; }
+.moduleName small, .accountHint { display: block; color: #5c6a70; font-size: 12px; line-height: 1.5; }
+.moduleRow select { width: 100%; }
+.permissions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 16px; }
+.assignments { padding-top: 16px; margin: 18px 0; border-top: 1px solid #ded8ca; }
+.assignments > label { display: grid; gap: 6px; }
+.assignmentList { max-height: 280px; overflow-y: auto; overflow-wrap: anywhere; padding: 8px 2px; }
+@media (max-width: 600px) {
+  .moduleRow { grid-template-columns: 1fr; }
+  .moduleRow select { max-width: 100%; }
+  .permissions { display: grid; }
+}

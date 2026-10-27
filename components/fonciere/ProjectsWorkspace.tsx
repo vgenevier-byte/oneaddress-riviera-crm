@@ -82,7 +82,7 @@ function bytes(value: number) { return value > 1_000_000 ? `${(value / 1_000_000
 export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = false, canWriteContacts = false, canManageAccess = false, accessRevision, accessSignal, onUnsavedChange, onOpenContact, onCreateContact, contactReturn, onContactReturnConsumed }: Props) {
   const [lang, setLang] = useFonciereLocale();
   const t = (fr: string, en: string) => lang === "fr" ? fr : en;
-  const begin = useScopedOperations("izord");
+  const begin = useScopedOperations("fonciere");
   const [projects, setProjects] = useState<LoadedFonciereProject["project"][]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [query, setQuery] = useState("");

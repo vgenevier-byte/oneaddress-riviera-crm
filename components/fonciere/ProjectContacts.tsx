@@ -21,7 +21,7 @@ const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entity
 const blankSearch = (query = ""): SearchState => ({ query, rows: [], loading: false, error: "" });
 
 export default function ProjectContacts({ data, onChange, canReadContacts, canWriteContacts, disabled = false, accessSignal, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
-  const [lang] = useFonciereLocale(), begin = useScopedOperations("izord");
+  const [lang] = useFonciereLocale(), begin = useScopedOperations("fonciere");
   const t = (fr: string, en: string) => lang === "fr" ? fr : en;
   const [agencySearch, setAgencySearch] = useState(() => blankSearch(data.agencyContactId ? "" : data.agencyName));
   const [agentSearch, setAgentSearch] = useState(() => blankSearch(data.agentContactId ? "" : data.agentName));

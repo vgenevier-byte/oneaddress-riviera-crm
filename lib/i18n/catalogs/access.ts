@@ -574,13 +574,30 @@ export const accessMessages = {
     "fr": "Contribution",
     "en": "Contribute"
   },
+  "admin.accountHint": {"fr": "Les droits concernent ce compte utilisateur, indépendamment de sa fiche Contact CRM.", "en": "These permissions apply to this user account, independently of its CRM Contact record."},
+  "access.businessRoleRequired": {"fr": "Le droit au module est configuré, mais un rôle métier actif est également nécessaire pour ouvrir ses dossiers. Contactez un administrateur pour vérifier le rôle et les affectations de votre compte.", "en": "Module access is configured, but an active business role is also required to open its records. Contact an administrator to check your account role and assignments."},
+  "admin.projectsDescription": {"fr": "Fiches des opérations immobilières", "en": "Property operation records"},
+  "admin.presentationsDescription": {"fr": "Création et gestion des présentations IZORD", "en": "Create and manage IZORD presentations"},
+  "admin.businessRole": {"fr": "Rôle métier Foncière et présentations", "en": "Property investment and presentation role"},
+  "admin.businessRoleHint": {"fr": "Le niveau de chaque module reste indépendant. Le rôle métier, la propriété et les affectations limitent les dossiers effectivement accessibles. Contribution à Projets ne donne pas automatiquement accès à tous les dossiers.", "en": "Each module level remains independent. The business role, ownership and assignments limit which records are actually accessible. Contribute access to Projects does not automatically grant access to every record."},
+  "admin.roleRequired": {"fr": "Un rôle métier actif est nécessaire en complément du droit au module. Sans rôle, ces dossiers restent inaccessibles.", "en": "An active business role is required in addition to module access. Without a role, these records remain inaccessible."},
+  "admin.readerLimits": {"fr": "Le rôle Lecteur limite la contribution à la lecture, même si le module est réglé sur Contribution.", "en": "The Reader role limits contributions to reading, even when the module level is Contribute."},
+  "admin.globalRoleHint": {"fr": "Les rôles Associé et Administrateur donnent un périmètre global de dossiers, sous réserve des droits de chaque module.", "en": "Partner and Administrator roles provide a global record scope, subject to each module permission."},
+  "admin.fonciereAssignments": {"fr": "Projets affectés", "en": "Assigned projects"},
+  "admin.fonciereAssignmentAdminLimited": {"fr": "Pour modifier ces affectations, votre propre compte doit disposer de Contribution à Projets et du rôle Associé ou Administrateur. Les affectations existantes sont conservées.", "en": "To change these assignments, your own account needs Contribute access to Projects and a Partner or Administrator role. Existing assignments are retained."},
+  "admin.fonciereAssignmentsHint": {"fr": "Cette liste concerne uniquement les fiches Projets et leurs documents. Pour un Contributeur, choisissez les projets existants à partager ; un projet dont il est propriétaire conserve ses règles de propriété. Les affectations restent sans effet si le module Projets est sur Aucun accès.", "en": "This list applies only to Project records and their documents. For a Contributor, select existing projects to share; owned projects retain their ownership rules. Assignments give no access when the Projects module is set to No access."},
+  "admin.presentationAssignments": {"fr": "Affectations aux présentations", "en": "Presentation assignments"},
+  "admin.presentationAssignmentsHint": {"fr": "Liste distincte des Projets. Ces affectations et le droit Présentations Projets déterminent l’accès aux présentations et à leurs instantanés historiques.", "en": "A separate list from Projects. These assignments and the Project Presentations permission determine access to presentations and their historical snapshots."},
+  "admin.noMatchingProjects": {"fr": "Aucun dossier correspondant dans ce périmètre.", "en": "No matching records in this scope."},
+  "admin.archivedProject": {"fr": "Archivé", "en": "Archived"},
+  "admin.projectOwnerHint": {"fr": "Propriétaire de ce projet : les règles de propriété restent applicables.", "en": "Owner of this project: ownership rules still apply."},
   "admin.izordSettings": {
     "fr": "Paramétrage IZORD complémentaire",
     "en": "Additional IZORD settings"
   },
   "admin.izordRole": {
-    "fr": "Rôle IZORD",
-    "en": "IZORD role"
+    "fr": "Rôle métier",
+    "en": "Business role"
   },
   "admin.noRole": {
     "fr": "Aucun rôle",
@@ -599,8 +616,8 @@ export const accessMessages = {
     "en": "Partner"
   },
   "admin.izordAdmin": {
-    "fr": "Administrateur IZORD",
-    "en": "IZORD administrator"
+    "fr": "Administrateur",
+    "en": "Administrator"
   },
   "admin.izordHint": {
     "fr": "Contribution ne remplace jamais le rôle IZORD. Un lecteur reste lecteur. L’approbation est réservée aux rôles Associé et Administrateur IZORD, selon les droits du module.",

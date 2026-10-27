@@ -128,6 +128,29 @@ try{
    }finally{handler=undefined;}
   }
  });
+ await check('Fonciere and presentation assignments reach separate server parameters without inference or real delivery',async()=>{
+  const project='11111111-1111-4111-8111-111111111111',presentation='22222222-2222-4222-8222-222222222222';
+  for(const fonciereAssignments of [[],[project]]){
+   requests.length=0;let delivered=false;
+   handler=async call=>{
+    if(call.url.pathname==='/auth/v1/user')return Response.json({id:'fixture-admin',email:'admin@example.invalid'});
+    if(call.url.pathname==='/rest/v1/rpc/crm_access_snapshot')return Response.json({generalAdmin:true});
+    if(call.url.pathname==='/rest/v1/rpc/crm_invite_prepare')return Response.json({id:'fixture-invitation',token:'fixture-business-token',existingUser:true,needsPasswordSetup:false});
+    if(call.url.pathname==='/rest/v1/rpc/crm_invite_delivery_allowed')return Response.json(true);
+    throw new Error('Unexpected simulated invitation endpoint');
+   };
+   try{
+    const response=await sendInvitation(new Request('https://crm.example.invalid/api/access/invite',{method:'POST',headers:{authorization:'Bearer fixture-session'},body:JSON.stringify({email:input.email,grants:{fonciere:{level:'read'},izord:{level:'none'}},izordRole:'reader',assignments:[presentation],fonciereAssignments})}),env,async()=>{delivered=true;});
+    assert.equal(response.status,200);assert.equal(delivered,true);
+    const preparation=requests.find(r=>r.url.pathname==='/rest/v1/rpc/crm_invite_prepare');
+    assert.deepEqual(preparation.body.p_fonciere_assignments,fonciereAssignments);
+    assert.deepEqual(preparation.body.p_assignments,[presentation]);
+    assert.equal(preparation.body.p_izord_role,'reader');
+    assert.deepEqual(preparation.body.p_grants,{fonciere:{level:'read'},izord:{level:'none'}});
+    assert(!requests.some(r=>r.url.pathname.startsWith('/auth/v1/otp')||r.url.pathname.startsWith('/auth/v1/invite')));
+   }finally{handler=undefined;}
+  }
+ });
  await check('Missing server password state revokes the prepared invitation without Auth delivery',async()=>{
   let sent=false;requests.length=0;
   handler=async call=>{

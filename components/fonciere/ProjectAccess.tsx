@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createSearchIndex, searchIndex } from "@/lib/search";
+import { SearchMatchHint } from "@/components/search/SearchMatchHint";
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
 import { useFonciereLocale } from "@/lib/fonciere/locale";
 import styles from "./ProjectAccess.module.css";
@@ -9,7 +11,8 @@ type AccessOption = { userId: string; email: string; role: "admin" | "partner" |
 type Props = { projectId: string; userId?: string; accessSignal?: AbortSignal; onDirty?: (dirty: boolean) => void };
 
 export default function ProjectAccess({ projectId, userId, accessSignal, onDirty }: Props) {
-  const [locale] = useFonciereLocale(), begin = useScopedOperations("izord");
+  const [locale] = useFonciereLocale(), begin = useScopedOperations("fonciere");
+  const [query, setQuery] = useState("");
   const [options, setOptions] = useState<AccessOption[]>([]), [loading, setLoading] = useState(true), [busy, setBusy] = useState(false), [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const controller = useRef<AbortController | null>(null);
@@ -43,13 +46,16 @@ export default function ProjectAccess({ projectId, userId, accessSignal, onDirty
   }
 
   const roles = { admin: t("Administrateur", "Administrator"), partner: t("Associé", "Partner"), contributor: t("Contributeur", "Contributor"), reader: t("Lecture", "Reader") };
+  const index = useMemo(() => createSearchIndex(options, option => [option.email, option.userId, option.role], { getId: option => option.userId, getLabel: option => option.email || option.userId }), [options]);
+  const visibleOptions = useMemo(() => searchIndex(index, query), [index, query]);
   const pending = loading || loadedFor !== projectId;
   return <section className={styles.panel} aria-labelledby="fonciere-access-title" aria-busy={pending || busy}>
     <h3 id="fonciere-access-title">{t("Accès au projet", "Project access")}</h3>
     <p>{t("Chaque affectation est enregistrée immédiatement pour ce projet et ses documents. Le rôle et les permissions de rubrique restent applicables.", "Each assignment is saved immediately for this project and its documents. Existing role and module permissions still apply.")}</p>
-    {pending && !error ? <p className={styles.message} role="status">{t("Chargement des accès…", "Loading access…")}</p> : !pending && <div className={styles.list}>{options.map(option => <label className={styles.row} key={option.userId}>
+    <label>{t("Rechercher un compte utilisateur", "Search user accounts")}<input type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
+    {pending && !error ? <p className={styles.message} role="status">{t("Chargement des accès…", "Loading access…")}</p> : !pending && <div className={styles.list}>{visibleOptions.map(({ item: option, approximate }) => <label className={styles.row} key={option.userId}>
       <input type="checkbox" checked={option.assigned || option.inherited} disabled={busy || option.inherited || accessSignal?.aborted} onChange={event => { void assign(option, event.target.checked); }} />
-      <span className={styles.identity}>{option.email || option.userId}<span className={styles.detail}>{roles[option.role]}{option.inherited ? t(" · Accès lié au rôle ou à la propriété du projet", " · Access inherited from role or project ownership") : ""}</span></span>
+      <span className={styles.identity}>{option.email || option.userId}<SearchMatchHint approximate={approximate}/><span className={styles.detail}>{roles[option.role]}{option.inherited ? t(" · Accès lié au rôle ou à la propriété du projet", " · Access inherited from role or project ownership") : ""}</span></span>
     </label>)}</div>}
     {error && <p className={`${styles.message} ${styles.error}`} role="alert">{error}</p>}
     {notice && <p className={styles.message} role="status">{notice}</p>}

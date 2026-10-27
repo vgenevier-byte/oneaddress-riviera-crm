@@ -1,12 +1,15 @@
 import { crmNavigationItems } from "@/components/crmNavigation";
 const housePosition = crmNavigationItems.findIndex(item => item.tab === "houseTracking") + 1;
-export const moduleItems = [...crmNavigationItems.slice(0, housePosition), { tab: "monthlyCharges", label: "Charges mensuelles", icon: "▥" }, ...crmNavigationItems.slice(housePosition), { tab: "izord", label: "Présentations Projets", icon: "◇" }, { tab: "publisher", label: "Instagram Publisher", icon: "▧" }] as const;
+export const moduleItems = [...crmNavigationItems.slice(0, housePosition), { tab: "monthlyCharges", label: "Charges mensuelles", icon: "▥" }, ...crmNavigationItems.slice(housePosition), { tab: "fonciere", label: "Projets", icon: "⌂" }, { tab: "izord", label: "Présentations Projets", icon: "◇" }, { tab: "publisher", label: "Instagram Publisher", icon: "▧" }] as const;
 export type ModuleId = typeof moduleItems[number]["tab"];
 export type AccessLevel = "none" | "read" | "contribute";
 export const sensitiveLabels = { delete: "Suppression", export: "Export et téléchargement", bank_read: "Consultation / copie des coordonnées bancaires", bank_write: "Modification / vérification des RIB", payment: "Préparation du paiement", generate: "Générer / régénérer", mark_published: "Marquer comme publié" };
 export type Sensitive = keyof typeof sensitiveLabels;
 /** Publisher has no deletion feature. Its sensitive actions do not apply to OAR/IZORD. */
 export function moduleSensitivePermissions(module: ModuleId): Sensitive[] {
+  // Project archival and private-document viewing follow their existing guards;
+  // this module does not expose permanent deletion or a separate export grant.
+  if (module === "fonciere") return [];
   if (module === "publisher") return ["generate", "export", "mark_published"];
   if (module === "monthlyCharges") return ["export"];
   return ["delete", "export", ...(module === "contacts" ? ["bank_read", "bank_write"] as const : []), ...(module === "vendorInvoices" ? ["payment"] as const : [])];
