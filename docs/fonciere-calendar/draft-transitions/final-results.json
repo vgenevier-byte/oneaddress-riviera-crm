@@ -1,0 +1,70 @@
+{
+  "phase": "final",
+  "app": "http://127.0.0.1:3198",
+  "passed": 6,
+  "failed": 0,
+  "checks": [
+    {
+      "name": "Two authenticated sessions replace all three custom durations from 4 to stored 7 on explicit arbitration reread",
+      "passed": true
+    },
+    {
+      "name": "Reread preserves the unsaved private remark and choice until explicit opinion reconfirmation",
+      "passed": true
+    },
+    {
+      "name": "Invalid drafts survive unrelated typing, block saving and remain after a rejected project-discard confirmation",
+      "passed": true
+    },
+    {
+      "name": "Each custom keystroke keeps focus and retains invalid drafts in the other controls",
+      "passed": true
+    },
+    {
+      "name": "An explicitly accepted new-project transition clears custom modes, dates and validation then saves unknown durations",
+      "passed": true
+    },
+    {
+      "name": "Explicitly discarding invalid date/duration and opening a saved project restores current values without stale validation",
+      "passed": true
+    }
+  ],
+  "observations": {
+    "configuration": {
+      "temporarilyChanged": true,
+      "restored": true
+    },
+    "reread": {
+      "displayed": [
+        "7",
+        "7",
+        "7"
+      ],
+      "summaryDuration": "7 mois",
+      "summaryFirstReceipt": "14 mois",
+      "stored": [
+        7,
+        7,
+        7
+      ],
+      "remark": "REMARQUE_FICTIVE_A_CONSERVER_1793135969888",
+      "date": "2028-02-29"
+    },
+    "invalidDateImmediately": "true",
+    "fresh": {
+      "selects": [
+        "",
+        "",
+        ""
+      ],
+      "customCount": 0,
+      "date": "",
+      "invalidCount": 0
+    }
+  },
+  "projectId": "69b35729-8f6c-4ff6-919b-62f646c0fb40",
+  "errors": [],
+  "externalRequests": [],
+  "auth": "Two independent real local password Auth/PostgREST browser sessions; no mocks",
+  "productionWrites": 0
+}

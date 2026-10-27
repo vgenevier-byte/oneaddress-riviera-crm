@@ -1,0 +1,15 @@
+{
+  "baselineCommit": "3446494fcee21d1add113cde6d8c2a2bea36406f",
+  "baselineApp": "http://127.0.0.1:3197",
+  "fixedApp": "http://127.0.0.1:3198",
+  "verifiedSources": 266,
+  "worktreeMismatches": [],
+  "changedSources": [
+    "components/fonciere/GuidedProjectField.tsx",
+    "components/fonciere/ProjectsWorkspace.tsx"
+  ],
+  "sourceHashes": {
+    "components/fonciere/GuidedProjectField.tsx": "71b5a35ac045ffe95478d9877e6f7f2421ae0d2b35a52707004e1559d48da441",
+    "components/fonciere/ProjectsWorkspace.tsx": "8b90e4b59b905d791e9e4192e3ae81c28795b88da8e5df662fef25f2b324d7a3"
+  }
+}

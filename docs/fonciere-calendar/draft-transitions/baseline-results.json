@@ -1,0 +1,72 @@
+{
+  "phase": "baseline",
+  "app": "http://127.0.0.1:3197",
+  "passed": 4,
+  "failed": 2,
+  "checks": [
+    {
+      "name": "Two authenticated sessions replace all three custom durations from 4 to stored 7 on explicit arbitration reread",
+      "passed": false,
+      "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n+   '4',\n+   '4',\n+   '4'\n-   '7',\n-   '7',\n-   '7'\n  ]\n"
+    },
+    {
+      "name": "Reread preserves the unsaved private remark and choice until explicit opinion reconfirmation",
+      "passed": true
+    },
+    {
+      "name": "Invalid drafts survive unrelated typing, block saving and remain after a rejected project-discard confirmation",
+      "passed": true
+    },
+    {
+      "name": "Each custom keystroke keeps focus and retains invalid drafts in the other controls",
+      "passed": true
+    },
+    {
+      "name": "An explicitly accepted new-project transition clears custom modes, dates and validation then saves unknown durations",
+      "passed": false,
+      "error": "Expected values to be strictly deep-equal:\n+ actual - expected\n\n  [\n+   'other',\n    '',\n    '',\n-   ''\n  ]\n"
+    },
+    {
+      "name": "Explicitly discarding invalid date/duration and opening a saved project restores current values without stale validation",
+      "passed": true
+    }
+  ],
+  "observations": {
+    "configuration": {
+      "temporarilyChanged": true,
+      "restored": true
+    },
+    "reread": {
+      "displayed": [
+        "4",
+        "4",
+        "4"
+      ],
+      "summaryDuration": "7 mois",
+      "summaryFirstReceipt": "14 mois",
+      "stored": [
+        7,
+        7,
+        7
+      ],
+      "remark": "REMARQUE_FICTIVE_A_CONSERVER_1793135982286",
+      "date": "2028-02-29"
+    },
+    "invalidDateImmediately": "true",
+    "fresh": {
+      "selects": [
+        "other",
+        "",
+        ""
+      ],
+      "customCount": 1,
+      "date": "",
+      "invalidCount": 1
+    }
+  },
+  "projectId": "f41a2eab-442d-4898-a932-0264c539cf8b",
+  "errors": [],
+  "externalRequests": [],
+  "auth": "Two independent real local password Auth/PostgREST browser sessions; no mocks",
+  "productionWrites": 0
+}
