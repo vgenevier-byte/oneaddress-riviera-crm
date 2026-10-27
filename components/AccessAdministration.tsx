@@ -70,12 +70,16 @@ export default function AccessAdministration({ onDirty, onSaved, userId, access,
     const grant = edit.modules[module], permissions = moduleSensitivePermissions(module);
     return <div key={module} className={styles.moduleRow} data-admin-module={module}>
       <div className={styles.moduleName}>{t(`navigation.module.${module}`)}{module === "fonciere" && <small>{t("admin.projectsDescription")}</small>}{module === "izord" && <small>{t("admin.presentationsDescription")}</small>}</div>
-      <select aria-label={t("admin.levelFor", { module: t(`navigation.module.${module}`) })} value={grant.level} disabled={busy} onChange={event => update({ ...edit, modules: { ...edit.modules, [module]: { level: event.target.value as AccessLevel, sensitive: {} } } })}>
+      <select aria-label={t("admin.levelFor", { module: t(`navigation.module.${module}`) })} value={grant.level} disabled={busy} onChange={event => {
+        const level = event.target.value as AccessLevel;
+        const sensitive = module === "fonciere" ? { delete: level === "contribute" && Boolean(grant.sensitive.delete), export: level !== "none" && Boolean(grant.sensitive.export) } : {};
+        update({ ...edit, modules: { ...edit.modules, [module]: { level, sensitive } } });
+      }}>
         <option value="none">{t("admin.none")}</option><option value="read">{t("admin.read")}</option><option value="contribute">{t("admin.contribute")}</option>
       </select>
       {permissions.length > 0 && <div className={styles.permissions}>{permissions.map(key => {
         const disabled = busy || grant.level === "none" || sensitiveNeedsContribution(key) && grant.level !== "contribute" || key === "bank_write" && !grant.sensitive.bank_read || key === "payment" && !edit.modules.contacts.sensitive.bank_read;
-        return <label className="unified-check" key={key}><input type="checkbox" checked={Boolean(grant.sensitive[key])} disabled={disabled} onChange={event => update({ ...edit, modules: { ...edit.modules, [module]: { ...grant, sensitive: { ...grant.sensitive, [key]: event.target.checked } } } })}/>{t(`admin.permission.${key}`)}</label>;
+        return <label className={`unified-check ${module === "fonciere" ? styles.foncierePermission : ""}`} key={key}><input type="checkbox" checked={Boolean(grant.sensitive[key])} disabled={disabled} onChange={event => update({ ...edit, modules: { ...edit.modules, [module]: { ...grant, sensitive: { ...grant.sensitive, [key]: event.target.checked } } } })}/><span>{t(module === "fonciere" && key === "delete" ? "admin.foncierePermission.delete" : `admin.permission.${key}`)}{module === "fonciere" && <small>{t(`admin.foncierePermission.${key}Hint`)}</small>}</span></label>;
       })}</div>}
     </div>;
   }

@@ -43,7 +43,7 @@ function contactOption(row: Record<string, unknown>): ContactOption {
 
 /** Captured-token clients from useScopedOperations are supported. Auth, Contacts
  * projection and every asset admission are verified by the existing server ACL. */
-export function createFonciereRepository(client: SupabaseClient) {
+export function createFonciereRepository(client: SupabaseClient, configuration: { accessToken?: string; previewBaseUrl?: string } = {}) {
   const store = client.storage.from("fonciere-documents");
   async function readProject(id: string, options: OperationOptions = {}): Promise<FonciereProjectRecord> {
     const result = await guarded(options.signal, () => client.from("fonciere_projects").select("*").eq("id", id).single());
@@ -52,12 +52,27 @@ export function createFonciereRepository(client: SupabaseClient) {
   async function listAssets(id: string, options: OperationOptions = {}): Promise<FonciereAssetRecord[]> {
     const result = await guarded(options.signal, () => client.from("fonciere_assets").select("*").eq("project_id", id).eq("lifecycle", "finalized").order("created_at", { ascending: false })); failure(result.error); return result.data || [];
   }
+  async function authorizeTransfer(id: string, revision: number | null, options: OperationOptions = {}) {
+    const result = await guarded(options.signal, () => client.rpc("fonciere_authorize_transfer", { p_project: id, p_revision: revision })); failure(result.error);
+  }
+  async function previewPhoto(asset: FonciereAssetRecord, options: OperationOptions): Promise<Blob> {
+    const token = configuration.accessToken || (await guarded(options.signal, () => client.auth.getSession())).data.session?.access_token;
+    if (!token) throw new Error("Session CRM requise pour consulter les photographies.");
+    const response = await guarded(options.signal, () => fetch(`${configuration.previewBaseUrl || ""}/api/fonciere/photo-preview?asset=${encodeURIComponent(asset.id)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: options.signal }));
+    if (!response.ok) throw new Error("Photographie inaccessible. Votre fiche et ses références sont conservées.");
+    const blob = await guarded(options.signal, () => response.blob());
+    if (blob.type !== "image/jpeg" || !blob.size || blob.size > LIMITS.fileBytes) throw new Error("Aperçu photographique invalide.");
+    return blob;
+  }
   async function downloadAsset(asset: FonciereAssetRecord, options: OperationOptions = {}): Promise<Blob> {
     if (asset.object_path !== `${asset.project_id}/${asset.id}` || !UUID.test(asset.id)) throw new Error("Identité documentaire invalide.");
+    const admission = await guarded(options.signal, () => client.rpc("fonciere_asset_access", { p_asset: asset.id, p_operation: "download" })); failure(admission.error);
+    if (!admission.data || admission.data.object_path !== asset.object_path) throw new Error("Identité documentaire non confirmée.");
     const result = await guarded(options.signal, () => store.download(asset.object_path)); failure(result.error);
     if (!result.data || result.data.size !== asset.expected_size || result.data.size > LIMITS.fileBytes || result.data.type !== asset.expected_mime) throw new Error("Document reçu invalide ou incomplet."); return result.data;
   }
-  async function loadProject(id: string, options: OperationOptions = {}): Promise<LoadedFonciereProject> {
+  async function loadProject(id: string, options: OperationOptions & { purpose?: "transfer" } = {}): Promise<LoadedFonciereProject> {
+    if (options.purpose === "transfer") await authorizeTransfer(id, null, options);
     const project = await readProject(id, options), saved = payload(project.payload), assets = await listAssets(id, options);
     const link = await guarded(options.signal, () => client.from("fonciere_project_contacts").select("contact_id,agency_contact_id").eq("project_id", id).maybeSingle()); failure(link.error);
     const data = structuredClone(saved.data), empty = createProjectData(), cache = new Map<string, string>();
@@ -70,12 +85,13 @@ export function createFonciereRepository(client: SupabaseClient) {
       if (!ref) return fallback;
       const asset = assets.find(item => item.id === ref && item.project_id === id && item.kind === "photo" && item.lifecycle === "finalized");
       if (!UUID.test(ref) || !asset) throw new Error("Une photographie est inaccessible. La fiche n’a pas été chargée partiellement.");
-      if (!cache.has(ref)) cache.set(ref, await blobData(await downloadAsset(asset, options), options));
+      if (!cache.has(ref)) cache.set(ref, await blobData(await (options.purpose === "transfer" ? downloadAsset(asset, options) : previewPhoto(asset, options)), options));
       return cache.get(ref)!;
     }
     for (const role of PHOTO_ROLES) data.presentationData.photos[role] = await hydrate(data.presentationData.photos[role], empty.photos[role]);
     for (const photo of data.presentationData.importGallery) photo.data = await hydrate(photo.data, empty.photos.main);
     for (const ref of saved.sourceDocuments) if (!assets.some(asset => asset.id === ref && asset.project_id === id && ["pdf", "attachment"].includes(asset.kind))) throw new Error("Un document source est inaccessible. La fiche n’a pas été chargée partiellement.");
+    if (options.purpose === "transfer") await authorizeTransfer(id, project.revision, options);
     return { project, data: validateFonciereData(data), assets, sourceDocuments: [...saved.sourceDocuments] };
   }
   async function uploadAsset(project: FonciereProjectRecord, file: Blob, kind: FonciereAssetRecord["kind"], name: string, options: OperationOptions): Promise<FonciereAssetRecord> {
@@ -118,7 +134,7 @@ export function createFonciereRepository(client: SupabaseClient) {
         if (page.length < pageSize) return rows;
       }
     },
-    loadProject, listAssets, downloadAsset,
+    loadProject, listAssets, downloadAsset, authorizeTransfer,
     async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; sourceFiles?: File[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions = {}): Promise<LoadedFonciereProject> {
       const data = validateFonciereData(input.data), persisted = structuredClone(data), empty = createProjectData();
       // Contact identity has a separate Contacts-protected projection in SQL.
@@ -139,14 +155,21 @@ export function createFonciereRepository(client: SupabaseClient) {
         input.onCreated?.(await loadProject(project.id, options));
       }
       const target = project, uploaded = new Map<string, string>();
-      async function persistPhoto(value: string, fallback: string, name: string) {
+      async function persistPhoto(value: string, fallback: string, name: string, previousValue?: string, previousReference?: string) {
+        // Slot identity preserves distinct originals even when previews have equal bytes.
+        if (previousReference && value === previousValue) return previousReference;
         if (value === fallback) return "";
         if (reuse.has(value)) return reuse.get(value)!;
         if (!uploaded.has(value)) uploaded.set(value, (await uploadAsset(target, photoDataToBlob(value), "photo", name, options)).id);
         return uploaded.get(value)!;
       }
-      for (const role of PHOTO_ROLES) persisted.presentationData.photos[role] = await persistPhoto(data.presentationData.photos[role], empty.photos[role], `${role}.jpg`);
-      for (let index = 0; index < data.presentationData.importGallery.length; index++) persisted.presentationData.importGallery[index].data = await persistPhoto(data.presentationData.importGallery[index].data, "", `photo-${index + 1}.jpg`);
+      for (const role of PHOTO_ROLES) persisted.presentationData.photos[role] = await persistPhoto(data.presentationData.photos[role], empty.photos[role], `${role}.jpg`, before?.data.presentationData.photos[role], old?.data.presentationData.photos[role]);
+      for (let index = 0; index < data.presentationData.importGallery.length; index++) {
+        const item = data.presentationData.importGallery[index];
+        const prior = before?.data.presentationData.importGallery[index];
+        const priorRef = old?.data.presentationData.importGallery[index];
+        persisted.presentationData.importGallery[index].data = await persistPhoto(item.data, "", `photo-${index + 1}.jpg`, prior?.data, priorRef?.data);
+      }
       const sourceDocuments = [...(before?.sourceDocuments || [])];
       if (sourceDocuments.length + (input.sourceFiles?.length || 0) > FONCIERE_DOCUMENT_LIMIT) throw new Error("Trente documents sources maximum par projet.");
       for (const file of input.sourceFiles || []) sourceDocuments.push((await uploadAsset(target, file, file.type === "application/pdf" ? "pdf" : "attachment", file.name, options)).id);

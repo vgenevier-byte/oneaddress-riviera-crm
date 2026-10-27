@@ -40,7 +40,7 @@ function safeName(value: string) { return (value || "projet-izord").replace(/[^a
 function isConflict(error: unknown) { return error instanceof Error && (error.name === "GeneratorConflictError" || /conflit|revision_conflict|40001/i.test(error.message)); }
 function messageOf(error: unknown) { return error instanceof Error ? error.message : "Opération indisponible. Votre brouillon reste en mémoire."; }
 
-export default function IzordGenerator({role,canExport=true,canReadProjects=false,canWriteProjects=false,userId,onUnsavedChange,accessSignal,recovery,onDraft}:{role:string;canExport?:boolean;canReadProjects?:boolean;canWriteProjects?:boolean;userId:string;onUnsavedChange:(value:boolean)=>void;accessSignal:AbortSignal;recovery?:GeneratorDraft;onDraft:(draft:GeneratorDraft)=>void}) {
+export default function IzordGenerator({role,canExport=true,canReadProjects=false,canWriteProjects=false,canDownloadProjects=false,userId,onUnsavedChange,accessSignal,recovery,onDraft}:{role:string;canExport?:boolean;canReadProjects?:boolean;canWriteProjects?:boolean;canDownloadProjects?:boolean;userId:string;onUnsavedChange:(value:boolean)=>void;accessSignal:AbortSignal;recovery?:GeneratorDraft;onDraft:(draft:GeneratorDraft)=>void}) {
   const { t, label: displayLabel, formatDate: screenDate, locale, language } = useI18n();
   const eur = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? new Intl.NumberFormat(locale,{style:"currency",currency:"EUR",minimumFractionDigits:0,maximumFractionDigits:0}).format(value) : displayLabel("À renseigner","izord");
   const pct = (value: number | null) => value === null ? "—" : new Intl.NumberFormat(locale,{minimumFractionDigits:1,maximumFractionDigits:1}).format(value) + " %";
@@ -137,6 +137,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
     if(accessSignal.aborted||!data||!canWrite||busy||loaded?.project.status==="approved"&&!canApprove)return null;
     const operation=begin(), snapshot=data;setBusy(true);setError("");setNotice("Enregistrement en cours…");
     try{
+      await repository.authorizeSource(snapshot,loaded??undefined,{signal:operation.signal});
       const project=loaded?.project??await repository.createProject(snapshot.state.project||"Nouveau projet",{signal:operation.signal});
       if(!current(operation.id))return null;
       // Retain the created identity if a later upload fails; retry never creates a duplicate project.
@@ -197,7 +198,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
     </label>;})}</div>;
   const metric=(label:string,value:string,emphasis=false)=><div className={`${styles.metric} ${emphasis?styles.emphasis:""}`}><span>{displayLabel(label,"izord")}</span><strong>{value}</strong></div>;
   return <div className={styles.generator} data-izord-generator>
-    <ProjectSourcePicker canReadProjects={canReadProjects} canWriteProjects={canWriteProjects} data={data} sourceFiles={sourceFiles} draftId={draftId} onBusyChange={setBusy} loadSourceFiles={async signal=>{
+    <ProjectSourcePicker canReadProjects={canReadProjects} canWriteProjects={canWriteProjects} canDownloadProjects={canDownloadProjects} data={data} sourceFiles={sourceFiles} draftId={draftId} onBusyChange={setBusy} loadSourceFiles={async signal=>{
       const files=[...sourceFiles];
       if(loaded&&!replaceSourceDocuments)for(const id of loaded.sourceDocuments){const asset=loaded.assets.find(item=>item.id===id);if(!asset)throw new Error("Document source inaccessible.");const blob=await repository.downloadAsset(asset,{signal});files.push(new File([blob],asset.original_name||`source-${id}`,{type:blob.type}));}
       return files;

@@ -48,7 +48,7 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
     const ids = [data.agentContactId, data.agencyContactId].filter(Boolean);
     if (!canReadContacts || !ids.length || accessSignal?.aborted) return () => local.abort();
     void (async () => {
-      const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]), repository = createFonciereRepository(op.client);
+      const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]), repository = createFonciereRepository(op.client, { accessToken: op.token });
       const rows = await op.run(() => Promise.all(ids.map(id => repository.readContact(id, { signal })))); signal.throwIfAborted();
       setLinked(Object.fromEntries(rows.filter((row): row is ProjectContact => Boolean(row)).map(row => [row.id, row])));
       setLinkError(rows.some(row => !row) ? t("Un contact lié est indisponible. Les informations locales sont conservées.", "A linked contact is unavailable. Local information is retained.") : "");
@@ -64,7 +64,7 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
       if (!canReadContacts || query.trim().length < 1 || accessSignal?.aborted) return;
       return window.setTimeout(() => { setter(previous => ({ ...previous, loading: true, error: "" })); void (async () => {
         const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]);
-        const rows = await op.run(() => createFonciereRepository(op.client).searchContacts(query, { signal })); signal.throwIfAborted();
+        const rows = await op.run(() => createFonciereRepository(op.client, { accessToken: op.token }).searchContacts(query, { signal })); signal.throwIfAborted();
         setter(previous => ({ ...previous, loading: false, rows: rows.filter(row => role === "agency" ? isAgencyOption(row) : row.entityType !== "company") }));
       })().catch(error => { if (!local.signal.aborted && !isCancelled(error)) setter(previous => ({ ...previous, loading: false, rows: [], error: t("Recherche indisponible. Vos valeurs restent conservées.", "Search unavailable. Your values are retained.") })); }); }, 220);
     });

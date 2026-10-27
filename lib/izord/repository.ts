@@ -174,6 +174,16 @@ export function createGeneratorRepository(client: SupabaseClient) {
     const asset = (await guarded(options.signal, () => listAssets(project.id, options))).find(item => item.id === id && item.lifecycle === "finalized");
     if (!asset) throw new Error("La finalisation du document n’a pas été confirmée."); return asset;
   }
+  async function authorizeSource(data: ProjectData, previous?: LoadedProject, options: OperationOptions = {}) {
+    const source = data.importMeta?.fonciereSource;
+    const historical = stored(previous?.project.payload)?.data.importMeta?.fonciereSource;
+    if (!source || historical && JSON.stringify(source) === JSON.stringify(historical)) return;
+    const ref = source as { id?: unknown; revision?: unknown };
+    if (typeof ref.id !== "string" || !uuid.test(ref.id) || !Number.isInteger(ref.revision) || Number(ref.revision) < 1) throw new Error("Référence au projet source invalide. Votre brouillon est conservé.");
+    // Admission precedes target creation and byte transfers. The final RPC repeats
+    // this check; an unchanged historical snapshot remains independent.
+    const admission = await guarded(options.signal, () => client.rpc("fonciere_authorize_transfer", { p_project: ref.id, p_revision: null })); failure(admission.error);
+  }
   return {
     async listProjects(options: OperationOptions = {}): Promise<ProjectRecord[]> {
       const rows: ProjectRecord[] = [], pageSize = 250;
@@ -205,7 +215,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
     async createProject(title: string, options: OperationOptions = {}): Promise<ProjectRecord> {
       const created = await guarded(options.signal, () => client.rpc("izord_create_project", { p_title: title.trim() || "Nouveau projet" })); failure(created.error); return guarded(options.signal, () => readProject(String(created.data), options));
     },
-    listAssets, listVersions, loadProject, downloadAsset,
+    listAssets, listVersions, loadProject, downloadAsset, authorizeSource,
     async saveProject(input: { project: ProjectRecord; data: ProjectData; previous?: LoadedProject; status?: ProjectStatus; sourceFiles?: File[]; replaceSourceDocuments?: boolean }, options: OperationOptions = {}): Promise<LoadedProject> {
       abortIfNeeded(options.signal);
       const before = input.previous;
@@ -215,7 +225,9 @@ export function createGeneratorRepository(client: SupabaseClient) {
         || stored(input.project.payload) && !before) {
         throw new Error("Ce dossier est en lecture seule ou ses photographies n’ont pas été chargées. Rouvrez la version actuelle avant d’enregistrer.");
       }
-      const who = await guarded(options.signal, () => actor(options.signal)), data = validateProjectData(input.data), empty = createProjectData(), persisted = structuredClone(data);
+      const data = validateProjectData(input.data);
+      await authorizeSource(data, before, options);
+      const who = await guarded(options.signal, () => actor(options.signal)), empty = createProjectData(), persisted = structuredClone(data);
       const old = stored(before?.project.payload), reusable = new Map<string, string>();
       if (old && before) {
         for (const role of PHOTO_ROLES) if (old.data.photos[role]) reusable.set(before.data.photos[role], old.data.photos[role]);

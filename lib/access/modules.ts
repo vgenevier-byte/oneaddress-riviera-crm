@@ -7,9 +7,8 @@ export const sensitiveLabels = { delete: "Suppression", export: "Export et t√©l√
 export type Sensitive = keyof typeof sensitiveLabels;
 /** Publisher has no deletion feature. Its sensitive actions do not apply to OAR/IZORD. */
 export function moduleSensitivePermissions(module: ModuleId): Sensitive[] {
-  // Project archival and private-document viewing follow their existing guards;
-  // this module does not expose permanent deletion or a separate export grant.
-  if (module === "fonciere") return [];
+  // Project deletion is reversible archival only; export controls originals.
+  if (module === "fonciere") return ["delete", "export"];
   if (module === "publisher") return ["generate", "export", "mark_published"];
   if (module === "monthlyCharges") return ["export"];
   return ["delete", "export", ...(module === "contacts" ? ["bank_read", "bank_write"] as const : []), ...(module === "vendorInvoices" ? ["payment"] as const : [])];
