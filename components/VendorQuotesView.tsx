@@ -456,7 +456,7 @@ export default function VendorQuotesView({
                     )}
 
                     {quote.status !== "Validé" && (
-                      <BusinessButton className="primary-button" type="button" permission="write" disabled={changingStatusId !== null || Boolean(business&&!business.canWrite("vendorInvoices"))} onClick={() => validateQuote(quote)}>
+                      <BusinessButton className="secondary-button" type="button" permission="write" disabled={changingStatusId !== null || Boolean(business&&!business.canWrite("vendorInvoices"))} onClick={() => validateQuote(quote)}>
 
                         {t("modules.vendorQuotesView.approve")}
                       </BusinessButton>
