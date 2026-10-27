@@ -95,16 +95,16 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
   function leave(){return !dirty||window.confirm(t("izord.ce_brouillon_n_est_pas_enregistre_exportez_s_e4fdd1"));}
   function edit(next:ProjectData){if(accessSignal.aborted||!canWrite)return;setData(next);setDirty(true);setNotice("Modifications non enregistrées");setError("");}
   function field(key:keyof ProjectState,value:string|boolean){if(data)edit({...data,state:{...data.state,[key]:value}});}
-  function fresh(next=createProjectData(),files:File[]=[]){setHistoricalRevision(null);begin();setDraftId(crypto.randomUUID());setData(next);setLoaded(null);setVersions([]);setSourceFiles(files);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setWorkflow("draft");setDirty(true);setBusy(false);setError("");setConflict(false);setRemote(null);setNotice("Nouveau brouillon — non enregistré");}
+  function fresh(next=createProjectData(),files:File[]=[]){const sourceAttemptUrl=new URL(window.location.href);sourceAttemptUrl.searchParams.delete("sourceDraft");window.history.replaceState(null,"",sourceAttemptUrl.pathname+sourceAttemptUrl.search+sourceAttemptUrl.hash);setHistoricalRevision(null);begin();setDraftId(crypto.randomUUID());setData(next);setLoaded(null);setVersions([]);setSourceFiles(files);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setWorkflow("draft");setDirty(true);setBusy(false);setError("");setConflict(false);setRemote(null);setNotice("Nouveau brouillon — non enregistré");}
   async function refreshList(){const operation=begin();try{const list=await repository.listProjects({signal:operation.signal});if(current(operation.id))setProjects(list);}catch{if(current(operation.id))setError("Liste indisponible.");}}
-  async function open(project:ProjectRecord, revision?:number, preserveTarget=false){
-    if(!leave())return;setHistoricalRevision(revision ?? null);const operation=begin();setDraftId(crypto.randomUUID());setData(null);setLoaded(null);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setBusy(true);setError("");setNotice("Ouverture…");
+  async function open(project:ProjectRecord, revision?:number, preserveTarget=false, preserveCreationAttempt=false){
+    if(!leave())return;const pendingSourceDraft=preserveCreationAttempt?new URL(window.location.href).searchParams.get("sourceDraft"):null;if(!preserveCreationAttempt){const sourceAttemptUrl=new URL(window.location.href);sourceAttemptUrl.searchParams.delete("sourceDraft");window.history.replaceState(null,"",sourceAttemptUrl.pathname+sourceAttemptUrl.search+sourceAttemptUrl.hash);}setHistoricalRevision(revision ?? null);const operation=begin();setDraftId(crypto.randomUUID());setData(null);setLoaded(null);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setBusy(true);setError("");setNotice("Ouverture…");
     try{const value=await repository.loadProject(project.id,{signal:operation.signal,hydratePhotos:roleCanWrite && revision === undefined,revision});const history=await repository.listVersions(project.id,{signal:operation.signal});
       if(current(operation.id)){
         if(!preserveTarget){
           const reference={type:"presentation",id:value.project.id,...(revision===undefined?{}:{context:{revision:String(revision)}})};
           handledTaskFocus.current=JSON.stringify(reference);
-          window.history.replaceState(window.history.state,"",taskTargetHref(reference));
+          const targetUrl=new URL(taskTargetHref(reference),window.location.origin);if(pendingSourceDraft)targetUrl.searchParams.set("sourceDraft",pendingSourceDraft);window.history.replaceState(window.history.state,"",targetUrl.pathname+targetUrl.search+targetUrl.hash);
           window.dispatchEvent(new Event(TASK_TARGET_NAVIGATED));
         }
         setDraftId(crypto.randomUUID());setLoaded(value);setData(value.data);setWorkflow(value.project.status);setVersions(history);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setReports([]);setPdfFiles([]);setConflict(false);setRemote(null);setNotice("Enregistré · révision "+value.project.revision);
@@ -122,7 +122,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
       if (!project) { setError(language === "en" ? "This presentation is unavailable." : "Cette présentation est inaccessible."); return; }
       const raw = taskFocus.context?.revision;
       const revision = raw && /^[1-9]\d*$/.test(raw) ? Number(raw) : undefined;
-      if (loaded?.project.id !== id || revision !== (historicalRevision ?? undefined)) void open(project, revision, taskFocus.type === "document");
+      if (loaded?.project.id !== id || revision !== (historicalRevision ?? undefined)) void open(project, revision, taskFocus.type === "document", Boolean(new URL(window.location.href).searchParams.get("sourceDraft")));
     }, 0);
     return () => window.clearTimeout(timer);
     // The repository rechecks RLS for the project, revision and assets.
@@ -198,7 +198,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
     </label>;})}</div>;
   const metric=(label:string,value:string,emphasis=false)=><div className={`${styles.metric} ${emphasis?styles.emphasis:""}`}><span>{displayLabel(label,"izord")}</span><strong>{value}</strong></div>;
   return <div className={styles.generator} data-izord-generator>
-    <ProjectSourcePicker canReadProjects={canReadProjects} canWriteProjects={canWriteProjects} canDownloadProjects={canDownloadProjects} data={data} sourceFiles={sourceFiles} draftId={draftId} onBusyChange={setBusy} loadSourceFiles={async signal=>{
+    <ProjectSourcePicker userId={userId} canReadProjects={canReadProjects} canWriteProjects={canWriteProjects} canDownloadProjects={canDownloadProjects} data={data} sourceFiles={sourceFiles} draftId={draftId} onBusyChange={setBusy} loadSourceFiles={async signal=>{
       const files=[...sourceFiles];
       if(loaded&&!replaceSourceDocuments)for(const id of loaded.sourceDocuments){const asset=loaded.assets.find(item=>item.id===id);if(!asset)throw new Error("Document source inaccessible.");const blob=await repository.downloadAsset(asset,{signal});files.push(new File([blob],asset.original_name||`source-${id}`,{type:blob.type}));}
       return files;

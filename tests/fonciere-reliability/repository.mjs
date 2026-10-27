@@ -1,0 +1,71 @@
+/** Real isolated repository/Auth/RPC/Storage; only response loss is simulated. */
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {dirname,join} from 'node:path';
+import {randomUUID,createHash} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {Client} from 'pg';
+import {createClient} from '@supabase/supabase-js';
+const require=createRequire(import.meta.url);require('../i18n/register-typescript.cjs');
+const {createFonciereRepository,FonciereCreationConflictError,FonciereConflictError}=require('../../lib/fonciere/repository');
+const {createFonciereData}=require('../../lib/fonciere/model');
+assert.equal(process.env.IZORD_TEST_ACK,'IZORD_DISPOSABLE_LOCAL_ONLY');
+const statusFile=process.env.FONCIERE_DRIVE_STATUS_FILE;assert(statusFile);
+const status=JSON.parse(readFileSync(statusFile,'utf8')),fixture=JSON.parse(readFileSync(join(dirname(statusFile),'fonciere-drive-fixture.private.json'),'utf8'));
+for(const url of [status.API_URL,status.DB_URL])assert.equal(new URL(url).hostname,'127.0.0.1');
+assert.equal(new URL(status.API_URL).port,'56031');assert.equal(new URL(status.DB_URL).port,'56032');
+const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}},output=process.env.FONCIERE_RELIABILITY_OUTPUT||'/private/tmp/fonciere-reliability-evidence';mkdirSync(output,{recursive:true});
+const sql=new Client({connectionString:status.DB_URL});await sql.connect();
+const service=createClient(status.API_URL,status.SERVICE_ROLE_KEY,options),checks=[],tag='Repository reliability '+randomUUID();
+const ok=async promise=>{const result=await promise;assert.equal(result.error,null,result.error?.message);return result.data;};
+const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+const fileHash=async file=>sha(Buffer.from(await file.arrayBuffer()));
+const countAssets=async id=>Number((await sql.query('select count(*) from fonciere_assets where project_id=$1',[id])).rows[0].count);
+const fileJobs=async id=>(await sql.query("select * from app_private.fonciere_drive_jobs where project_id=$1 and job_type='file' order by id",[id])).rows;
+const projectRow=async key=>(await sql.query('select * from fonciere_projects where creation_key=$1',[key])).rows[0];
+try{
+ const writer=createClient(status.API_URL,status.ANON_KEY,options),session=await ok(writer.auth.signInWithPassword({email:fixture.users.writer.email,password:fixture.users.writer.password})),token=session.session.access_token;
+ const normal=createFonciereRepository(writer),realFetch=fetch;
+ let dropCreate=true,dropFinal=false;
+ const transport=createClient(status.API_URL,status.ANON_KEY,{...options,global:{headers:{Authorization:'Bearer '+token},fetch:async(input,init)=>{
+  const url=String(input);assert.equal(new URL(url).origin,status.API_URL,'Test transport must remain on owned API');
+  const response=await realFetch(input,init);
+  const lose=dropCreate&&url.endsWith('/rest/v1/rpc/fonciere_create_project')||dropFinal&&url.endsWith('/rest/v1/rpc/fonciere_save_project');
+  if(lose){assert(response.ok);if(url.endsWith('fonciere_create_project'))dropCreate=false;else dropFinal=false;await response.text();throw new TypeError('Fixture: successful database response lost');}
+  return response;
+ }}}),repo=createFonciereRepository(transport);
+ const key=randomUUID(),data={...createFonciereData(),name:tag+' initial'},file=new File(['%PDF-1.4\nOriginal pending draft A\n%%EOF'],'same-name.pdf',{type:'application/pdf'}),files=[file],snapshot=structuredClone(data),originalHash=await fileHash(file);
+ await assert.rejects(repo.saveProject({data,creationKey:key,sourceFiles:files,sourceFileCategories:['plans']}));
+ const initial=await projectRow(key);assert(initial);assert.equal(initial.revision,1);assert.equal(await countAssets(initial.id),0);assert.equal((await fileJobs(initial.id)).length,0);assert.deepEqual(data,snapshot);assert.equal(files[0],file);assert.equal(await fileHash(file),originalHash);
+ const changed={...data,name:tag+' changed after uncertain result'},changedFile=new File(['%PDF-1.4\nChanged pending original B\n%%EOF'],'same-name.pdf',{type:'application/pdf'}),changedFiles=[changedFile],changedSnapshot=structuredClone(changed),changedHash=await fileHash(changedFile);
+ const isCreationConflict=error=>{assert(error instanceof FonciereCreationConflictError);assert.equal(error.projectId,initial.id);assert.equal(error.projectReference,initial.project_reference);assert.equal(error.revision,1);return true;};
+ await assert.rejects(repo.saveProject({data:changed,creationKey:key,sourceFiles:changedFiles,sourceFileCategories:['plans']}),isCreationConflict);
+ const pending=await normal.loadProject(initial.id);
+ await assert.rejects(repo.saveProject({data:changed,previous:pending,creationKey:key,sourceFiles:changedFiles,sourceFileCategories:['plans']}),isCreationConflict);
+ assert.deepEqual(await projectRow(key),initial);assert.equal(await countAssets(initial.id),0);assert.equal((await fileJobs(initial.id)).length,0);assert.deepEqual(changed,changedSnapshot);assert.equal(changedFiles[0],changedFile);assert.equal(await fileHash(changedFile),changedHash);
+ checks.push('Lost creation response follows a real commit; changed draft/files with the same key conflict at revision1, including retry with canonical previous record, before any upload; canonical identity reaches the typed error and inputs/bytes stay exact');
+ const reconciled=await repo.saveProject({data:changed,previous:pending,creationKey:key,creationReconciled:true,sourceFiles:changedFiles,sourceFileCategories:['plans']});
+ assert.equal(reconciled.project.id,initial.id);assert.equal(reconciled.project.project_reference,initial.project_reference);assert.equal(reconciled.project.revision,2);assert.equal(reconciled.sourceDocuments.length,1);assert.equal(await countAssets(initial.id),1);
+ const original=(await sql.query('select * from fonciere_assets where id=$1',[reconciled.sourceDocuments[0]])).rows[0];assert.equal(original.drive_category,'plans');assert.equal(original.original_name,changedFile.name);
+ const downloaded=await ok(service.storage.from('fonciere-documents').download(original.object_path));assert.equal(sha(Buffer.from(await downloaded.arrayBuffer())),changedHash);
+ const jobsAfterReconcile=await fileJobs(initial.id),loaded=await normal.loadProject(initial.id);
+ const renamed=await normal.saveProject({data:{...loaded.data,name:tag+' explicit reviewed edit'},previous:loaded});assert.equal(renamed.project.id,initial.id);assert.equal(renamed.project.project_reference,initial.project_reference);assert.deepEqual(renamed.sourceDocuments,reconciled.sourceDocuments);assert.equal(await countAssets(initial.id),1);assert.deepEqual(await fileJobs(initial.id),jobsAfterReconcile);
+ checks.push('Explicit reconciliation updates the authorized existing UUID/reference, retains the selected original PDF/category/name and reread byte hash; subsequent normal edit preserves the same original and file outbox rows');
+ const stale=await normal.loadProject(initial.id),winnerData={...stale.data,notes:'Winning saved notes '+tag},winner=await normal.saveProject({data:winnerData,previous:stale}),staleData={...stale.data,notes:'Unsubmitted stale notes '+tag},staleSnapshot=structuredClone(staleData),preservedJobs=await fileJobs(initial.id);
+ await assert.rejects(normal.saveProject({data:staleData,previous:stale}),error=>error instanceof FonciereConflictError);
+ const staleAttachment=new File(['%PDF-1.4\nPreserved stale attachment\n%%EOF'],'stale.pdf',{type:'application/pdf'}),staleAttachmentHash=await fileHash(staleAttachment),staleFiles=[staleAttachment];
+ await assert.rejects(normal.saveProject({data:staleData,previous:stale,sourceFiles:staleFiles,sourceFileCategories:['other']}));
+ assert.deepEqual(staleData,staleSnapshot);assert.equal(staleFiles[0],staleAttachment);assert.equal(await fileHash(staleAttachment),staleAttachmentHash);assert.equal((await projectRow(key)).payload.data.notes,winnerData.notes);assert.equal((await projectRow(key)).revision,winner.project.revision);assert.equal(await countAssets(initial.id),1);assert.deepEqual(await fileJobs(initial.id),preservedJobs);
+ checks.push('Actual revision CAS conflict preserves local fields and source-file objects/bytes; stale upload admission fails before Storage and leaves winning server data, original assets and file outbox unchanged');
+ const finalKey=randomUUID(),finalData={...createFonciereData(),name:tag+' final response replay'},finalFiles=[0,1].map(index=>new File(['%PDF-1.4\nDistinct lost-final original '+index+'\n%%EOF'],'homonyme.pdf',{type:'application/pdf'})),finalSnapshot=structuredClone(finalData),finalHashes=await Promise.all(finalFiles.map(fileHash));
+ dropFinal=true;let pendingFinal;
+ await assert.rejects(repo.saveProject({data:finalData,creationKey:finalKey,sourceFiles:finalFiles,sourceFileCategories:['plans','other'],onCreated:draft=>{pendingFinal=draft;}}));
+ assert(pendingFinal);const committed=await projectRow(finalKey);assert.equal(committed.revision,2);assert.equal(await countAssets(committed.id),2);const committedAssets=(await sql.query('select * from fonciere_assets where project_id=$1 order by id',[committed.id])).rows,committedJobs=await fileJobs(committed.id);
+ const replayed=await repo.saveProject({data:finalData,creationKey:finalKey,sourceFiles:finalFiles,sourceFileCategories:['plans','other']});
+ assert.equal(replayed.project.id,committed.id);assert.equal(replayed.project.project_reference,committed.project_reference);assert.equal(replayed.project.revision,committed.revision);assert.equal(replayed.sourceDocuments.length,2);assert.equal(await countAssets(committed.id),2);assert.deepEqual((await sql.query('select * from fonciere_assets where project_id=$1 order by id',[committed.id])).rows,committedAssets);assert.deepEqual(await fileJobs(committed.id),committedJobs);
+ for(const asset of committedAssets){const index=asset.drive_category==='plans'?0:1;const blob=await ok(service.storage.from('fonciere-documents').download(asset.object_path));assert.equal(sha(Buffer.from(await blob.arrayBuffer())),finalHashes[index]);}
+ assert.deepEqual(finalData,finalSnapshot);assert.deepEqual(await Promise.all(finalFiles.map(fileHash)),finalHashes);
+ const identities=(await sql.query('select id,project_reference,creation_key from fonciere_projects where creation_key=any($1::uuid[])',[[key,finalKey]])).rows;assert.equal(identities.length,2);assert.equal(new Set(identities.map(p=>p.id)).size,2);assert.equal(new Set(identities.map(p=>p.project_reference)).size,2);
+ checks.push('Lost final-save response follows a real successful commit; exact retry recovers the same revision/UUID/reference, two homonymous original assets and identical file outbox records without retransfers or duplicate creation keys');
+ writeFileSync(join(output,'repository-results.json'),JSON.stringify({passed:checks.length,checks,realLocalAuthRpcStorage:true,lostResponsesSimulatedAfterRealCommits:true,productionRequests:0,googleRequests:0},null,2));console.log(checks.map(c=>'PASS '+c).join('\n'));
+}finally{await sql.end();}

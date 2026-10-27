@@ -22,18 +22,28 @@ export class FonciereDriveError extends Error {
   constructor(public code: string, public permanent = false) { super(code); }
 }
 function fail(code: string, permanent = false): never { throw new FonciereDriveError(code, permanent); }
-function checked(response: Response, code: string) {
-  if (!response.ok) fail(response.status === 401 || response.status === 403 ? "drive_access_denied" : code, response.status === 401 || response.status === 403 || response.status === 400);
-  return response;
+async function checked(response: Response, code: string) {
+  if (response.ok) return response;
+  if (response.status === 403) {
+    // Drive reports quota throttling as 403 as well as 429. Only its structured
+    // reasons distinguish retryable throttling from actual permission failures.
+    const body = await response.clone().json().catch(() => null);
+    const errors = body?.error?.errors;
+    const reasons: unknown[] = Array.isArray(errors) ? errors.map((entry: { reason?: unknown } | null) => entry?.reason) : [];
+    if (reasons.length && reasons.every(reason => reason === "rateLimitExceeded" || reason === "userRateLimitExceeded")) fail("drive_rate_limited");
+    fail("drive_access_denied", true);
+  }
+  if (response.status === 429) fail("drive_rate_limited");
+  fail(response.status === 401 ? "drive_access_denied" : code, response.status === 401 || response.status === 400);
 }
 async function read(fetchDrive: FonciereDriveFetch, id: string): Promise<DriveMetadata | null> {
   const response = await fetchDrive(`${FILES}/${encodeURIComponent(id)}?supportsAllDrives=true&fields=${FIELDS}`, { cache: "no-store", signal: AbortSignal.timeout(12000) });
   if (response.status === 404) return null;
-  checked(response, "drive_metadata_unavailable");
+  await checked(response, "drive_metadata_unavailable");
   return await response.json();
 }
 export async function reserveDriveId(fetchDrive: FonciereDriveFetch) {
-  const response = checked(await fetchDrive(`${FILES}/generateIds?count=1&space=drive&type=files`, { cache: "no-store", signal: AbortSignal.timeout(12000) }), "drive_id_unavailable");
+  const response = await checked(await fetchDrive(`${FILES}/generateIds?count=1&space=drive&type=files`, { cache: "no-store", signal: AbortSignal.timeout(12000) }), "drive_id_unavailable");
   const id = (await response.json()).ids?.[0];
   if (typeof id !== "string" || !/^[\w-]{1,180}$/.test(id)) fail("drive_id_invalid", true);
   return id as string;
@@ -66,7 +76,7 @@ export async function discoverProjetsRoot(fetchDrive: FonciereDriveFetch, shared
   do {
     const params = new URLSearchParams({ q: `name = 'Projets' and mimeType = '${FOLDER}' and trashed = false`, corpora: "drive", driveId: sharedDriveId, includeItemsFromAllDrives: "true", supportsAllDrives: "true", spaces: "drive", pageSize: "100", fields: `nextPageToken,incompleteSearch,files(${FIELDS})` });
     if (pageToken) params.set("pageToken", pageToken);
-    const response = checked(await fetchDrive(`${FILES}?${params}`, { cache: "no-store", signal: AbortSignal.timeout(12000) }), "drive_root_search_failed");
+    const response = await checked(await fetchDrive(`${FILES}?${params}`, { cache: "no-store", signal: AbortSignal.timeout(12000) }), "drive_root_search_failed");
     const body = await response.json();
     if (!Array.isArray(body.files) || body.incompleteSearch === true) fail("drive_root_search_incomplete", true);
     for (const candidate of body.files) {
@@ -83,7 +93,7 @@ async function createFolder(fetchDrive: FonciereDriveFetch, id: string, name: st
   try {
     response = await fetchDrive(`${FILES}?supportsAllDrives=true&fields=id`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id, name, mimeType: FOLDER, parents: [parentId], appProperties: properties }), signal: AbortSignal.timeout(15000) });
   } catch { /* Ambiguous creation: caller confirms only the persisted ID. */ }
-  if (response && !response.ok && response.status !== 409) checked(response, "drive_folder_create_failed");
+  if (response && !response.ok && response.status !== 409) await checked(response, "drive_folder_create_failed");
   return read(fetchDrive, id);
 }
 /** Complete discovery establishes absence. Root reservation commits before POST. */
@@ -124,10 +134,13 @@ async function resolveFolder(store: FonciereDriveStore, fetchDrive: FonciereDriv
     folder = await read(fetchDrive, id);
   }
   if (!folder) folder = await createFolder(fetchDrive, id, name, parentId, properties);
+  // An unconfirmed creation can be absent after a lost request. Keep the saved
+  // reservation retryable; only a formerly ready folder requires intervention.
+  if (!folder) fail("drive_folder_creation_unconfirmed");
   assertFolder(folder, config.shared_drive_id!, parentId, properties, id);
   if (folder.name !== name) {
     const renamed = await fetchDrive(`${FILES}/${encodeURIComponent(id)}?supportsAllDrives=true&fields=id`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name }), signal: AbortSignal.timeout(12000) });
-    checked(renamed, "drive_folder_rename_failed");
+    await checked(renamed, "drive_folder_rename_failed");
     const confirmed = await read(fetchDrive, id);
     assertFolder(confirmed, config.shared_drive_id!, parentId, properties, id);
     if (confirmed.name !== name) fail("drive_folder_rename_unconfirmed");
@@ -152,7 +165,7 @@ export async function copyOriginalToDrive(fetchDrive: FonciereDriveFetch, job: D
     const metadata = { id, name: job.original_name, mimeType: job.expected_mime, parents: [parentId], appProperties: fileProperties(job) };
     const initiation = await fetchDrive(`https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id`, { method: "POST", headers: { "content-type": "application/json", "x-upload-content-type": job.expected_mime, "x-upload-content-length": String(bytes.length) }, body: JSON.stringify(metadata), signal: AbortSignal.timeout(15000) });
     if (initiation.status !== 409) {
-      checked(initiation, "drive_upload_start_failed");
+      await checked(initiation, "drive_upload_start_failed");
       const location = initiation.headers.get("location");
       if (!location) fail("drive_upload_session_missing");
       const url = new URL(location);
@@ -162,8 +175,8 @@ export async function copyOriginalToDrive(fetchDrive: FonciereDriveFetch, job: D
         let response: Response | undefined;
         try { response = await fetchDrive(location, { method: "PUT", headers: { "content-type": job.expected_mime, "content-length": String(end - offset), "content-range": `bytes ${offset}-${end - 1}/${bytes.length}` }, body: new Uint8Array(bytes.subarray(offset, end)), signal: AbortSignal.timeout(45000) }); }
         catch { confirmed = await read(fetchDrive, id); if (!confirmed) fail("drive_upload_unconfirmed"); break; }
-        if (end < bytes.length && response.status !== 308) checked(response, "drive_upload_failed");
-        if (end === bytes.length && !response.ok) { confirmed = await read(fetchDrive, id); if (!confirmed) checked(response, "drive_upload_failed"); }
+        if (end < bytes.length && response.status !== 308) await checked(response, "drive_upload_failed");
+        if (end === bytes.length && !response.ok) { confirmed = await read(fetchDrive, id); if (!confirmed) await checked(response, "drive_upload_failed"); }
       }
     }
     confirmed = confirmed || await read(fetchDrive, id);
@@ -212,6 +225,8 @@ export function safeDriveError(error: unknown) {
   return error instanceof FonciereDriveError ? error.code : error instanceof DriveRouteError ? "drive_configuration_unavailable" : "drive_temporary_failure";
 }
 export const DRIVE_ERROR_MESSAGES: Record<string, string> = {
+  drive_rate_limited: "Google Drive limite temporairement le débit. La copie reprendra automatiquement avec temporisation.",
+  drive_folder_creation_unconfirmed: "La création du dossier n’est pas encore confirmée. La copie reprendra automatiquement avec la même identité de dossier.",
   drive_not_configured: "La destination Google Drive doit être configurée par l’administrateur.",
   managed_folder_missing_or_inaccessible: "Le dossier géré est absent ou inaccessible. Faites vérifier son accès ou restaurer le même dossier avant de réessayer.",
   managed_folder_changed: "Le dossier géré a été déplacé, mis à la corbeille ou modifié. Faites rétablir son emplacement avant de réessayer.",
@@ -223,6 +238,8 @@ export const DRIVE_ERROR_MESSAGES: Record<string, string> = {
   drive_temporary_failure: "La copie reprendra automatiquement après un incident temporaire."
 };
 export const DRIVE_ERROR_MESSAGES_EN: Record<string, string> = {
+  drive_rate_limited: "Google Drive is temporarily limiting requests. Copying will retry automatically after a delay.",
+  drive_folder_creation_unconfirmed: "Folder creation is not yet confirmed. Copying will retry automatically with the same folder identity.",
   drive_not_configured: "An administrator must configure the Google Drive destination.",
   managed_folder_missing_or_inaccessible: "The managed folder is missing or inaccessible. Have its access checked or restore the same folder before retrying.",
   managed_folder_changed: "The managed folder was moved, trashed or changed. Have its original location restored before retrying.",

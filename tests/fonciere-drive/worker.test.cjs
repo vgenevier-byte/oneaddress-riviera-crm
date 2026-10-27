@@ -204,6 +204,53 @@ test("Drive outage leaves durable retry; moved/trashed ready folder never create
   f.state.unavailable = true; f.jobs.push(makeJob({ id: "outage", status: "pending" }));
   assert.equal((await processFonciereDriveJobs(f.store, f.fetchDrive)).failed, 1); assert.equal(f.jobs[2].status, "retry"); assert.equal(f.jobs[2].permanent, false);
 });
+for (const reason of ["rateLimitExceeded", "userRateLimitExceeded"]) test(`403 ${reason} keeps folder reservation retryable and recovers with the same ID`, async () => {
+  const f = fixture(); f.jobs.push(makeJob({ status: "pending", job_type: "folder", asset_id: null }));
+  let throttled = false, reserved;
+  const limited = async (input, init) => {
+    if (init?.method === "POST" && new URL(input).pathname === "/drive/v3/files" && !throttled) {
+      throttled = true; reserved = JSON.parse(init.body).id;
+      return Response.json({ error: { errors: [{ reason }] } }, { status: 403 });
+    }
+    return f.fetchDrive(input, init);
+  };
+  assert.equal((await processFonciereDriveJobs(f.store, limited)).failed, 1);
+  assert.equal(f.jobs[0].permanent, false); assert.equal(f.jobs[0].error, "drive_rate_limited");
+  assert.equal(f.folders.get(`${project}/project`).drive_folder_id, reserved);
+  f.jobs[0].status = "pending";
+  // The real SQL fail operation releases every matching folder lease.
+  for (const row of f.folders.values()) row.lease_token = null;
+  assert.equal((await processFonciereDriveJobs(f.store, limited)).synced, 1);
+  assert.equal(f.folders.get(`${project}/project`).drive_folder_id, reserved);
+  assert.equal(f.creations.filter(id => id === reserved).length, 1);
+});
+test("interrupted creating-folder POST followed by 404 keeps the same reservation eligible for retry", async () => {
+  const f = fixture(); f.jobs.push(makeJob({ status: "pending", job_type: "folder", asset_id: null }));
+  let interrupted = false, reserved;
+  const transport = async (input, init) => {
+    if (init?.method === "POST" && new URL(input).pathname === "/drive/v3/files" && !interrupted) {
+      interrupted = true; reserved = JSON.parse(init.body).id; throw Error("Interrupted before Google creation");
+    }
+    return f.fetchDrive(input, init);
+  };
+  assert.equal((await processFonciereDriveJobs(f.store, transport)).failed, 1);
+  assert.equal(f.jobs[0].permanent, false); assert.equal(f.jobs[0].error, "drive_folder_creation_unconfirmed");
+  assert.equal(f.folders.get(`${project}/project`).status, "creating"); assert.equal(f.files.has(reserved), false);
+  f.jobs[0].status = "pending"; for (const row of f.folders.values()) row.lease_token = null;
+  assert.equal((await processFonciereDriveJobs(f.store, transport)).synced, 1);
+  assert.equal(f.folders.get(`${project}/project`).drive_folder_id, reserved); assert.equal(f.creations.filter(id => id === reserved).length, 1);
+});
+for (const reason of ["insufficientFilePermissions", "teamDriveMembershipRequired", undefined]) test(`403 ${reason || "without JSON reason"} remains an intervention error`, async () => {
+  const f = fixture(); f.jobs.push(makeJob({ status: "pending", job_type: "folder", asset_id: null }));
+  const denied = async (input, init) => init?.method === "POST" && new URL(input).pathname === "/drive/v3/files" ? Response.json(reason ? { error: { errors: [{ reason }] } } : {}, { status: 403 }) : f.fetchDrive(input, init);
+  assert.equal((await processFonciereDriveJobs(f.store, denied)).failed, 1);
+  assert.equal(f.jobs[0].permanent, true); assert.equal(f.jobs[0].error, "drive_access_denied");
+});
+for (const status of [429, 500, 503]) test(`HTTP ${status} stays eligible for automatic retry`, async () => {
+  const f = fixture(); f.jobs.push(makeJob({ status: "pending", job_type: "folder", asset_id: null }));
+  const result = await processFonciereDriveJobs(f.store, async () => Response.json({}, { status }));
+  assert.equal(result.failed, 1); assert.equal(f.jobs[0].permanent, false); assert.notEqual(f.jobs[0].error, "drive_access_denied");
+});
 for (const status of [403, 404]) test(`managed ready folder HTTP ${status} is intervention-required, never absence for creation`, async () => {
   const f = fixture(); f.jobs.push(makeJob({ status: "pending", job_type: "folder", asset_id: null }));
   await processFonciereDriveJobs(f.store, f.fetchDrive);

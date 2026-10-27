@@ -8,13 +8,14 @@ import { Archive, ArrowLeft, ArrowUpRight, Building2, Check, ChevronRight, Downl
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
 import { createFonciereData, FONCIERE_DOCUMENT_LIMIT, type FonciereData, type FonciereField } from "@/lib/fonciere/model";
 import { useFonciereLocale } from "@/lib/fonciere/locale";
-import { createFonciereRepository, type FonciereAssetRecord, type LoadedFonciereProject } from "@/lib/fonciere/repository";
+import { createFonciereRepository, FonciereCreationConflictError, type FonciereAssetRecord, type LoadedFonciereProject } from "@/lib/fonciere/repository";
 import { agencyReportToFonciere, applyAgencyImport, proposeAgencyImport } from "@/lib/fonciere/import";
 import { analyzeAgencyFiles, type AgencyReport } from "@/lib/izord/agency";
 import { addPhotoFile } from "@/lib/izord/photos";
 import { LIMITS } from "@/lib/izord/model";
 import { normalizeContactSearch } from "@/lib/contactSearch";
-import { getFonciereCreationKey, clearFonciereCreationKey } from "@/lib/fonciere/creationKey";
+import { claimFonciereDraft, confirmFonciereDraft, markFonciereDraftAttempted, FonciereDraftInUseError, type FonciereDraftLease } from "@/lib/fonciere/creationKey";
+import { readFonciereLocalDraft, saveFonciereLocalDraft, deleteFonciereLocalDraft } from "@/lib/fonciere/draftRecovery";
 import { searchProjects } from "@/lib/fonciere/projectSearch";
 import ProjectDriveSync from "./ProjectDriveSync";
 import styles from "./ProjectsWorkspace.module.css";
@@ -87,7 +88,15 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   const [lang, setLang] = useFonciereLocale();
   const t = (fr: string, en: string) => lang === "fr" ? fr : en;
   const begin = useScopedOperations("fonciere");
-  const creationScope = `${userId}:projects:new`;
+  const creationScope = `${userId}:projects`;
+  const draftError = (failure: unknown) => failure instanceof FonciereDraftInUseError ? "draft-in-use" : failure instanceof Error && /identité de brouillon|identité du brouillon|brouillon local|brouillons entre onglets|brouillon conservée|quota|storage/i.test(failure.message) ? "draft-storage-unavailable" : messageOf(failure);
+  const draftLease = useRef<FonciereDraftLease | null>(null);
+  const draftEpoch = useRef(0);
+  const draftPersistence = useRef<Promise<void>>(Promise.resolve());
+  const [draftReady, setDraftReady] = useState(false);
+  const [creationReconciled, setCreationReconciled] = useState(false);
+  const [creationConflict, setCreationConflict] = useState<FonciereCreationConflictError | null>(null);
+  const [reconciliation, setReconciliation] = useState<LoadedFonciereProject | null>(null);
   const [projects, setProjects] = useState<LoadedFonciereProject["project"][]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -127,6 +136,42 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     signal.throwIfAborted();
     return { id, scoped, signal, repository: createFonciereRepository(scoped.client, { accessToken: scoped.token }) };
   }, [begin, accessSignal]);
+  function draftUrl(draftId: string) { return `/fonciere?draft=${encodeURIComponent(draftId)}`; }
+  async function persistDraft() {
+    const identity = draftLease.current?.identity;
+    if (!identity || !data || !draftReady) return;
+    const snapshot = { data, loaded, sourceFiles, sourceFileCategories, creationReconciled, updatedAt: new Date().toISOString() };
+    draftPersistence.current = draftPersistence.current.catch(() => {}).then(() => saveFonciereLocalDraft(identity, snapshot));
+    await draftPersistence.current;
+  }
+  useEffect(() => {
+    const candidate = new URL(window.location.href).searchParams.get("draft");
+    const controller = new AbortController();
+    const generation = ++draftEpoch.current;
+    if (candidate && !new URL(window.location.href).searchParams.has("project")) void (async () => {
+      const lease = await claimFonciereDraft(creationScope, candidate, controller.signal);
+      if (controller.signal.aborted || generation !== draftEpoch.current) { lease.release(); return; }
+      draftLease.current = lease;
+      window.history.replaceState(null, "", draftUrl(lease.identity.draftId));
+      const restored = await readFonciereLocalDraft(lease.identity);
+      if (controller.signal.aborted || generation !== draftEpoch.current || draftLease.current !== lease) return;
+      if (!restored && lease.identity.confirmedProjectId) { lease.release(); draftLease.current = null; await open(lease.identity.confirmedProjectId); return; }
+      if (restored) { setData(restored.data); setLoaded(restored.loaded); setSourceFiles(restored.sourceFiles); setSourceFileCategories(restored.sourceFileCategories); setCreationReconciled(restored.creationReconciled); setDirty(true); }
+      else setData(createFonciereData());
+      setDraftReady(true);
+    })().catch(failure => { if (!controller.signal.aborted && generation === draftEpoch.current && !isCancelled(failure)) setError(draftError(failure)); });
+    return () => { controller.abort(); draftLease.current?.release(); draftLease.current = null; };
+    // Restore once per account scope; draftEpoch and lease ownership reject late reads.
+    // A changing open callback must not restart recovery over the active editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [creationScope]);
+  useEffect(() => {
+    if (!data || !draftReady || !draftLease.current || !dirty) return;
+    const timer = window.setTimeout(() => { void persistDraft().catch(failure => setError(draftError(failure))); }, 150);
+    return () => window.clearTimeout(timer);
+    // Persist the current committed editor snapshot, scoped to its captured identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, loaded, sourceFiles, sourceFileCategories, creationReconciled, draftReady, dirty]);
   function current(id: number) { return epoch.current === id && !controller.current?.signal.aborted && !accessSignal?.aborted; }
   function leave() { return !(dirty || accessBusy || contactPending) || window.confirm(t("Ce projet contient des modifications non enregistrées. Quitter sans les enregistrer ?", "This project has unsaved changes. Leave without saving?")); }
   function edit(next: FonciereData) { if (!writable || busy || accessSignal?.aborted) return; setData(next); setDirty(true); setError(""); setNotice(""); }
@@ -175,17 +220,25 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     return projects.filter(project => { if (project.id === loaded?.project.id) return false; const other = (project.payload as { data?: Partial<FonciereData> } | undefined)?.data; return Boolean(ref && ref === normalizeContactSearch(other?.agencyReference || "") || address.length > 8 && address === normalizeContactSearch(other?.propertyAddress || "")); });
   }, [data, projects, loaded?.project.id]);
 
-  function fresh() {
+  async function fresh() {
     if (!canWrite || busy || !leave()) return;
-    try { clearFonciereCreationKey(creationScope); } catch { setError(t("La conservation de l’identité du brouillon est indisponible.", "Draft identity storage is unavailable.")); return; }
-    controller.current?.abort(); epoch.current++;
-    window.history.replaceState(null, "", "/fonciere"); setData(createFonciereData()); setLoaded(null); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setReview(null); setError(""); setNotice(""); setActiveSection("identity");
+    const generation = ++draftEpoch.current;
+    setBusy(true);
+    try {
+      const lease = await claimFonciereDraft(creationScope);
+      if (generation !== draftEpoch.current) { lease.release(); return; }
+      draftLease.current?.release(); draftLease.current = lease;
+      controller.current?.abort(); epoch.current++;
+      window.history.replaceState(null, "", draftUrl(lease.identity.draftId)); setData(createFonciereData()); setLoaded(null); setDraftReady(true); setCreationReconciled(false); setCreationConflict(null); setReconciliation(null); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setReview(null); setError(""); setNotice(""); setActiveSection("identity");
+    } catch (failure) { if (generation === draftEpoch.current) setError(draftError(failure)); }
+    finally { if (generation === draftEpoch.current) setBusy(false); }
   }
   async function open(id: string) {
     if (busy || !leave()) return;
+    draftEpoch.current++;
     setBusy(true); setError(""); setReview(null);
     let op: Awaited<ReturnType<typeof operation>> | undefined;
-    try { op = await operation(); const value = await op.scoped.run(() => op!.repository.loadProject(id, { signal: op!.signal })); if (current(op.id)) { window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(value.project.id)}`); setLoaded(value); setData(value.data); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setNotice(""); setActiveSection("identity"); } }
+    try { op = await operation(); const value = await op.scoped.run(() => op!.repository.loadProject(id, { signal: op!.signal })); if (current(op.id)) { window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(value.project.id)}`); draftLease.current?.release(); draftLease.current = null; setDraftReady(false); setCreationReconciled(false); setCreationConflict(null); setReconciliation(null); setLoaded(value); setData(value.data); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setNotice(""); setActiveSection("identity"); } }
     catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) setError(messageOf(failure)); }
     finally { if (!op || current(op.id)) setBusy(false); }
   }
@@ -229,10 +282,26 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     setBusy(true); setError(""); setNotice(t("Enregistrement des informations et des documents…", "Saving information and documents…"));
     let op: Awaited<ReturnType<typeof operation>> | undefined;
     try {
-      op = await operation(); const saved = await op.scoped.run(() => op!.repository.saveProject({ data, previous: loaded || undefined, creationKey: loaded ? undefined : getFonciereCreationKey(creationScope), sourceFiles, sourceFileCategories, onCreated: draft => { if (op && current(op.id)) setLoaded(draft); } }, { signal: op!.signal, onProgress: progress => { if (op && current(op.id)) setNotice(`${progress.label} · ${progress.total ? Math.round(progress.completed / progress.total * 100) : 0} %`); } }));
-      if (current(op.id)) { window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(saved.project.id)}`); setLoaded(saved); setData(saved.data); setSourceFiles([]); setSourceFileCategories([]); setDirty(false); try { clearFonciereCreationKey(creationScope); } catch { /* The confirmed project identity remains canonical. */ } setNotice(t("Projet enregistré. Copie Google Drive en attente.", "Project saved. Google Drive copy pending.") + ` · ${t("révision", "revision")} ${saved.project.revision}`); setProjects(previous => [saved.project, ...previous.filter(project => project.id !== saved.project.id)]); }
-    } catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) { setError(messageOf(failure)); setNotice(t("Le brouillon et les documents à enregistrer sont conservés dans cet onglet.", "The draft and pending documents remain in this tab.")); } }
+      await persistDraft();
+      const identity = draftLease.current?.identity;
+      if (!loaded && !identity) throw new Error(t("L’identité du brouillon n’est pas encore confirmée. Votre saisie est conservée.", "Draft identity is not confirmed yet. Your entries are retained."));
+      if (identity && !creationReconciled) markFonciereDraftAttempted(identity);
+      op = await operation(); const saved = await op.scoped.run(() => op!.repository.saveProject({ data, previous: loaded || undefined, creationKey: identity?.creationKey, creationReconciled, sourceFiles, sourceFileCategories, onCreated: draft => { if (op && current(op.id)) setLoaded(draft); } }, { signal: op!.signal, onProgress: progress => { if (op && current(op.id)) setNotice(`${progress.label} · ${progress.total ? Math.round(progress.completed / progress.total * 100) : 0} %`); } }));
+      if (current(op.id)) { window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(saved.project.id)}`); setLoaded(saved); setData(saved.data); setSourceFiles([]); setSourceFileCategories([]); setDirty(false); if (identity) { try { confirmFonciereDraft(identity, saved.project.id); await draftPersistence.current.catch(() => {}); await deleteFonciereLocalDraft(identity); } catch { /* The canonical project remains confirmed; retain its own recovery data if cleanup fails. */ } draftLease.current?.release(); draftLease.current = null; setDraftReady(false); } setCreationConflict(null); setReconciliation(null); setCreationReconciled(false); setNotice(t("Projet enregistré. Copie Google Drive en attente.", "Project saved. Google Drive copy pending.") + ` · ${t("révision", "revision")} ${saved.project.revision}`); setProjects(previous => [saved.project, ...previous.filter(project => project.id !== saved.project.id)]); }
+    } catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) { if (failure instanceof FonciereCreationConflictError) { setCreationConflict(failure); setReconciliation(null); setError(t("Cette identité de création correspond à une autre intention d’enregistrement. Votre brouillon et ses pièces jointes sont conservés ; comparez la fiche avant de continuer.", "This creation identity belongs to a different save request. Your draft and attachments are retained; compare the saved record before continuing.")); } else setError(draftError(failure)); setNotice(t("Le brouillon et les documents à enregistrer sont conservés dans cet onglet.", "The draft and pending documents remain in this tab.")); } }
     finally { if (!op || current(op.id)) setBusy(false); }
+  }
+  async function inspectCreationConflict() {
+    if (!creationConflict?.projectId || busy) return;
+    setBusy(true); let op: Awaited<ReturnType<typeof operation>> | undefined;
+    try { op = await operation(); const canonical = await op.scoped.run(() => op!.repository.loadProject(creationConflict.projectId!, { signal: op!.signal })); if (current(op.id)) setReconciliation(canonical); }
+    catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) setError(messageOf(failure)); }
+    finally { if (!op || current(op.id)) setBusy(false); }
+  }
+  function reconcileCreation() {
+    if (!reconciliation || busy || reconciliation.project.status === "archived") return;
+    setLoaded(reconciliation); setCreationReconciled(true); setCreationConflict(null); setReconciliation(null); setDirty(true); setError("");
+    setNotice(t("La fiche existante sert maintenant de base. Votre saisie et vos pièces jointes sont conservées. Vérifiez-les avant d’enregistrer.", "The existing record is now the baseline. Your entries and attachments are retained. Review them before saving."));
   }
   async function archive() {
     if (!loaded || !canWrite || !canArchive || busy || !leave()) return;
@@ -245,6 +314,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   }
   async function importAgency(file: File) {
     if (!canWrite || busy || review || data && !writable) return;
+    if (!data) { const generation = ++draftEpoch.current; try { const lease = await claimFonciereDraft(creationScope); if (generation !== draftEpoch.current) { lease.release(); return; } draftLease.current?.release(); draftLease.current = lease; setDraftReady(true); window.history.replaceState(null, "", draftUrl(lease.identity.draftId)); } catch (failure) { setError(draftError(failure)); return; } }
     const initial = data || createFonciereData();
     setData(initial); setBusy(true); setError(""); setNotice(t("Analyse de la fiche d’agence…", "Reading agency brochure…"));
     let op: Awaited<ReturnType<typeof operation>> | undefined;
@@ -337,7 +407,8 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       <div><p className={styles.eyebrow}>FONCIÈRE <span>/</span> {t("PATRIMOINE & OPPORTUNITÉS", "PROPERTY & OPPORTUNITIES")}</p><h1>{t("Projets", "Projects")}</h1><p className={styles.intro}>{t("Un lieu pour réunir vos biens, leurs documents et vos prochaines décisions.", "Your properties, source documents and next decisions, together in one place.")}</p></div>
       <div className={styles.headingActions}><div className={styles.language} aria-label={t("Langue du formulaire", "Form language")}>{(["fr", "en"] as const).map(value => <button key={value} type="button" aria-pressed={lang === value} onClick={() => setLang(value)}>{value.toUpperCase()}</button>)}</div>{canWrite && <button className={styles.primary} type="button" disabled={busy || importPending} onClick={fresh}><Plus size={16} />{t("Nouveau projet", "New project")}</button>}</div>
     </header>
-    {error && <p className={styles.error} role="alert">{error}</p>}
+    {error && <p className={styles.error} role="alert">{error === "draft-in-use" ? t("Ce brouillon est déjà ouvert dans un autre onglet. Vérifiez sa tentative d’enregistrement avant de le reprendre.", "This draft is already open in another tab. Review its save attempt before resuming it.") : error === "draft-storage-unavailable" ? t("La conservation locale du brouillon ou sa protection entre onglets est indisponible. Votre saisie reste dans cet onglet ; vérifiez la tentative avant de continuer.", "Local draft storage or protection between tabs is unavailable. Your entries remain in this tab; review the save attempt before continuing.") : error}</p>}
+    {creationConflict && <section className={styles.warning} data-creation-reconciliation><h3>{t("Vérifier la tentative d’enregistrement", "Review the save attempt")}</h3><p>{t("Votre brouillon reste conservé. Aucune autre fiche ne sera créée automatiquement.", "Your draft is retained. No other record will be created automatically.")}</p>{creationConflict.projectId && <><button type="button" disabled={busy} onClick={() => void inspectCreationConflict()}>{t("Comparer avec la fiche enregistrée", "Compare with the saved record")}</button> <a href={`/fonciere?project=${encodeURIComponent(creationConflict.projectId)}`} target="_blank" rel="noreferrer">{t("Ouvrir la fiche dans un autre onglet", "Open the record in another tab")}</a></>}{reconciliation && <div><p>{t("Fiche enregistrée", "Saved record")} : {reconciliation.project.project_reference} · {reconciliation.project.title} · r{reconciliation.project.revision}</p><p>{t("Votre brouillon", "Your draft")} : {data?.name} · {sourceFiles.length} {t("pièce(s) jointe(s) conservée(s)", "retained attachment(s)")}</p><button type="button" disabled={busy || reconciliation.project.status === "archived"} onClick={reconcileCreation}>{t("Utiliser cette fiche comme base et conserver mon brouillon", "Use this record as the baseline and keep my draft")}</button></div>}</section>}
     {notice && <p className={styles.notice} role="status"><Check size={16} />{notice}</p>}
     {!data ? <>
       <div className={styles.listToolbar}><label className={styles.search}><Search size={17} /><span className={styles.srOnly}>{t("Rechercher un projet", "Search projects")}</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder={t("Numéro, nom, adresse ou référence agence…", "Number, name, address or agency reference…")} /></label><div className={styles.tabs}><button aria-pressed={!archived} onClick={() => setArchived(false)}>{t("En cours", "Active")} <span>{projects.filter(project => project.status !== "archived").length}</span></button><button aria-pressed={archived} onClick={() => setArchived(true)}>{t("Archivés", "Archived")}</button></div><button className={styles.iconButton} disabled={listLoading || busy} onClick={() => void reload().catch(failure => setError(messageOf(failure)))} aria-label={t("Actualiser la liste", "Refresh list")}><RefreshCw size={17} /></button></div>
@@ -345,7 +416,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       {listLoading ? <div className={styles.empty} role="status"><RefreshCw size={28} /><h2>{t("Chargement des projets…", "Loading projects…")}</h2></div> : visibleProjects.length ? <div className={styles.projectGrid}>{visibleProjects.map(project => { const item = (project.payload as { data?: Partial<FonciereData> } | undefined)?.data; const display = item ? guidedReadableFields({ ...createFonciereData(), ...item }, lang) : undefined; return <button key={project.id} className={styles.projectCard} disabled={busy} onClick={() => void open(project.id)}><div className={styles.cardTop}><span className={styles.propertyIcon}><Building2 size={23} /></span><span className={styles.pill}>{archived ? t("Archivé", "Archived") : display?.propertyType || t("Projet immobilier", "Property project")}</span></div>{project.project_reference && <span className={styles.projectReference}>{project.project_reference}</span>}<h2>{project.title}</h2>{approximateProjects.has(project.id) && <small>{t("Correspondance approchée", "Close match")}</small>}<p className={styles.location}><MapPin size={14} />{[item?.propertyAddress, item?.city].filter(Boolean).join(" · ") || t("Adresse à compléter", "Address to complete")}</p><div className={styles.cardBottom}><span>{display?.askingPrice ? display.askingPrice : item?.agencyReference ? `${t("Réf.", "Ref.")} ${item.agencyReference}` : t("Fiche à enrichir", "Ready to enrich")}</span><ChevronRight size={18} /></div></button>; })}</div> : <div className={styles.empty}><FolderOpen size={38} strokeWidth={1} /><h2>{query ? t("Aucun projet trouvé", "No matching projects") : archived ? t("Aucun projet archivé", "No archived projects") : t("Votre premier projet commence ici", "Your first project starts here")}</h2><p>{query ? t("Essayez un nom, une adresse ou une référence différente.", "Try a different name, address or reference.") : t("Créez une fiche à votre rythme ou partez d’une fiche d’agence. Seul le nom du projet est nécessaire.", "Create a record at your own pace or start with an agency brochure. Only a project name is required.")}</p>{canWrite && !archived && <button className={styles.secondary} onClick={fresh}><Plus size={16} />{t("Créer un projet", "Create a project")}</button>}</div>}
     </> : <>
       <TaskSourceActions reference={loaded ? { type: "fonciere_project", id: loaded.project.id } : undefined} saved={Boolean(loaded)} title={t("Compléter le projet", "Complete the project")} />
-      <div className={styles.recordToolbar}><button className={styles.back} disabled={busy || importPending} onClick={() => { if (leave()) { window.history.replaceState(null, "", "/fonciere"); controller.current?.abort(); epoch.current++; setData(null); setLoaded(null); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setReview(null); setError(""); setNotice(""); } }}><ArrowLeft size={16} />{t("Tous les projets", "All projects")}</button><span className={styles.saveState}>{busy ? t("Opération en cours…", "Working…") : dirty ? t("Modifications non enregistrées", "Unsaved changes") : loaded ? `${t("Enregistré", "Saved")} · r${loaded.project.revision}` : t("Nouveau projet", "New project")}</span><div className={styles.recordActions}>{canWrite && canArchive && loaded && <button className={styles.secondary} disabled={busy || importPending} onClick={() => void archive()}><Archive size={15} />{loaded.project.status === "archived" ? t("Réactiver", "Restore") : t("Archiver", "Archive")}</button>}{writable && <button className={styles.primary} disabled={busy || importPending} onClick={() => void save()}><Save size={16} />{t("Enregistrer", "Save project")}</button>}</div></div>
+      <div className={styles.recordToolbar}><button className={styles.back} disabled={busy || importPending} onClick={() => { if (leave()) { window.history.replaceState(null, "", "/fonciere"); draftEpoch.current++; draftLease.current?.release(); draftLease.current = null; setDraftReady(false); controller.current?.abort(); epoch.current++; setData(null); setLoaded(null); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setReview(null); setError(""); setNotice(""); } }}><ArrowLeft size={16} />{t("Tous les projets", "All projects")}</button><span className={styles.saveState}>{busy ? t("Opération en cours…", "Working…") : dirty ? t("Modifications non enregistrées", "Unsaved changes") : loaded ? `${t("Enregistré", "Saved")} · r${loaded.project.revision}` : t("Nouveau projet", "New project")}</span><div className={styles.recordActions}>{canWrite && canArchive && loaded && <button className={styles.secondary} disabled={busy || importPending} onClick={() => void archive()}><Archive size={15} />{loaded.project.status === "archived" ? t("Réactiver", "Restore") : t("Archiver", "Archive")}</button>}{writable && <button className={styles.primary} disabled={busy || importPending} onClick={() => void save()}><Save size={16} />{t("Enregistrer", "Save project")}</button>}</div></div>
       <div className={styles.recordHero}><div><p className={styles.eyebrow}>{loaded?.project.status === "archived" ? t("PROJET ARCHIVÉ", "ARCHIVED PROJECT") : t("FICHE PROJET", "PROJECT RECORD")}</p><p className={styles.projectReference}>{loaded?.project.project_reference || t("Numéro attribué à l’enregistrement", "Number assigned on save")}</p><h2>{data.name || t("Nouveau projet", "New project")}</h2><p><MapPin size={15} />{[data.propertyAddress, data.city].filter(Boolean).join(" · ") || t("Adresse du bien à renseigner", "Property address to complete")}</p><AddressMapLink address={propertyAddressText(data)} metadata={propertyAddressDetails(data)} lang={lang} /></div><div className={styles.heroMetrics}>{guidedText?.askingPrice && <div><span>{t("Prix demandé", "Asking price")}</span><strong>{guidedText.askingPrice}</strong></div>}{guidedText?.area && <div><span>{guidedText?.areaKind || t("Surface annoncée", "Advertised area")}</span><strong>{guidedText.area}</strong></div>}{data.agencyReference && <div><span>{t("Référence agence", "Agency reference")}</span><strong className={styles.reference}>{data.agencyReference}</strong></div>}</div></div>
       {duplicates.length > 0 && <div className={styles.warning} role="status"><strong>{t("Doublon possible", "Possible duplicate")}</strong><p>{t("Une référence agence ou une adresse correspond à : ", "An agency reference or address matches: ")}{duplicates.map(project => project.title).join(", ")}. {t("Vérifiez avant d’enregistrer. Aucun rapprochement automatique.", "Check before saving. Records are never merged automatically.")}</p></div>}
       <div className={styles.recordLayout}>

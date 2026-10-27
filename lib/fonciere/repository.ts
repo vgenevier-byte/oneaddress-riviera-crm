@@ -11,16 +11,29 @@ import { FONCIERE_DOCUMENT_LIMIT, FONCIERE_SCHEMA, validateFonciereData, type Fo
 export type FonciereProjectRecord = { id: string; owner_id: string; title: string; project_number?: number; project_reference?: string; creation_key?: string; revision: number; status: "active" | "archived"; payload: StoredFoncierePayload; created_at: string; updated_at: string };
 export type FonciereDocumentCategory = "agency" | "plans" | "photos" | "other";
 export type FonciereAssetRecord = { id: string; project_id: string; object_path: string; kind: "pdf" | "photo" | "attachment"; lifecycle: "pending" | "finalized" | "withdrawn"; created_by: string; created_at: string; expected_size: number; expected_mime: string; original_name: string; drive_category?: FonciereDocumentCategory };
-export type StoredFoncierePayload = { schema: typeof FONCIERE_SCHEMA; data: FonciereData; sourceDocuments: string[]; creationRequestHash?: string };
+export type StoredFoncierePayload = { schema: typeof FONCIERE_SCHEMA; data: FonciereData; sourceDocuments: string[]; creationRequestHash?: string; creationIntentHash?: string };
 export type LoadedFonciereProject = { project: FonciereProjectRecord; data: FonciereData; assets: FonciereAssetRecord[]; sourceDocuments: string[] };
 export type ContactOption = ProjectContact;
 export type { ContactCreateInput } from "./contacts";
 export class FonciereConflictError extends Error { constructor() { super("Une autre modification a été enregistrée. Votre saisie est conservée ; rechargez la fiche avant de rapprocher les changements."); this.name = "FonciereConflictError"; } }
+export class FonciereCreationConflictError extends Error {
+  projectId?: string; projectReference?: string; revision?: number;
+  constructor(identity: { projectId?: string; projectReference?: string; revision?: number } = {}) {
+    super("Cette identité de création correspond déjà à une fiche enregistrée. Votre brouillon est conservé ; rapprochez explicitement les deux versions avant de poursuivre.");
+    this.name = "FonciereCreationConflictError";
+    this.projectId = identity.projectId; this.projectReference = identity.projectReference; this.revision = identity.revision;
+  }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function aborted(signal?: AbortSignal) { if (signal?.aborted) throw new DOMException("Opération interrompue.", "AbortError"); }
 async function guarded<T>(signal: AbortSignal | undefined, operation: () => PromiseLike<T>): Promise<T> { aborted(signal); try { return await operation(); } finally { aborted(signal); } }
-function failure(error: { code?: string; message?: string } | null) {
+function failure(error: { code?: string; message?: string; details?: string } | null) {
   if (!error) return;
+  if (error.message === "fonciere_creation_intent_conflict" || error.message === "fonciere_creation_reconciliation_required") {
+    let identity: { projectId?: string; projectReference?: string; revision?: number } = {};
+    try { const detail = JSON.parse(error.details || "{}"); identity = { ...(typeof detail.projectId === "string" && UUID.test(detail.projectId) ? { projectId: detail.projectId } : {}), ...(typeof detail.projectReference === "string" && /^PRJ-\d+$/.test(detail.projectReference) ? { projectReference: detail.projectReference } : {}), ...(Number.isInteger(detail.revision) ? { revision: detail.revision } : {}) }; } catch { /* Keep the draft even when the server cannot supply a readable identity. */ }
+    throw new FonciereCreationConflictError(identity);
+  }
   if (error.code === "40001") throw new FonciereConflictError();
   if (error.code === "42501") throw new Error("Opération refusée : vérifiez vos droits sur le projet, les contacts et les documents.");
   if (error.code === "PGRST205" || error.code === "PGRST202" || error.code === "42P01") throw new Error("Le stockage Foncière n’est pas encore disponible. Conservez votre saisie et contactez l’administrateur.");
@@ -151,7 +164,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       }
     },
     loadProject, listAssets, downloadAsset, authorizeTransfer,
-    async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; creationKey?: string; sourceFiles?: File[]; sourceFileCategories?: FonciereDocumentCategory[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions = {}): Promise<LoadedFonciereProject> {
+    async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; creationKey?: string; creationReconciled?: boolean; sourceFiles?: File[]; sourceFileCategories?: FonciereDocumentCategory[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions = {}): Promise<LoadedFonciereProject> {
       const data = validateFonciereData(input.data), persisted = structuredClone(data), empty = createProjectData();
       // Contact identity has a separate Contacts-protected projection in SQL.
       delete (persisted as Partial<FonciereData>).agentContactId;
@@ -162,26 +175,24 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
         old.data.presentationData.importGallery.forEach((photo, index) => { if (before.data.presentationData.importGallery[index]) reuse.set(before.data.presentationData.importGallery[index].data, photo.data); });
       }
       let project = before?.project;
-      const requestHash = !before || before.project.revision === 1 ? await creationRequestHash(data, input.sourceFiles || [], input.sourceFileCategories, options) : undefined;
-      if (!project) {
+      if (input.creationReconciled && !before) throw new Error("Une fiche enregistrée doit être vérifiée avant le rapprochement. Votre brouillon est conservé.");
+      const pendingCreation = !before || Boolean(input.creationKey) && !input.creationReconciled;
+      const requestHash = pendingCreation ? await creationRequestHash(data, input.sourceFiles || [], input.sourceFileCategories, options) : undefined;
+      if (pendingCreation) {
         const initial = structuredClone(persisted); initial.presentationData.photos = { main: "", view: "", inside: "", operation: "" }; initial.presentationData.importGallery = []; initial.presentationData.photoGalleryRoles = {};
         if (!input.creationKey || !UUID.test(input.creationKey)) throw new Error("Identité de création persistante requise. Votre saisie est conservée.");
-        const created = await guarded(options.signal, () => client.rpc("fonciere_create_project", { p_creation_key: input.creationKey, p_payload: { schema: FONCIERE_SCHEMA, data: initial, sourceDocuments: [] }, p_contact: data.agentContactId, p_agency_contact: data.agencyContactId })); failure(created.error);
+        const created = await guarded(options.signal, () => client.rpc("fonciere_create_project", { p_creation_key: input.creationKey, p_payload: { schema: FONCIERE_SCHEMA, data: initial, sourceDocuments: [], creationIntentHash: requestHash }, p_contact: data.agentContactId, p_agency_contact: data.agencyContactId })); failure(created.error);
+        if (before && created.data !== before.project.id) throw new FonciereCreationConflictError();
         project = await readProject(String(created.data), options);
         if (project.revision > 1) {
           if (project.payload.creationRequestHash === requestHash) return loadProject(project.id, options);
-          throw new Error(`Le projet ${project.project_reference || project.title} a déjà été enregistré. Votre nouveau brouillon est conservé ; ouvrez la fiche enregistrée pour vérifier les différences avant de la modifier.`);
+          throw new FonciereCreationConflictError({ projectId: project.id, projectReference: project.project_reference, revision: project.revision });
         }
         // Surface the confirmed identity before any fallible byte transfer. The
         // editor retains it on failure so retry cannot create a second property.
-        input.onCreated?.(await loadProject(project.id, options));
-      } else if (project.revision === 1 && project.creation_key) {
-        const current = await readProject(project.id, options);
-        if (current.revision > 1) {
-          if (current.payload.creationRequestHash === requestHash) return loadProject(current.id, options);
-          throw new FonciereConflictError();
-        }
+        if (!before) input.onCreated?.(await loadProject(project.id, options));
       }
+      if (!project) throw new Error("Identité du projet non confirmée. Votre brouillon est conservé.");
       const target = project, uploaded = new Map<string, string>();
       async function persistPhoto(value: string, fallback: string, name: string, previousValue?: string, previousReference?: string) {
         // Slot identity preserves distinct originals even when previews have equal bytes.
@@ -201,7 +212,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       const sourceDocuments = [...(before?.sourceDocuments || [])];
       if (sourceDocuments.length + (input.sourceFiles?.length || 0) > FONCIERE_DOCUMENT_LIMIT) throw new Error("Trente documents sources maximum par projet.");
       for (const [index, file] of (input.sourceFiles || []).entries()) sourceDocuments.push((await uploadAsset(target, file, file.type === "application/pdf" ? "pdf" : "attachment", file.name, options, input.sourceFileCategories?.[index] ?? (file.type.startsWith("image/") ? "photos" : file.type === "application/pdf" ? "agency" : "other"))).id);
-      const value: StoredFoncierePayload = { schema: FONCIERE_SCHEMA, data: persisted, sourceDocuments, ...(old?.creationRequestHash || requestHash ? { creationRequestHash: old?.creationRequestHash || requestHash } : {}) };
+      const value: StoredFoncierePayload = { schema: FONCIERE_SCHEMA, data: persisted, sourceDocuments, ...(old?.creationRequestHash || requestHash ? { creationRequestHash: old?.creationRequestHash || requestHash } : {}), ...(project.payload.creationIntentHash ? { creationIntentHash: project.payload.creationIntentHash } : {}) };
       if (new TextEncoder().encode(JSON.stringify(value)).length > 950000) throw new Error("Métadonnées du projet trop volumineuses. Votre saisie est conservée.");
       options.onProgress?.({ stage: "save", completed: 0, total: 1, label: "Enregistrement du projet" });
       const saved = await guarded(options.signal, () => client.rpc("fonciere_save_project", { p_id: target.id, p_expected_revision: target.revision, p_payload: value, p_contact: data.agentContactId, p_agency_contact: data.agencyContactId })); failure(saved.error);

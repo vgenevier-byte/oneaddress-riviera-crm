@@ -1,0 +1,75 @@
+/** Owned isolated Auth/RPC/Storage; no Production or Google requests. */
+import assert from 'node:assert/strict';
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {dirname,join} from 'node:path';
+import {randomUUID,createHash} from 'node:crypto';
+import {createRequire} from 'node:module';
+import {Client} from 'pg';
+import {createClient} from '@supabase/supabase-js';
+const require=createRequire(import.meta.url);require('../i18n/register-typescript.cjs');
+const {createFonciereData}=require('../../lib/fonciere/model');
+assert.equal(process.env.IZORD_TEST_ACK,'IZORD_DISPOSABLE_LOCAL_ONLY');
+const statusFile=process.env.FONCIERE_DRIVE_STATUS_FILE;assert(statusFile);
+const status=JSON.parse(readFileSync(statusFile,'utf8')),fixture=JSON.parse(readFileSync(join(dirname(statusFile),'fonciere-drive-fixture.private.json'),'utf8'));
+for(const url of [status.API_URL,status.DB_URL])assert.equal(new URL(url).hostname,'127.0.0.1');
+assert.equal(new URL(status.API_URL).port,'56031');assert.equal(new URL(status.DB_URL).port,'56032');
+const options={auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}},output=process.env.FONCIERE_RELIABILITY_OUTPUT||'/private/tmp/fonciere-reliability-evidence';mkdirSync(output,{recursive:true});
+const sql=new Client({connectionString:status.DB_URL});await sql.connect();
+const service=createClient(status.API_URL,status.SERVICE_ROLE_KEY,options),checks=[];
+const ok=async promise=>{const r=await promise;assert.equal(r.error,null,r.error?.message);return r.data;};
+const rejected=async(promise,message,code)=>{const r=await promise;assert(r.error);assert.equal(r.error.message,message);assert.equal(r.error.code,code);return r.error;};
+const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
+const payload=(name,identity=name)=>{const data=createFonciereData();data.name=name;delete data.agentContactId;delete data.agencyContactId;for(const role of ['main','view','inside','operation'])data.presentationData.photos[role]='';return {schema:'FONCIERE_PROPERTY_V1',data,sourceDocuments:[],creationIntentHash:digest(JSON.stringify({data,identity,files:[]}))};};
+const args=(key,value)=>({p_creation_key:key,p_payload:value,p_contact:'',p_agency_contact:''});
+const migration='supabase/migrations/20261027173928_fonciere_creation_intent_binding.sql';
+try{
+ assert.equal(Number((await sql.query("select count(*) from auth.users where email not like '%@example.invalid' or email is null")).rows[0].count),0);
+ const fingerprint=async()=>{const parts={};for(const table of ['fonciere_projects','fonciere_assets','fonciere_project_assignments','fonciere_project_contacts','crm_access_profiles','crm_module_grants','app_memberships','izord_projects','izord_project_versions','app_private.fonciere_drive_config','app_private.fonciere_drive_folders','app_private.fonciere_drive_jobs'])parts[table]=(await sql.query('select to_jsonb(r) row from '+table+' r order by to_jsonb(r)::text')).rows;parts.sequence=(await sql.query('select last_value,is_called from app_private.fonciere_project_number_seq')).rows;return digest(JSON.stringify(parts));};
+ const previous=await fingerprint(),acl=(await sql.query("select proacl from pg_proc where oid='app_private.create_fonciere_project(uuid,jsonb,text,text)'::regprocedure")).rows[0].proacl;
+ assert.equal((await sql.query("select to_regclass('app_private.fonciere_creation_intents') t")).rows[0].t,null,'Apply new complement exactly once over owned historical fixtures');
+ await sql.query(readFileSync(migration,'utf8'));
+ assert.equal(await fingerprint(),previous);assert.deepEqual((await sql.query("select proacl from pg_proc where oid='app_private.create_fonciere_project(uuid,jsonb,text,text)'::regprocedure")).rows[0].proacl,acl);
+ assert.equal(Number((await sql.query('select count(*) from app_private.fonciere_creation_intents')).rows[0].count),0);
+ checks.push('Complement leaves every existing UUID, number, payload, asset, assignment, permission, Drive configuration/job/folder and sequence state exact; no automatic legacy binding');
+ const clients={};for(const [name,user] of Object.entries(fixture.users)){const client=createClient(status.API_URL,status.ANON_KEY,options);const login=await ok(client.auth.signInWithPassword({email:user.email,password:user.password}));clients[name]={client,token:login.session.access_token};}
+ const writer=clients.writer.client;
+ const legacy=(await sql.query('select * from fonciere_projects where id=$1',[fixture.projects.replayed])).rows[0];assert(legacy.creation_key);
+ const legacyArgs=args(legacy.creation_key,{...legacy.payload,creationIntentHash:digest('unknown historical intent')});
+ const oldError=await rejected(clients.admin.client.rpc('fonciere_create_project',legacyArgs),'fonciere_creation_reconciliation_required','40001');assert.equal(JSON.parse(oldError.details).projectId,legacy.id);
+ const seqBefore=(await sql.query('select last_value,is_called from app_private.fonciere_project_number_seq')).rows;
+ const missing=payload('Invalid hash');delete missing.creationIntentHash;
+ await rejected(writer.rpc('fonciere_create_project',args(randomUUID(),missing)),'creation_intent_hash_required','22023');
+ await rejected(writer.rpc('fonciere_create_project',args(randomUUID(),{...missing,creationIntentHash:'x'.repeat(64)})),'creation_intent_hash_required','22023');
+ assert.deepEqual((await sql.query('select last_value,is_called from app_private.fonciere_project_number_seq')).rows,seqBefore);
+ assert.equal(await fingerprint(),previous);checks.push('Legacy key requires explicit reconciliation; missing/malformed intent digest rejects before number allocation and changes no existing data');
+ const initialCount=Number((await sql.query('select count(*) from fonciere_projects')).rows[0].count),keyA=randomUUID(),keyB=randomUUID(),requestA=args(keyA,payload('Draft A','photo/file intent A')),requestB=args(keyB,payload('Draft B','photo/file intent B'));
+ let lose=true;const realFetch=fetch,losingClient=createClient(status.API_URL,status.ANON_KEY,{...options,global:{headers:{Authorization:'Bearer '+clients.writer.token},fetch:async(input,init)=>{const response=await realFetch(input,init);if(lose&&String(input).endsWith('/rest/v1/rpc/fonciere_create_project')){lose=false;assert(response.ok);await response.text();throw new TypeError('Fixture: committed response lost');}return response;}}});
+ const lost=await losingClient.rpc('fonciere_create_project',requestA);assert(lost.error);
+ const a=(await sql.query('select * from fonciere_projects where creation_key=$1',[keyA])).rows[0];assert(a);assert.equal(a.revision,1);
+ const b=await ok(writer.rpc('fonciere_create_project',requestB));assert.notEqual(a.id,b);
+ const replay=await Promise.all(Array.from({length:12},()=>ok(writer.rpc('fonciere_create_project',requestA))));assert(replay.every(id=>id===a.id));
+ assert.equal(Number((await sql.query('select count(*) from fonciere_projects')).rows[0].count),initialCount+2);
+ const bRow=(await sql.query('select * from fonciere_projects where id=$1',[b])).rows[0];assert.notEqual(a.project_reference,bRow.project_reference);assert.equal(bRow.title,'Draft B');assert.equal(a.title,'Draft A');
+ checks.push('Real committed A response is lost, same-account B saves independently, twelve A retries recover the same UUID/reference: exactly two distinct projects and no third row');
+ const aBefore=(await sql.query('select to_jsonb(p) row from fonciere_projects p where id=$1',[a.id])).rows[0].row,changed=structuredClone(requestA);changed.p_payload.data.name='Different draft forced onto A';
+ const conflict=await rejected(writer.rpc('fonciere_create_project',changed),'fonciere_creation_intent_conflict','40001');const detail=JSON.parse(conflict.details);assert.equal(detail.projectId,a.id);assert.equal(detail.projectReference,a.project_reference);assert.equal(detail.revision,1);
+ const changedDigest=structuredClone(requestA);changedDigest.p_payload.creationIntentHash=digest('different file bytes');await rejected(writer.rpc('fonciere_create_project',changedDigest),'fonciere_creation_intent_conflict','40001');
+ await rejected(writer.rpc('fonciere_create_project',{...requestA,p_contact:'different-canonical-contact'}),'fonciere_creation_intent_conflict','40001');
+ const reorder={...requestA,p_payload:{creationIntentHash:requestA.p_payload.creationIntentHash,sourceDocuments:[],data:requestA.p_payload.data,schema:'FONCIERE_PROPERTY_V1'}};assert.equal(await ok(writer.rpc('fonciere_create_project',reorder)),a.id);
+ assert.deepEqual((await sql.query('select to_jsonb(p) row from fonciere_projects p where id=$1',[a.id])).rows[0].row,aBefore);
+ assert.equal(Number((await sql.query('select count(*) from fonciere_projects')).rows[0].count),initialCount+2);
+ checks.push('Forced identical key with different payload despite unchanged digest, different digest/file intent or canonical contacts conflicts at revision1; JSON object-key order is harmless; project remains exact');
+ const outsider=await rejected(clients.stranger.client.rpc('fonciere_create_project',requestA),'fonciere_forbidden','42501');assert(!outsider.details||!outsider.details.includes(a.id));
+ await sql.query("update crm_module_grants set level='none' where user_id=$1 and module='fonciere'",[fixture.users.writer.id]);await rejected(writer.rpc('fonciere_create_project',requestA),'fonciere_forbidden','42501');await sql.query("update crm_module_grants set level='contribute' where user_id=$1 and module='fonciere'",[fixture.users.writer.id]);
+ checks.push('Other accounts and revoked contributors cannot replay or obtain reconciliation metadata from another draft');
+ // Ordinary edits of an explicitly selected UUID remain possible; creation replay remains bound to its original request.
+ const edited=structuredClone(a.payload);edited.data.notes='Explicit normal edit after selecting saved project';await ok(writer.rpc('fonciere_save_project',{p_id:a.id,p_expected_revision:1,p_payload:edited,p_contact:'',p_agency_contact:''}));assert.equal(await ok(writer.rpc('fonciere_create_project',requestA)),a.id);
+ await rejected(writer.rpc('fonciere_create_project',changed),'fonciere_creation_intent_conflict','40001');
+ const afterEdit=(await sql.query('select * from fonciere_projects where id=$1',[a.id])).rows[0];assert.equal(afterEdit.project_reference,a.project_reference);assert.equal(afterEdit.payload.data.notes,edited.data.notes);
+ for(const role of ['anon','authenticated','service_role']){const rights=(await sql.query('select has_table_privilege($1,$2,\'select\') read,has_table_privilege($1,$2,\'insert\') write',[role,'app_private.fonciere_creation_intents'])).rows[0];assert.equal(rights.read,false);assert.equal(rights.write,false);}
+ let immutable=false;try{await sql.query('update app_private.fonciere_creation_intents set contact_id=contact_id where creation_key=$1',[keyA]);}catch(e){immutable=e.code==='42501';}assert(immutable);
+ checks.push('Explicit normal UUID edits remain authorized without changing reference; original intent stays immutable and inaccessible through direct user/service table access');
+ const result={passed:checks.length,checks,migration,migrationSha256:digest(readFileSync(migration)),productionRequests:0,googleRequests:0,lostRpcResponseSimulatedAfterRealCommit:true};writeFileSync(join(output,'creation-intent-results.json'),JSON.stringify(result,null,2));
+ writeFileSync(join(dirname(statusFile),'fonciere-reliability-fixture.private.json'),JSON.stringify({...fixture,reliability:{keyA,keyB,projectA:a.id,projectB:b}}),{mode:0o600});
+ console.log(checks.map(c=>'PASS '+c).join('\n'));
+}finally{await sql.end();}
