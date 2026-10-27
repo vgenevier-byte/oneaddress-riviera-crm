@@ -7,7 +7,7 @@ import { connect, sql, fixtureFile, directory, output, login } from './local.mjs
 const fixture=JSON.parse(readFileSync(fixtureFile,'utf8'));
 const before=JSON.parse(readFileSync(join(directory,'fonciere-access-before.private.json'),'utf8'));
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
-const migration=process.env.FONCIERE_ACCESS_MIGRATION;
+const migration=process.env.FONCIERE_ACCESS_MIGRATION||'20261027131656_fonciere_module_permissions.sql';
 assert.match(migration||'',/^\d+_fonciere_module_permissions\.sql$/);
 await connect();
 try {

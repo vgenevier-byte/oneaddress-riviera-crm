@@ -13,7 +13,16 @@ infrastructure wrapper. Do not stop or reset preexisting stacks.
 
 Set `IZORD_TEST_ACK=IZORD_DISPOSABLE_LOCAL_ONLY`, `FONCIERE_ACCESS_STATUS_FILE` to the newly
 created stack's private `local-status.json`, `FONCIERE_ACCESS_OUTPUT` to a report directory,
-and `FONCIERE_ACCESS_MIGRATION=20261027124814_fonciere_module_permissions.sql`.
+and optionally override `FONCIERE_ACCESS_MIGRATION` (default:
+`20261027131656_fonciere_module_permissions.sql`).
+
+The file version matches the registry version assigned during the Production apply.
+Its SQL remains byte-identical to the validated migration (SHA-256
+`a3ca4620ac98b4a55c4adad79ab645ddfcc652013d977226681cbaa3d34364ac`).
+The private recovery journal deliberately keeps its stable logical key
+`20261027124814_fonciere_module_permissions`; journal queries must use that key,
+not derive a key from the filename. This is a local filename alignment, not a
+new migration execution or a rewrite of server migration history.
 
 Run in order:
 

@@ -32,7 +32,9 @@ try {
  const baseline=readFileSync('tests/izord/sql-fixture.sql','utf8');
  if(fresh){await sql.query(baseline.slice(baseline.indexOf('create table public.crm_workspace_state'),baseline.indexOf('create schema storage;')));
  await sql.query("insert into storage.buckets(id,name,public) values('crm-documents','crm-documents',false); create policy crm_docs on storage.objects for all to authenticated using(bucket_id='crm-documents') with check(bucket_id='crm-documents');");}
- const split=process.env.FONCIERE_ACCESS_MIGRATION;
+ const split=process.env.FONCIERE_ACCESS_MIGRATION||'20261027131656_fonciere_module_permissions.sql';
+ assert.match(split,/^\d+_fonciere_module_permissions\.sql$/);
+ assert(readdirSync('supabase/migrations').includes(split),'The exact split migration must exist and stay excluded from the historical fixture baseline');
  const migrations=readdirSync('supabase/migrations').filter(name=>name.endsWith('.sql')&&name!==split&&!name.includes('fonciere_module_access')&&!name.includes('fonciere_access_separation')).sort();
  if(fresh)for(const name of migrations) { try { await sql.query(readFileSync(join('supabase/migrations',name),'utf8')); } catch(error) { throw new Error('Baseline migration '+name+': '+error.message); } }
  const users={};
