@@ -1,0 +1,10 @@
+{
+  "typescript": "passed",
+  "lint": { "errors": 0, "warnings": 2, "warningsPreexisting": true },
+  "productionBuild": "passed with isolated local public configuration",
+  "vendorFinanceTests": { "passed": 39, "failed": 0 },
+  "isolatedServerScenarios": { "passed": 7, "failed": 0 },
+  "isolatedBrowserScenarios": { "passed": 7, "failed": 0 },
+  "diffCheck": "passed",
+  "productionBusinessTests": false
+}

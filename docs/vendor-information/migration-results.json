@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "file": "20261027220357_vendor_quote_information.sql",
+  "sha256": "7c2aa9ed326f0ea0ce6132c47e5faad786ba644593c7fd11365ae1cae29e2751",
+  "businessPayloadUnchanged": true,
+  "environment": "Dedicated loopback Supabase with synthetic data"
+}

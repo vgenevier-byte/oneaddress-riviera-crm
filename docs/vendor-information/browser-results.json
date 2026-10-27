@@ -1,0 +1,77 @@
+{
+  "passed": 7,
+  "results": [
+    {
+      "name": "FR complete desktop creates informational quote with actual PDF/notes; neutral badge, ordered filters, excludes pending total",
+      "passed": true
+    },
+    {
+      "name": "FR complete desktop classifies pending/refused and restores same ID; explicit invoice-link blocks and manual task retained",
+      "passed": true
+    },
+    {
+      "name": "FR restricted desktop contributor has Notes and creates informational quote with staged PDF upload, without Invoice grants",
+      "passed": true
+    },
+    {
+      "name": "EN restricted mobile fresh login rereads quote/document/notes; filters, neutral badge, classification and return; no horizontal overflow",
+      "passed": true
+    },
+    {
+      "name": "FR quote-only mobile contributor classifies without additional invoice rights; server guard rejects hidden reverse link",
+      "passed": true
+    },
+    {
+      "name": "EN desktop complete and mobile reader show For information; reader cannot mutate through UI",
+      "passed": true
+    },
+    {
+      "name": "Full existing approval flow requires actual confirmation and creates one invoice for persisted informational quote with document; existing finance/payment/manual task unchanged",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": [],
+  "externalRequests": [],
+  "dialogs": [
+    {
+      "type": "beforeunload",
+      "message": ""
+    },
+    {
+      "type": "beforeunload",
+      "message": ""
+    },
+    {
+      "type": "beforeunload",
+      "message": ""
+    },
+    {
+      "type": "beforeunload",
+      "message": ""
+    },
+    {
+      "type": "beforeunload",
+      "message": ""
+    },
+    {
+      "type": "beforeunload",
+      "message": ""
+    }
+  ],
+  "evidence": {
+    "realUi": true,
+    "realAuth": true,
+    "realRpc": true,
+    "realStorage": true,
+    "realPostgres": true,
+    "fullAndRestricted": true,
+    "frAndEn": true,
+    "desktopAndMobile": true,
+    "productionWrites": false
+  },
+  "confirmations": [
+    {
+      "message": "Valider le devis DEMO-UI-RESTRICTED pour 1 234,50 € ?\n\nLa facture liée sera réutilisée ; une facture en attente sera créée uniquement si nécessaire."
+    }
+  ]
+}

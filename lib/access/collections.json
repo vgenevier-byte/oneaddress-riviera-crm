@@ -659,6 +659,10 @@
     "module": "vendorQuotes",
     "label": "Devis prestataires",
     "fields": {
+      "notes": {
+        "type": "string",
+        "label": "Notes"
+      },
       "title": {
         "type": "string",
         "label": "Titre"

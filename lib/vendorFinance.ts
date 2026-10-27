@@ -151,6 +151,18 @@ export function isOrphanAutomaticVendorInvoice(invoice: VendorInvoice, quotes: V
 export type VendorFinanceState = { vendorQuotes?: VendorQuote[]; vendorInvoices?: VendorInvoice[] };
 export type VendorQuoteDeletionChoice = "delete-both" | "keep-invoice";
 
+/** Advisory UI check; the status RPC repeats it against the complete locked workspace. */
+export function getVendorQuoteInformationBlockReason(
+  quote: VendorQuote, invoices: VendorInvoice[]
+): "linked_invoice" | "broken_invoice_link" | null {
+  if (quote.linkedInvoiceId) {
+    const linked = invoices.find(invoice => invoice.id === quote.linkedInvoiceId);
+    if (!linked || (linked.sourceQuoteId && linked.sourceQuoteId !== quote.id)) return "broken_invoice_link";
+    return "linked_invoice";
+  }
+  return invoices.some(invoice => invoice.sourceQuoteId === quote.id) ? "linked_invoice" : null;
+}
+
 /** Find references in all current payload objects, including document/payment records. */
 export function hasVendorInvoiceReference(value: unknown, invoiceId: string): boolean {
   if (typeof value === "string") return value.includes(invoiceId);
@@ -229,7 +241,7 @@ export function validateVendorQuoteIdempotently<T extends VendorFinanceState>(
 }
 
 export function preserveVendorQuoteIdentity(current: VendorQuote, edited: VendorQuote): VendorQuote {
-  return { ...current, ...edited, id: current.id, createdAt: current.createdAt,
+  return { ...current, ...edited, id: current.id, status: current.status, createdAt: current.createdAt,
     linkedInvoiceId: current.linkedInvoiceId || edited.linkedInvoiceId };
 }
 

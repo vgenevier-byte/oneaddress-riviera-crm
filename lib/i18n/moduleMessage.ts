@@ -1,6 +1,12 @@
 /** Known application messages only; unknown errors never expose a server payload. */
 type Translate = (key: string, variables?: Record<string, string | number>) => string;
 const knownMessages: Record<string, string> = {
+  "vendor_quote_sync_pending": "modules.vendorQuotesView.waitForSynchronization",
+  "revision_conflict": "modules.vendorQuotesView.revisionConflict",
+  "vendor_quote_has_linked_invoice": "modules.vendorQuotesView.informationBlockedByInvoice",
+  "broken_explicit_invoice_link": "modules.vendorQuotesView.informationBlockedByBrokenInvoice",
+  "vendor_quote_invoice_link_inconsistent": "modules.vendorQuotesView.informationBlockedByBrokenInvoice",
+  "quote_document_required": "modules.vendorQuotesView.uploadTheSuppliersActualQuoteBeforeApprovingIt",
   "contact_name_required": "crm.contacts.validation.contact_name_required",
   "contact_company_name_required": "crm.contacts.validation.contact_company_name_required",
   "contact_entity_type_invalid": "crm.contacts.validation.contact_entity_type_invalid",

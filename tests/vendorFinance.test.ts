@@ -5,7 +5,7 @@ import {
   createPendingVendorInvoiceFromQuote, validateVendorQuoteIdempotently, preserveVendorQuoteIdentity,
   findVendorInvoiceDuplicates, canSaveVendorInvoice, isOrphanAutomaticVendorInvoice,
   isEmptyAutomaticVendorInvoice, getVendorQuoteDeletionPlan, deleteVendorQuoteWithDecision,
-  deleteOrphanAutomaticVendorInvoice
+  deleteOrphanAutomaticVendorInvoice, getVendorQuoteInformationBlockReason
 } from "../lib/vendorFinance";
 
 const quote = (id = "quote-fictional"): VendorQuote => ({ id, contactId: "vendor-fictional", contactName: "Jardins fictifs",
@@ -174,4 +174,23 @@ test("refus puis revalidation : réactive uniquement la facture automatique vide
   assert.deepEqual(next.vendorInvoices, [{ ...invoice, status: "En attente de facture" }]);
   const used = { ...invoice, invoiceDate: "2026-01-01" };
   assert.deepEqual(validateVendorQuoteIdempotently({ ...state, vendorInvoices: [used] }, quote().id, "unused").vendorInvoices, [used]);
+});
+
+
+test("information classification blocks both invoice links and missing or inconsistent forward links", () => {
+  const q = quote();
+  assert.equal(getVendorQuoteInformationBlockReason(q, []), null);
+  assert.equal(getVendorQuoteInformationBlockReason({...q, status: "Refusé"}, [recurring("other", "01")]), null);
+  assert.equal(getVendorQuoteInformationBlockReason(q, [automatic()]), "linked_invoice");
+  assert.equal(getVendorQuoteInformationBlockReason({...q, linkedInvoiceId: "absent"}, []), "broken_invoice_link");
+  assert.equal(getVendorQuoteInformationBlockReason({...q, linkedInvoiceId: "invoice-fictional"}, [automatic()]), "linked_invoice");
+  assert.equal(getVendorQuoteInformationBlockReason({...q, linkedInvoiceId: "invoice-fictional"}, [{...automatic(), sourceQuoteId: "other-quote"}]), "broken_invoice_link");
+});
+
+test("editing a stale quote retains its current informational workflow status", () => {
+  const current: VendorQuote = {...quote(), status: "Pour information", notes: "Étude de marché"};
+  const saved = preserveVendorQuoteIdentity(current, {...quote(), title: "Tarifs comparés", status: "Validé"});
+  assert.equal(saved.status, "Pour information");
+  assert.equal(saved.title, "Tarifs comparés");
+  assert.equal(saved.id, current.id);
 });

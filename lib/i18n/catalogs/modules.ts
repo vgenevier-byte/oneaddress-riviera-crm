@@ -924,6 +924,50 @@ export const modulesMessages = {
     "fr": "À valider",
     "en": "Awaiting approval"
   },
+  "modules.vendorQuotesView.waitForSynchronization": {
+    "fr": "Attendez la synchronisation des devis avant de réessayer.",
+    "en": "Wait for quotes to finish syncing before trying again."
+  },
+  "modules.vendorQuotesView.revisionConflict": {
+    "fr": "Les devis ont changé depuis leur lecture. Actualisez la liste avant de réessayer.",
+    "en": "Quotes have changed since they were loaded. Refresh the list before trying again."
+  },
+  "modules.vendorQuotesView.classifiedForInformation": {
+    "fr": "Devis classé pour information.",
+    "en": "Quote classified for information."
+  },
+  "modules.vendorQuotesView.restoredForApproval": {
+    "fr": "Devis remis à valider.",
+    "en": "Quote returned to awaiting approval."
+  },
+  "modules.vendorQuotesView.forInformation": {
+    "fr": "Pour information",
+    "en": "For information"
+  },
+  "modules.vendorQuotesView.quoteStatus": {
+    "fr": "Statut du devis",
+    "en": "Quote status"
+  },
+  "modules.vendorQuotesView.classifyForInformation": {
+    "fr": "Classer pour information",
+    "en": "Classify for information"
+  },
+  "modules.vendorQuotesView.returnToApproval": {
+    "fr": "Remettre à valider",
+    "en": "Return to awaiting approval"
+  },
+  "modules.vendorQuotesView.informationBlockedByInvoice": {
+    "fr": "Classement pour information impossible : une facture est liée à ce devis ou son lien doit être vérifié.",
+    "en": "This quote cannot be classified for information: an invoice is linked or its link needs to be checked."
+  },
+  "modules.vendorQuotesView.informationBlockedByBrokenInvoice": {
+    "fr": "Classement pour information impossible : le lien de facture est incohérent ou la facture est introuvable. Vérifiez ce lien sans modifier la facture.",
+    "en": "This quote cannot be classified for information: the invoice link is inconsistent or the invoice cannot be found. Check the link without changing the invoice."
+  },
+  "modules.vendorQuotesView.invoiceLinkUnavailable": {
+    "fr": "Facture liée non accessible · lien à vérifier",
+    "en": "Linked invoice unavailable · check the link"
+  },
   "modules.vendorQuotesView.noSupplierQuotesMatchThisFilter": {
     "fr": "Aucun devis prestataire pour ce filtre.",
     "en": "No supplier quotes match this filter."
@@ -1025,8 +1069,8 @@ export const modulesMessages = {
     "en": "The document will be required for approval"
   },
   "modules.vendorQuotesView.termsDepositConditionsTechnicalDetails": {
-    "fr": "Conditions, acompte, réserve, détail technique...",
-    "en": "Terms, deposit, conditions, technical details…"
+    "fr": "Conditions, comparaison des tarifs, étude de marché, nouveau partenaire potentiel…",
+    "en": "Terms, price comparison, market research, potential new partner…"
   },
   "modules.vendorQuotesView.uploading": {
     "fr": "Import en cours...",

@@ -5749,6 +5749,7 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
 
   const beginHouseOperation = useScopedOperations("houseTracking");
   const beginContactOperation = useScopedOperations("contacts");
+  const beginVendorQuoteOperation = useScopedOperations("vendorQuotes");
   const unconfirmedContact = useRef<{ id: string; fingerprint: string; revision: string } | null>(null);
   const taskApi = useTaskApi();
   const taskLinkContext = useTaskLinks();
@@ -6121,7 +6122,9 @@ export default function CRMApp({ access, initialTab = "dashboard", initialContac
         "semantic-neutral"
       );
 
-      const tone = getSemanticToneFromText(element.dataset.semanticText || "");
+      const explicitTone = element.dataset.semanticTone;
+      const tone = explicitTone && ["success", "warning", "danger", "pending", "neutral"].includes(explicitTone)
+        ? explicitTone : getSemanticToneFromText(element.dataset.semanticText || "");
 
       if (tone) {
         element.classList.add(`semantic-${tone}`);
@@ -8070,17 +8073,75 @@ const toneRank: Record<ActionNotification["tone"], number> = {
   }
 
 
-  function addVendorQuote(quote: VendorQuote) {
-    const createdQuote = normalizeVendorQuoteFinancials(
-      stampCreated(quote, activeActor) as VendorQuote
-    );
+  async function persistVendorQuoteWorkflow(
+    name: "crm_create_vendor_quote" | "crm_set_vendor_quote_information",
+    id: string, args: Record<string, unknown>
+  ): Promise<FormSaveResult> {
+    const before = currentBusinessData.current;
+    if (!sharedWorkspaceReady || workspaceBusy.current || workspaceSync.current.dirty(before)) {
+      return { ok: false, message: "vendor_quote_sync_pending" };
+    }
+    const write = workspaceSync.current.prepare(before);
+    if (!write) return { ok: false, message: "revision_conflict" };
+    workspaceBusy.current = true;
+    try {
+      const op = await beginVendorQuoteOperation();
+      const projection = await op.run(() => op.client.rpc("crm_read_module", { p_module: "vendorQuotes" }));
+      if (projection.error) throw projection.error;
+      const expected = await op.run(() => op.client.from("crm_workspace_state")
+        .select("updated_at").eq("workspace_id", SHARED_WORKSPACE_ID).single());
+      if (expected.error) throw expected.error;
+      if (String(expected.data?.updated_at || "") !== write.revision) throw new Error("revision_conflict");
+      const result = await op.run(() => op.client.rpc(name, { ...args, p_quote: id, p_revision: projection.data.revision }));
+      if (result.error) throw result.error;
+      const saved = result.data?.collections?.vendorQuotes?.find((quote: VendorQuote) => quote.id === id);
+      if (!saved || saved.status !== args.p_status) throw new Error("quote_confirmation_missing");
+      const shared = await op.run(() => op.client.from("crm_workspace_state")
+        .select("payload, updated_at").eq("workspace_id", SHARED_WORKSPACE_ID).single());
+      if (shared.error) throw shared.error;
+      if (!shared.data?.payload || !shared.data.updated_at) throw new Error("quote_confirmation_missing");
+      const acknowledged = normalizeSharedCRMData(shared.data.payload);
+      workspaceSync.current.load(acknowledged, String(shared.data.updated_at));
+      setAcceptedWorkspaceFingerprint(workspaceFingerprint(acknowledged));
+      setSharedWorkspaceUpdatedAt(String(shared.data.updated_at));
+      failedSaveFingerprint.current = null;
+      setData(current => {
+        const merged = { ...acknowledged };
+        for (const key of Object.keys(current) as (keyof CRMData)[]) {
+          if (workspaceFingerprint(current[key]) !== workspaceFingerprint(before[key])) {
+            (merged as Record<string, unknown>)[key] = current[key];
+            if (key === "vendorQuotes") workspaceSync.current.conflict();
+          }
+        }
+        return merged;
+      });
+      setSharedWorkspaceStatus("connected");
+      setSharedWorkspaceMessage(screenNotice("crm.shell.6159f4160c"));
+      setFormDirty(false);
+      return { ok: true, recordId: id };
+    } catch (error) {
+      const message = error && typeof error === "object" && "message" in error ? String(error.message) : "";
+      if (message.includes("revision_conflict")) showWorkspaceConflict();
+      return { ok: false, cancelled: isCancelled(error), message };
+    } finally {
+      workspaceBusy.current = false;
+      if (!identityLifetime.current.signal.aborted) setWorkspaceSyncEpoch(value => value + 1);
+    }
+  }
 
-    setData((current) => ({
-      ...current,
-      vendorQuotes: [createdQuote, ...(((current as any).vendorQuotes ?? []) as VendorQuote[])]
-    }));
+  async function addVendorQuote(quote: VendorQuote): Promise<FormSaveResult> {
+    const fields = collectionCatalog.find(schema => schema.collection === "vendorQuotes")?.fields ?? {};
+    const patch = Object.fromEntries(Object.entries(normalizeVendorQuoteFinancials(quote))
+      .filter(([key, value]) => key in fields && value !== undefined));
+    const result = await persistVendorQuoteWorkflow("crm_create_vendor_quote", quote.id, { p_patch: patch, p_status: quote.status });
+    if (result.ok) notify(screenNotice("crm.shell.e730183f39"));
+    return result;
+  }
 
-    notify(screenNotice("crm.shell.e730183f39"));
+  async function setVendorQuoteInformationStatus(id: string, status: "À valider" | "Pour information") {
+    const result = await persistVendorQuoteWorkflow("crm_set_vendor_quote_information", id, { p_status: status });
+    if (result.ok) notify(t(status === "Pour information" ? "modules.vendorQuotesView.classifiedForInformation" : "modules.vendorQuotesView.restoredForApproval"));
+    return result;
   }
 
   function updateVendorQuote(updatedQuote: VendorQuote) {
@@ -9368,6 +9429,7 @@ function createQuoteDraftFromLead(lead: Lead) {
             onDelete={deleteVendorQuote}
             onValidate={validateVendorQuote}
             onReject={rejectVendorQuote}
+            onSetInformationStatus={setVendorQuoteInformationStatus}
             onOpenInvoice={() => setActiveTab("vendorInvoices")}
           />
         </RetainedTaskView>

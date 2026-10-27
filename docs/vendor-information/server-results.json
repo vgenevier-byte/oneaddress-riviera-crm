@@ -1,0 +1,43 @@
+{
+  "passed": 7,
+  "results": [
+    {
+      "name": "Creation informational through guarded RPC; actual PDF upload and optional notes persist after new Auth session",
+      "passed": true
+    },
+    {
+      "name": "Complete access legacy PDF uploaded before creation is adopted atomically; missing/wrong prefix and restricted adoption refused",
+      "passed": true
+    },
+    {
+      "name": "Quote-only contributor without invoice permissions classifies pending/refused and restores same ID; finance and manual task unchanged",
+      "passed": true
+    },
+    {
+      "name": "Reader and anonymous denied; generic status edits and forged create status cannot bypass validation",
+      "passed": true
+    },
+    {
+      "name": "Stale revision denied and simultaneous quote writes serialize with exactly one conflict",
+      "passed": true
+    },
+    {
+      "name": "Both invoice directions, missing and incoherent links block classification with explicit error and no changes",
+      "passed": true
+    },
+    {
+      "name": "Validation requires document and both module grants; later explicit validation creates/reuses exactly one invoice across retries",
+      "passed": true
+    }
+  ],
+  "evidence": {
+    "realAuth": true,
+    "realSessions": true,
+    "realHttpRpc": true,
+    "realPostgres": true,
+    "realStorageUploadDownload": true,
+    "loopback": "http://127.0.0.1:56231",
+    "fictitiousDataOnly": true,
+    "productionWrites": false
+  }
+}

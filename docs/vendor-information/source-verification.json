@@ -1,0 +1,25 @@
+{
+  "passed": true,
+  "mode": "development",
+  "sourceIdentical": true,
+  "sourceHashes": {
+    "components/AccessPortal.tsx": "c44e568e8ebc2f35e7445fe1ce3f0c7b4a46ca749aa4633ae2bc0a3f7419a226",
+    "components/ModuleWorkspace.tsx": "340eedbe7ce679b9d0f0a48fa73a8b3226c9cec88f8e05c9f9ad387fecd4941f",
+    "components/CRMApp.tsx": "0046898fa336c1e0defcf26cfc3691965c51c5a459445242ecd96f72c6d1f754",
+    "components/VendorQuotesView.tsx": "c1e3a50c457c2106ade5569cb711856b2678c62842531e371e055df8b1db82e6",
+    "lib/types.ts": "0592f2cc1a8e156b937652759d53a8fe8478337778de269b88fb6c3eb721e241",
+    "lib/vendorFinance.ts": "444f2df18e62ae77f918135c3f39c41187c6fc0955a06837dfd3f2e763c80ac1",
+    "lib/access/collections.json": "ee0c6dc6b1036d0b891462b99543e7e699d3b64212a7f2e8449aa59e4556f2ac",
+    "lib/i18n/catalogs/modules.ts": "c9d3d1f5bfa4322aa607205dd133107e156ea18879d0d9a73c1231650f7ed35d",
+    "lib/i18n/moduleMessage.ts": "31dc563c248697f8f6924330870520885539c4707786f301fe6445ba97a3973b",
+    "app/globals.css": "2098e1167214fd416476442e37ae06a48d1800f579f11f6eb66c87d2b663b7d6",
+    "app/mobile.css": "50e39407cc05539b718e92cf6ddadcc865dce4dc7e3b0c712d899cfaa357bf37"
+  },
+  "runtimeErrors": [],
+  "externalRequests": [],
+  "layoutRecaptured": true,
+  "frAndEn": true,
+  "fullAndRestricted": true,
+  "desktopAndMobile": true,
+  "productionWrites": false
+}

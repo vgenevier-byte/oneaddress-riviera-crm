@@ -1,0 +1,16 @@
+# Vérification du statut « Pour information »
+
+Le parcours vérifié part de **Maison & services → Devis prestataires**, passe par la session Auth, les mutations dédiées et le stockage documentaire, puis relit la base PostgreSQL et affiche le résultat après une nouvelle connexion.
+
+Les scénarios métier ont utilisé une pile Supabase dédiée sur `127.0.0.1` (Auth, PostgREST, PostgreSQL 17, Storage). Tous les comptes sont fictifs en `@example.invalid`. Aucune variable d'environnement du dépôt, donnée réelle ou connexion vers la production n'a été utilisée par ce banc. Les clés et sessions restent dans un répertoire temporaire privé.
+
+- La migration conserve l'intégralité du jeu fictif avant/après, sans reclassement automatique.
+- Sept groupes de tests serveur couvrent création en information, téléversement réel d'un PDF, sauvegarde, déconnexion/reconnexion, conservation des notes/montant/document et relecture des octets ; téléversement préalable du parcours complet et refus des chemins invalides ; transitions aller/retour pour devis à valider ou refusés ; contributeur Devis seul ; lecteur et anonyme refusés ; statut protégé dans les écritures génériques ; révision périmée et deux écritures concurrentes ; liens facture directs, inverses, cassés ou incohérents ; document et droits requis pour validation ; facture unique après répétition.
+- Les instantanés des factures, paiements, heures et d'une tâche canonique manuelle liée restent identiques pendant le classement pour information. La tâche conserve son statut.
+- Sept groupes de tests navigateur couvrent les parcours complet et restreint, FR/EN, ordinateur et mobile émulé ; créations réelles avec PDF et notes ; filtres dans l'ordre prévu ; badge neutre ; montant à valider inchangé par une création en information ; transitions ; protections facture ; contributeur Devis seul et lecteur ; relecture après connexion neuve ; absence de débordement horizontal ; validation ultérieure du parcours complet avec confirmation et création d'une seule facture.
+- Le parcours complet existant normalise les champs absents des anciennes factures en valeurs par défaut lors de sa sauvegarde. Le contrôle de validation vérifie la conservation de chaque champ déjà présent et des montants/paiements ; les actions de classement ont un contrôle d'égalité complet.
+- Aucun incident JavaScript ni requête navigateur externe au banc n'a été constaté. Les captures ont été inspectées visuellement. Une vérification navigateur a révélé que l'effet global de couleurs retirait le badge neutre ; le correctif a été repris dans les tests finaux. La disposition finale du formulaire place Notes et le bouton d'ajout sur toute la largeur.
+
+La copie de l'application utilisée pour les interactions était en mode développement, avec blocage réseau vers l'extérieur. `source-verification.json` compare les empreintes des sources servies à celles de la version finale. Les contrôles TypeScript, lint, build et publication sont effectués séparément par la procédure de livraison ; les tests de ce dossier ne constituent pas des tests métier en production.
+
+Résultats : `migration-results.json`, `server-results.json`, `browser-results.json`, `source-verification.json`. Captures sous `captures/`.

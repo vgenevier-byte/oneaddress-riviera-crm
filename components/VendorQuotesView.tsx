@@ -1,6 +1,7 @@
 "use client";
 import { moduleMessage } from "@/lib/i18n/moduleMessage";
 import { useI18n } from "@/lib/i18n/I18nProvider";
+import { useConfirmedForm, type FormSave } from "@/lib/access/useConfirmedForm";
 import {TaskSourceActions} from "./TaskLinkProvider";
 import {useTaskTargetFocus,scrollTaskTarget} from "@/lib/tasks/navigation";
 
@@ -26,7 +27,7 @@ import {
   sumEuroAmounts
 } from "@/lib/currency";
 
-import { getVendorQuoteDeletionPlan, type VendorQuoteDeletionChoice } from "@/lib/vendorFinance";
+import { getVendorQuoteDeletionPlan, getVendorQuoteInformationBlockReason, type VendorQuoteDeletionChoice } from "@/lib/vendorFinance";
 import { VendorQuoteDeletionDialog } from "./VendorFinanceDialogs";
 
 const SHARED_WORKSPACE_ID = "oneaddress-riviera";
@@ -52,6 +53,7 @@ function sanitizeFileName(fileName: string) {
 function statusTone(status: VendorQuoteStatus) {
   if (status === "Validé") return "semantic-success";
   if (status === "Refusé") return "semantic-danger";
+  if (status === "Pour information") return "semantic-neutral";
   return "semantic-pending";
 }
 
@@ -59,11 +61,12 @@ type Props = {
   contacts: Contact[];
   quotes: VendorQuote[];
   invoices: VendorInvoice[];
-  onAdd: (quote: VendorQuote) => void;
-  onUpdate: (quote: VendorQuote) => void;
+  onAdd: (quote: VendorQuote) => FormSave;
+  onUpdate: (quote: VendorQuote) => FormSave;
   onDelete: (id: string, choice?: VendorQuoteDeletionChoice) => void;
   onValidate: (id: string) => void;
   onReject: (id: string) => void;
+  onSetInformationStatus: (id: string, status: "À valider" | "Pour information") => FormSave;
   onOpenInvoice: (invoiceId: string) => void;
 };
 
@@ -76,6 +79,7 @@ export default function VendorQuotesView({
   onDelete,
   onValidate,
   onReject,
+  onSetInformationStatus,
   onOpenInvoice
 }: Props) {
   const {t, label: uiLabel, formatDate: uiDate, formatMoney} = useI18n();
@@ -83,11 +87,14 @@ export default function VendorQuotesView({
   useLayoutEffect(() => { liveT.current = t; }, [t]);
 
   const business=useBusinessPermissions();
+  const confirmation = useConfirmedForm(business?.markDirty);
+  const newQuoteId = useRef<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<VendorQuoteStatus | "Tous">("Tous");
   const [editingQuote, setEditingQuote] = useState<VendorQuote | null>(null);
   const [deletingQuoteId, setDeletingQuoteId] = useState<string | null>(null);
   const deletionPlan = deletingQuoteId ? getVendorQuoteDeletionPlan({ vendorQuotes: quotes, vendorInvoices: invoices }, deletingQuoteId) : null;
   const [uploading, setUploading] = useState(false);
+  const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
   const taskTarget=useTaskTargetFocus("vendor_quote");
   useEffect(()=>{if(!taskTarget||!quotes.some(quote=>quote.id===taskTarget.id))return;const timer=window.setTimeout(()=>{setStatusFilter("Tous");window.requestAnimationFrame(()=>scrollTaskTarget(`vendor-quote-${taskTarget.id}`));},0);return()=>window.clearTimeout(timer);},[taskTarget,quotes]);
 
@@ -210,6 +217,7 @@ export default function VendorQuotesView({
 
   async function submitQuote(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (uploading || confirmation.saving || business?.write === false) return;
 
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -217,7 +225,7 @@ export default function VendorQuotesView({
     const contact = contacts.find((item) => item.id === contactId);
     const preserveLegacyContact = form.get("preserveLegacyContact") === "true";
     const amount = parseEuroAmount(form.get("amount"));
-    const quoteId = editingQuote?.id || makeId("vendor-quote");
+    const quoteId = editingQuote?.id || newQuoteId.current || (newQuoteId.current = makeId("vendor-quote"));
     const quoteFile = form.get("quoteFile");
 
     if (!contact && !preserveLegacyContact && (!business || business.read("contacts") || !editingQuote)) {
@@ -230,68 +238,67 @@ export default function VendorQuotesView({
       return;
     }
 
-    let uploadedDocument: Partial<VendorQuote> = {};
+    await confirmation.submit(formElement, async () => {
+      let uploadedDocument: Partial<VendorQuote> = {};
 
-    if (quoteFile instanceof File && quoteFile.size > 0) {
-      try {
-        setUploading(true);
-        uploadedDocument = await uploadQuoteDocument(quoteFile, quoteId);
-        if(business)await business.check();
-      } catch (error) {
-        window.alert(moduleMessage(error instanceof Error ? error.message : "", liveT.current));
-        return;
-      } finally {
-        setUploading(false);
+      if (quoteFile instanceof File && quoteFile.size > 0) {
+        try {
+          setUploading(true);
+          uploadedDocument = await uploadQuoteDocument(quoteFile, quoteId);
+          if(business)await business.check();
+        } catch (error) {
+          return {ok: false, message: error instanceof Error ? error.message : ""};
+        } finally {
+          setUploading(false);
+        }
       }
-    }
 
-    const referenceInput = String(form.get("quoteReference") || "").trim();
-    const generatedReference = `DEV-PREST-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${quoteId.slice(-4).toUpperCase()}`;
+      const referenceInput = String(form.get("quoteReference") || "").trim();
+      const generatedReference = `DEV-PREST-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${quoteId.slice(-4).toUpperCase()}`;
 
-    const quote: VendorQuote = {
-      ...(editingQuote || {}),
-      id: quoteId,
-      contactId,
-      contactName: editingQuote && contactId === (editingQuote.contactId || "")
-        ? editingQuote.contactName
-        : contact
-          ? getVendorBusinessName(contact)
-          : String(editingQuote?.contactName || "").trim(),
-      contactPersonName: contact
-        ? getVendorContactPersonName(contact)
-        : String(editingQuote?.contactPersonName || "").trim(),
-      category: contact
-        ? getVendorContactProfession(contact) || "Prestataire"
-        : String(editingQuote?.category || "Prestataire").trim(),
-      title: String(form.get("title") || "").trim() || "Devis prestataire",
-      quoteReference: referenceInput || editingQuote?.quoteReference || generatedReference,
-      quoteDate: String(form.get("quoteDate") || ""),
-      validUntil: String(form.get("validUntil") || ""),
-      amount,
-      status: editingQuote?.status || "À valider",
-      quoteDocumentUrl: editingQuote?.quoteDocumentUrl || "",
-      quoteDocumentStoragePath:
-        uploadedDocument.quoteDocumentStoragePath ||
-        editingQuote?.quoteDocumentStoragePath ||
-        "",
-      quoteDocumentName:
-        uploadedDocument.quoteDocumentName ||
-        editingQuote?.quoteDocumentName ||
-        "",
-      linkedInvoiceId: editingQuote?.linkedInvoiceId || "",
-      notes: String(form.get("notes") || "").trim(),
-      createdAt: editingQuote?.createdAt || new Date().toISOString(),
-      validatedAt: editingQuote?.validatedAt || ""
-    };
+      const quote: VendorQuote = {
+        ...(editingQuote || {}),
+        id: quoteId,
+        contactId,
+        contactName: editingQuote && contactId === (editingQuote.contactId || "")
+          ? editingQuote.contactName
+          : contact
+            ? getVendorBusinessName(contact)
+            : String(editingQuote?.contactName || "").trim(),
+        contactPersonName: contact
+          ? getVendorContactPersonName(contact)
+          : String(editingQuote?.contactPersonName || "").trim(),
+        category: contact
+          ? getVendorContactProfession(contact) || "Prestataire"
+          : String(editingQuote?.category || "Prestataire").trim(),
+        title: String(form.get("title") || "").trim() || "Devis prestataire",
+        quoteReference: referenceInput || editingQuote?.quoteReference || generatedReference,
+        quoteDate: String(form.get("quoteDate") || ""),
+        validUntil: String(form.get("validUntil") || ""),
+        amount,
+        status: editingQuote?.status || (form.get("status") === "Pour information" ? "Pour information" : "À valider"),
+        quoteDocumentUrl: editingQuote?.quoteDocumentUrl || "",
+        quoteDocumentStoragePath:
+          uploadedDocument.quoteDocumentStoragePath ||
+          editingQuote?.quoteDocumentStoragePath ||
+          "",
+        quoteDocumentName:
+          uploadedDocument.quoteDocumentName ||
+          editingQuote?.quoteDocumentName ||
+          "",
+        linkedInvoiceId: editingQuote?.linkedInvoiceId || "",
+        notes: String(form.get("notes") || "").trim(),
+        createdAt: editingQuote?.createdAt || new Date().toISOString(),
+        validatedAt: editingQuote?.validatedAt || ""
+      };
 
-    if (editingQuote) {
-      onUpdate(quote);
-      setEditingQuote(null);
-    } else {
-      onAdd(quote);
-    }
-
-    formElement.reset();
+      return editingQuote ? onUpdate(quote) : onAdd(quote);
+    }, newerDraft => {
+      if (newerDraft) return;
+      if (editingQuote) setEditingQuote(null);
+      else newQuoteId.current = null;
+      formElement.reset();
+    });
   }
 
   function validateQuote(quote: VendorQuote) {
@@ -320,6 +327,23 @@ export default function VendorQuotesView({
     }
   }
 
+  async function setInformationStatus(quote: VendorQuote, status: "À valider" | "Pour information") {
+    const blocked = status === "Pour information" ? getVendorQuoteInformationBlockReason(quote, invoices) : null;
+    if (blocked) {
+      window.alert(liveT.current(blocked === "broken_invoice_link" ? "modules.vendorQuotesView.informationBlockedByBrokenInvoice" : "modules.vendorQuotesView.informationBlockedByInvoice"));
+      return;
+    }
+    setChangingStatusId(quote.id);
+    try {
+      const result = await onSetInformationStatus(quote.id, status);
+      if (result && !result.ok) window.alert(moduleMessage(result.message, liveT.current));
+    } catch (error) {
+      window.alert(moduleMessage(error instanceof Error ? error.message : "", liveT.current));
+    } finally {
+      setChangingStatusId(null);
+    }
+  }
+
   return (
     <div className="two-columns wide-left vendor-quotes-view">
       {deletionPlan && <VendorQuoteDeletionDialog plan={deletionPlan}
@@ -341,7 +365,7 @@ export default function VendorQuotesView({
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 20 }}>
-          {(["Tous", "À valider", "Validé", "Refusé"] as Array<VendorQuoteStatus | "Tous">).map((status) => (
+          {(["Tous", "À valider", "Validé", "Refusé", "Pour information"] as Array<VendorQuoteStatus | "Tous">).map((status) => (
             <BusinessButton
               key={status}
               type="button"
@@ -360,6 +384,10 @@ export default function VendorQuotesView({
             {visibleQuotes.map((quote) => {
               const linkedInvoice = invoices.find(invoice => invoice.id === quote.linkedInvoiceId)
                 || invoices.find(invoice => invoice.sourceQuoteId === quote.id);
+              const informationBlockReason = getVendorQuoteInformationBlockReason(quote, invoices);
+              const informationBlockedMessage = informationBlockReason === "broken_invoice_link"
+                ? t("modules.vendorQuotesView.informationBlockedByBrokenInvoice")
+                : t("modules.vendorQuotesView.informationBlockedByInvoice");
               const linkedContact = contacts.find((contact) => contact.id === quote.contactId);
               const businessName = linkedContact
                 ? getVendorBusinessName(linkedContact)
@@ -404,7 +432,7 @@ export default function VendorQuotesView({
                       </div>
                       <div className="mini-stat">
                         <span>{t("modules.vendorQuotesView.linkedInvoice")}</span>
-                        <strong>{linkedInvoice ? uiLabel(linkedInvoice.status) : t("modules.vendorQuotesView.notCreated")}</strong>
+                        <strong>{linkedInvoice ? uiLabel(linkedInvoice.status) : t(quote.linkedInvoiceId ? "modules.vendorQuotesView.invoiceLinkUnavailable" : "modules.vendorQuotesView.notCreated")}</strong>
                       </div>
                     </div>
 
@@ -412,7 +440,7 @@ export default function VendorQuotesView({
                   </div>
 
                   <div className="item-actions contact-row-actions oar-contact-actions">
-                    <span className={`status-pill ${statusTone(quote.status)}`}>{uiLabel(quote.status, "modules")}</span>
+                    <span className={`status-pill ${statusTone(quote.status)}`} data-semantic-tone={statusTone(quote.status).slice("semantic-".length)}>{uiLabel(quote.status, "modules")}</span>
 
                     {(quote.quoteDocumentStoragePath || quote.quoteDocumentUrl) && (
                       <>
@@ -428,16 +456,35 @@ export default function VendorQuotesView({
                     )}
 
                     {quote.status !== "Validé" && (
-                      <BusinessButton className="primary-button" type="button" permission="write" disabled={Boolean(business&&!business.canWrite("vendorInvoices"))} onClick={() => validateQuote(quote)}>
+                      <BusinessButton className="primary-button" type="button" permission="write" disabled={changingStatusId !== null || Boolean(business&&!business.canWrite("vendorInvoices"))} onClick={() => validateQuote(quote)}>
 
                         {t("modules.vendorQuotesView.approve")}
                       </BusinessButton>
                     )}
 
                     {quote.status !== "Refusé" && (
-                      <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => rejectQuote(quote)}>
+                      <BusinessButton className="secondary-button" type="button" permission="write" disabled={changingStatusId !== null} onClick={() => rejectQuote(quote)}>
 
                         {t("modules.vendorQuotesView.reject")}
+                      </BusinessButton>
+                    )}
+
+                    {(quote.status === "À valider" || quote.status === "Refusé") && (
+                      <>
+                        <BusinessButton className="secondary-button" type="button" permission="write"
+                          disabled={Boolean(informationBlockReason) || changingStatusId !== null}
+                          title={informationBlockReason ? informationBlockedMessage : undefined}
+                          onClick={() => void setInformationStatus(quote, "Pour information")}>
+                          {t("modules.vendorQuotesView.classifyForInformation")}
+                        </BusinessButton>
+                        {informationBlockReason && <p className="muted-line" role="note">{informationBlockedMessage}</p>}
+                      </>
+                    )}
+
+                    {quote.status === "Pour information" && (
+                      <BusinessButton className="secondary-button" type="button" permission="write" disabled={changingStatusId !== null}
+                        onClick={() => void setInformationStatus(quote, "À valider")}>
+                        {t("modules.vendorQuotesView.returnToApproval")}
                       </BusinessButton>
                     )}
 
@@ -448,7 +495,7 @@ export default function VendorQuotesView({
                       </BusinessButton>
                     )}
 
-                    <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => setEditingQuote(quote)}>
+                    <BusinessButton className="secondary-button" type="button" permission="write" disabled={changingStatusId !== null} onClick={() => setEditingQuote(quote)}>
 
                       {t("modules.tasksWorkspace.edit")}
                     </BusinessButton>
@@ -456,6 +503,7 @@ export default function VendorQuotesView({
                     <BusinessButton
                       className="danger-link"
                       type="button"
+                      disabled={changingStatusId !== null}
                       onClick={() => {
                         const plan = getVendorQuoteDeletionPlan({ vendorQuotes: quotes, vendorInvoices: invoices }, quote.id);
                         if (plan.invoices.length || plan.missingLink) setDeletingQuoteId(quote.id);
@@ -484,7 +532,7 @@ export default function VendorQuotesView({
           {t("modules.vendorQuotesView.theQuoteMustBeApprovedBeforeAPendingInvoiceIsCreated")}
         </p>
 
-        <BusinessForm key={editingQuote?.id || "new-vendor-quote"} className="form-grid" onSubmit={submitQuote}>
+        <BusinessForm key={editingQuote?.id || "new-vendor-quote"} className="form-grid" pending={confirmation.saving} onChangeCapture={confirmation.changed} onSubmit={submitQuote}>
           <SearchableBusinessContactPicker
             contacts={selectableContacts}
             defaultContact={contacts.find((contact) => contact.id === editingQuote?.contactId)}
@@ -494,6 +542,13 @@ export default function VendorQuotesView({
             fallbackProfession={editingQuote?.category || ""}
             required
           />
+
+          {!editingQuote && <BusinessLabel>{t("modules.vendorQuotesView.quoteStatus")}
+            <select name="status" defaultValue="À valider">
+              <option value="À valider">{uiLabel("À valider", "modules")}</option>
+              <option value="Pour information">{uiLabel("Pour information", "modules")}</option>
+            </select>
+          </BusinessLabel>}
 
           <BusinessLabel>{t("modules.vendorQuotesView.quoteSubject")}
             <input name="title" defaultValue={editingQuote?.title || ""} placeholder={t("modules.vendorQuotesView.egJulyGardenMaintenance")} required />
@@ -522,7 +577,7 @@ export default function VendorQuotesView({
             />
           </BusinessLabel>
 
-          <BusinessLabel className="vendor-invoice-file-field">{t("modules.vendorQuotesView.uploadQuote")}
+          <BusinessLabel className="vendor-invoice-file-field full">{t("modules.vendorQuotesView.uploadQuote")}
             <input name="quoteFile" type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.heic,.doc,.docx,.xls,.xlsx" />
             <span className="field-help">
               {editingQuote?.quoteDocumentName
@@ -531,16 +586,17 @@ export default function VendorQuotesView({
             </span>
           </BusinessLabel>
 
-          <BusinessLabel className="planning-entry-notes">{t("modules.tasksWorkspace.notes")}
+          <BusinessLabel className="planning-entry-notes full">{t("modules.tasksWorkspace.notes")}
             <textarea name="notes" defaultValue={editingQuote?.notes || ""} placeholder={t("modules.vendorQuotesView.termsDepositConditionsTechnicalDetails")} />
           </BusinessLabel>
 
-          <div className="mobile-form-actions">
-            <BusinessButton className="primary-button planning-entry-submit" type="submit" disabled={uploading}>
-              {uploading ? t("modules.vendorQuotesView.uploading") : editingQuote ? t("modules.tasksWorkspace.save") : t("modules.vendorQuotesView.addQuote")}
+          {confirmation.message && <p className="full muted-line" role="alert">{moduleMessage(confirmation.message, t)}</p>}
+          <div className="mobile-form-actions full">
+            <BusinessButton className="primary-button planning-entry-submit full" type="submit" disabled={uploading || confirmation.saving}>
+              {uploading ? t("modules.vendorQuotesView.uploading") : confirmation.saving ? t("modules.moduleWorkspace.saving") : editingQuote ? t("modules.tasksWorkspace.save") : t("modules.vendorQuotesView.addQuote")}
             </BusinessButton>
             {editingQuote && (
-              <BusinessButton className="secondary-button" type="button" permission="write" onClick={() => setEditingQuote(null)}>
+              <BusinessButton className="secondary-button full" type="button" permission="write" disabled={confirmation.saving} onClick={() => setEditingQuote(null)}>
 
                 {t("modules.tasksWorkspace.cancel")}
               </BusinessButton>
