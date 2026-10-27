@@ -32,7 +32,7 @@ function fixture() {
     if (url.pathname.endsWith("generateIds")) return Response.json({ ids: [`generated-${++generated}`] });
     if (url.pathname === "/drive/v3/files" && method === "GET") {
       if (state.listPages) return Response.json(state.listPages[url.searchParams.get("pageToken") || "first"]);
-      return Response.json({ files: [...files.values()].filter(file => file.name === "Projets" && !file.trashed), incompleteSearch: state.listIncomplete });
+      return Response.json({ files: [...files.values()].filter(file => file.mimeType === FOLDER && !file.trashed), incompleteSearch: state.listIncomplete });
     }
     if (url.pathname === "/drive/v3/files" && method === "POST") {
       const data = JSON.parse(init.body);
@@ -181,6 +181,23 @@ test("root reservation precedes creation; a lost creation response adopts that s
   const second = await configureProjetsRoot(f.store, fetchDrive, "fixture-drive");
   assert.equal(first.root_folder_id, second.root_folder_id); assert.equal(first.root_folder_id, f.config.reserved_root_id); assert.equal(f.state.creates, 1);
 });
+for (const name of ["07 - Projets", "07. Projets", "7–Projets", "007 — Projets", "05 — PROJETS"]) test(`numbered root ${name} is discovered without creating or renaming any folder`, async () => {
+  const f = fixture(); f.files.get("fixture-root").name = name; f.config.root_folder_id = null;
+  for (const unrelated of ["Projets archives", "Anciens Projets", "PRJ-000001 - Projets", "07 - Projets - ancien", "Projet"]) f.files.set(unrelated, f.folder(unrelated, "fixture-drive", unrelated));
+  const discovery = await discoverProjetsRoot(f.fetchDrive, "fixture-drive");
+  assert.equal(discovery.absenceEstablished, false); assert.deepEqual(discovery.candidates.map(item => item.id), ["fixture-root"]);
+  const listed = f.requests.find(row => row.url.pathname === "/drive/v3/files"); assert(listed); assert.equal(listed.url.searchParams.get("q"), `mimeType = '${FOLDER}' and trashed = false`);
+  assert.equal((await configureProjetsRoot(f.store, f.fetchDrive, "fixture-drive")).root_folder_id, "fixture-root");
+  assert.equal(f.files.get("fixture-root").name, name); assert(f.requests.every(row => row.method === "GET")); assert.equal(f.state.creates, 0);
+});
+test("legacy and numbered root candidates remain ambiguous across complete folder pages", async () => {
+  const f = fixture(), numbered = f.folder("numbered-root", "fixture-drive", "07 - Projets"), unrelated = f.folder("archive", "fixture-drive", "Projets archives");
+  f.files.set(numbered.id, numbered); f.files.set(unrelated.id, unrelated); f.config.root_folder_id = null;
+  f.state.listPages = { first: { files: [unrelated, f.files.get("fixture-root")], nextPageToken: "second" }, second: { files: [numbered] } };
+  const discovery = await discoverProjetsRoot(f.fetchDrive, "fixture-drive"); assert.equal(discovery.candidates.length, 2);
+  await assert.rejects(() => configureProjetsRoot(f.store, f.fetchDrive, "fixture-drive"), error => error.code === "drive_root_ambiguous");
+  assert.equal(f.state.creates, 0); assert.equal(f.config.root_folder_id, null);
+});
 test("second job reuses all ready folders; text rename retains IDs and does not upload files", async () => {
   const f = fixture(); f.jobs.push(makeJob({ status: "pending" }), makeJob({ id: "job-2", status: "pending", asset_id: "another", object_path: `${project}/another` }));
   const result = await processFonciereDriveJobs(f.store, f.fetchDrive);
@@ -294,4 +311,19 @@ test("English status diagnostic, no folder URL without export, and post-Drive re
   const userClient = () => ({ rpc: () => ({ abortSignal: async () => ++admissions === 1 ? { data: id, error: null } : { data: null, error: { code: "42501" } } }) });
   const handler = createFonciereDriveFolderHandler({ userClient, store: () => f.store, fetchDrive: f.fetchDrive });
   assert.equal((await handler(new Request(`https://fixture.invalid/api/fonciere/drive/folder?project=${project}`, { headers: { authorization: "Bearer fictitious" } }))).status, 403);
+});
+test("diagnose follows the configured root ID after rename and never searches for a replacement", async () => {
+  const f = fixture(); f.files.get("fixture-root").name = "Dossier canonique renommé";
+  process.env.CRON_SECRET = "fictional-secret-for-local-worker-test-only";
+  const handler = createFonciereDriveWorkerHandler({ store: () => f.store, fetchDrive: f.fetchDrive, sharedDriveId: () => "fixture-drive" });
+  const request = () => new Request("https://fixture.invalid/api/fonciere/drive/worker", { method: "POST", headers: { authorization: `Bearer ${process.env.CRON_SECRET}`, "content-type": "application/json" }, body: JSON.stringify({ action: "diagnose" }) });
+  const response = await handler(request()), body = await response.json();
+  assert.equal(response.status, 200); assert.equal(body.configured, true); assert.equal(body.absenceEstablished, false);
+  assert.equal(body.candidates.length, 1); assert.equal(body.candidates[0].id, "fixture-root"); assert.equal(body.candidates[0].name, "Dossier canonique renommé");
+  assert(f.requests.every(row => row.method === "GET" && row.url.pathname !== "/drive/v3/files"));
+  f.files.delete("fixture-root");
+  const before = f.requests.length, missing = await handler(request());
+  assert.equal(missing.status, 409); assert.equal((await missing.json()).code, "managed_folder_missing_or_inaccessible");
+  assert(f.requests.slice(before).every(row => row.method === "GET" && row.url.pathname !== "/drive/v3/files"));
+  assert.equal(f.config.root_folder_id, "fixture-root"); assert.equal(f.state.creates, 0);
 });

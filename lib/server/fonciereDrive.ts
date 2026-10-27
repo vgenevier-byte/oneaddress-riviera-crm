@@ -74,12 +74,15 @@ export async function discoverProjetsRoot(fetchDrive: FonciereDriveFetch, shared
   const candidates: DriveMetadata[] = [];
   let pageToken = "";
   do {
-    const params = new URLSearchParams({ q: `name = 'Projets' and mimeType = '${FOLDER}' and trashed = false`, corpora: "drive", driveId: sharedDriveId, includeItemsFromAllDrives: "true", supportsAllDrives: "true", spaces: "drive", pageSize: "100", fields: `nextPageToken,incompleteSearch,files(${FIELDS})` });
+    // Drive's name contains operator matches prefixes, so it cannot establish
+    // absence after a numeric prefix is added. Filter complete folder pages.
+    const params = new URLSearchParams({ q: `mimeType = '${FOLDER}' and trashed = false`, corpora: "drive", driveId: sharedDriveId, includeItemsFromAllDrives: "true", supportsAllDrives: "true", spaces: "drive", pageSize: "100", fields: `nextPageToken,incompleteSearch,files(${FIELDS})` });
     if (pageToken) params.set("pageToken", pageToken);
     const response = await checked(await fetchDrive(`${FILES}?${params}`, { cache: "no-store", signal: AbortSignal.timeout(12000) }), "drive_root_search_failed");
     const body = await response.json();
     if (!Array.isArray(body.files) || body.incompleteSearch === true) fail("drive_root_search_incomplete", true);
     for (const candidate of body.files) {
+      if (typeof candidate?.name !== "string" || !/^(?:\d+\s*[-–—.]\s*)?Projets$/i.test(candidate.name)) continue;
       assertFolder(candidate, sharedDriveId);
       await validateProjetsRoot(fetchDrive, { enabled: true, shared_drive_id: sharedDriveId, root_folder_id: candidate.id, root_parent_id: candidate.parents?.[0] });
       candidates.push(candidate);

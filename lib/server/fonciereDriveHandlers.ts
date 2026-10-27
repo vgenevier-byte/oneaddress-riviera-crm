@@ -85,11 +85,19 @@ export function createFonciereDriveWorkerHandler(deps: Dependencies = {}) {
       const body = request.method === "POST" ? await request.json() : { action: "run" };
       if (!body || typeof body !== "object" || Object.keys(body).some(key => key !== "action") || !["run", "diagnose", "configure", "backfill", "report", "test"].includes(body.action)) return json({ error: "Action invalide." }, 400);
       const fetchDrive = deps.fetchDrive || createGoogleDriveFetch(), sharedDriveId = (deps.sharedDriveId || getSharedDriveId)();
-      if (body.action === "diagnose") {
-        const discovery = await discoverProjetsRoot(fetchDrive, sharedDriveId);
-        return json({ sharedDriveId, absenceEstablished: discovery.absenceEstablished, candidates: discovery.candidates.map(item => ({ id: item.id, name: item.name, parents: item.parents, canAddChildren: item.capabilities?.canAddChildren, canListChildren: item.capabilities?.canListChildren })) });
-      }
       const store = (deps.store || createFonciereDriveStore)();
+      if (body.action === "diagnose") {
+        // A configured destination is an identity, independent of its display
+        // name. A renamed or inaccessible root must never trigger replacement.
+        const config = await store.call<DriveConfig>("get_config");
+        if (config.root_folder_id) {
+          if (config.shared_drive_id !== sharedDriveId) throw new FonciereDriveError("drive_configuration_conflict", true);
+          const root = await validateProjetsRoot(fetchDrive, { ...config, enabled: true });
+          return json({ sharedDriveId, configured: true, enabled: config.enabled, absenceEstablished: false, candidates: [{ id: root.id, name: root.name, parents: root.parents, canAddChildren: root.capabilities?.canAddChildren, canListChildren: root.capabilities?.canListChildren }] });
+        }
+        const discovery = await discoverProjetsRoot(fetchDrive, sharedDriveId);
+        return json({ sharedDriveId, configured: false, absenceEstablished: discovery.absenceEstablished, candidates: discovery.candidates.map(item => ({ id: item.id, name: item.name, parents: item.parents, canAddChildren: item.capabilities?.canAddChildren, canListChildren: item.capabilities?.canListChildren })) });
+      }
       if (body.action === "configure") return json(await configureProjetsRoot(store, fetchDrive, sharedDriveId));
       if (body.action === "test") return json(await testFonciereDriveIntegration(store, fetchDrive, sharedDriveId));
       if (body.action === "backfill" || body.action === "report") return json(await store.call(body.action));
