@@ -1,0 +1,18 @@
+{
+  "passed": 10,
+  "checks": [
+    "Additive validation migration leaves existing projects, approvals, histories and Drive jobs byte-identical",
+    "Structured assumptions persist through actual repository load, save, reload and a new Auth session",
+    "Direct RPC rejects invalid dates and noninteger, negative, excessive or textual durations even in inactive scenarios",
+    "Null/empty missing dates and months remain missing; zero must persist explicitly and leap days remain civil dates",
+    "Changing personal strategy conserves inactive values while calendar results use only the chosen scenario",
+    "Agency reimport persists factual corrections without replacing personal calendar, budgets, comments or legacy timing",
+    "A saved calendar change requires both designated approvals to be reconfirmed and retains their previous opinions",
+    "Repeated calendar displays, changed system time and read RPCs neither write nor invalidate approvals",
+    "Read-only users load calendar but cannot save it; strangers and anonymous callers cannot access the project",
+    "Calendar validators and catalog remain unavailable as directly executable public functions"
+  ],
+  "services": "Real local Auth/PostgREST/PostgreSQL/Storage",
+  "productionWrites": 0,
+  "externalRequests": 0
+}

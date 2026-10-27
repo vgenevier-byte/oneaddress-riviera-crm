@@ -9,6 +9,7 @@ import { presentationMaps } from "./presentation-maps";
 import { renderedFont } from "./presentation-layout";
 import { notesText } from "./presentation-notes";
 import { appendPhotoSlide, updatePresentationMetadata } from "./presentation-gallery";
+import { appendCalendarSlide } from "./presentation-calendar";
 import { P, A, R, PKG, parseXml, xmlText, part, setShapeText, shapeById, normalizePath, replaceNote } from "./presentation-xml";
 
 export { presentationSlides, presentationDimensions, blankPhotos, presentationSourceSHA256 } from "./presentation-assets";
@@ -62,6 +63,7 @@ export async function generatePresentation(input: ProjectData, options: { signal
     zip.file("docProps/core.xml", xmlText(core));
   }
   await appendPhotoSlide(zip, data, options.signal);
+  await appendCalendarSlide(zip, data);
   await updatePresentationMetadata(zip);
   options.signal?.throwIfAborted();
   // The dimensions are original; updatePresentationMetadata only fixes the

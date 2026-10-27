@@ -242,3 +242,21 @@
 .arbitrageBadge[data-arbitrage-status=refused] { background:#fceee8; color:#8d4a35; }
 .arbitrageBadge[data-arbitrage-status=deepen] { background:#fbf4df; color:#80683a; }
 @media(max-width:600px) { .arbitrageFilter { order:3; max-width:none; width:100%; } }
+
+.monthDuration { display:grid; gap:10px; min-width:0; }
+.customDuration { display:grid; gap:7px; min-width:0; }
+.customDuration>span:first-child { font-size:11px; color:#6b7b61; line-height:1.6; }
+.projectCalendar { margin:22px 0; padding:20px; border:1px solid #d7e2cf; border-radius:8px; background:#f5f8f0; }
+.projectCalendar h4 { margin:0 0 17px; color:#36583b; font-size:14px; line-height:1.5; }
+.projectCalendar dl { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:15px 22px; margin:0; }
+.projectCalendar dl>div { min-width:0; }
+.projectCalendar dt { color:#5b6b53; font-size:11px; line-height:1.6; margin-bottom:4px; }
+.projectCalendar dd { color:#35523a; font-size:13px; line-height:1.7; margin:0; overflow-wrap:anywhere; }
+.projectCalendar [data-calendar-row=firstReceiptDate] { padding-top:12px; border-top:1px solid #dbe5d3; grid-column:1/-1; }
+.projectCalendar [data-calendar-row=firstReceiptDate] dd { font-weight:600; }
+.calendarRule { color:#5e6c55; font-size:11px; line-height:1.7; margin:14px 0 0; }
+.calendarWarning { color:#8b4b32; font-size:12px; line-height:1.7; background:#fff1e6; border:1px solid #ead0b9; border-radius:5px; padding:11px 13px; margin:16px 0 0; }
+.retainedScenarioList { display:grid; gap:13px; margin:15px 0 0; }
+.retainedScenarioList dt { font-size:11px; font-weight:600; margin-bottom:4px; }
+.retainedScenarioList dd { margin:0; font-size:12px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
+@media(max-width:600px) { .projectCalendar { padding:16px; } .projectCalendar dl { grid-template-columns:1fr; gap:14px; } .projectCalendar [data-calendar-row=firstReceiptDate] { grid-column:auto; } }

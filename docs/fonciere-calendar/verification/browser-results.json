@@ -1,0 +1,17 @@
+{
+  "passed": 7,
+  "checks": [
+    "Initial unknown values and explicit zero never invent a start date",
+    "Short numeric duration choices, custom integer validation and keyboard remain controlled",
+    "Civil leap-year end-of-month schedule and sale delay recalculate immediately",
+    "Strategies retain inactive assumptions and combined scenario flags sale before first rent",
+    "Saved calendar reloads with actual persisted values and read-only preview has no writes",
+    "New authenticated connection restores the calendar in English on a mobile viewport",
+    "Reader can inspect the calendar while strategy, dates and durations remain disabled"
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "projectId": "eb11a228-dad3-4e8b-9609-541c63981ac6",
+  "mobile": "Chromium 390px touch emulation",
+  "auth": "Real local password Auth and PostgREST"
+}

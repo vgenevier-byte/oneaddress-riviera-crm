@@ -77,6 +77,10 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   const text = (key: GuidedKey) => readable[key];
   const amount = (key: GuidedKey) => { const value = currentGuidedValue(data,key); return typeof value === "number" ? String(value) : key in deriveGuidedProperty(data).values ? "" : numericHypothesis(data[key as FonciereField] || ""); };
   const compositeAmount = (key: GuidedKey) => { const value = currentGuidedValue(data,key); return value && !Array.isArray(value) && typeof value === "object" && typeof value.amount === "number" ? String(value.amount) : key in deriveGuidedProperty(data).values ? "" : numericHypothesis(data[key as FonciereField] || ""); };
+  const strategy = currentGuidedValue(data, "personalStrategy");
+  const legacyStrategy = !Object.hasOwn(deriveGuidedProperty(data).values, "personalStrategy");
+  const saleActive = legacyStrategy || strategy === "resale" || strategy === "rental_then_resale";
+  const rentalActive = legacyStrategy || strategy === "rental" || strategy === "rental_then_resale";
   set("project", data.name); set("ref", data.agencyReference); set("address", [data.propertyAddress, [data.postalCode, data.city].filter(Boolean).join(" ")].filter(Boolean).join(", "));
   const address = propertyAddressDetails(data);
   if (address) { set("address", address.formattedAddress); result.addressDetails = normalizeAddressValue(address, result.state.address); }
@@ -92,14 +96,14 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   set("propertyWarnings", (["pointsToVerify","diagnostics","charges","constraints"] as GuidedKey[]).filter(key=>text(key)).map(key=>text(key)).join("\n"));
   set("environment", [data.location, text("locationPrecision"), text("pointsOfInterest")].filter(Boolean).join(" · "));
   set("source", [data.agencyName, data.agencyReference, data.provenance.map(item => item.filename).join(", ")].filter(Boolean).join(" · "));
-  set("works", compositeAmount("worksHypothesis")); set("resale", compositeAmount("resaleHypothesis"));
+  set("works", compositeAmount("worksHypothesis")); set("resale", saleActive ? compositeAmount("resaleHypothesis") : "");
   set("monthly", ""); set("weekly", ""); set("rentedMonths", ""); set("weeks", "");
   const rent = currentGuidedValue(data,"rentalHypothesis") as GuidedComposite | undefined;
-  if (rent && !Array.isArray(rent) && typeof rent === "object" && typeof rent.amount === "number") {
+  if (rentalActive && rent && !Array.isArray(rent) && typeof rent === "object" && typeof rent.amount === "number") {
     if (rent.period === "month") { set("monthly", String(rent.amount)); set("rentalMode", "annual"); if (typeof rent.occupiedUnits === "number") set("rentedMonths", String(rent.occupiedUnits)); }
     if (rent.period === "week") { set("weekly", String(rent.amount)); set("rentalMode", "seasonal"); if (typeof rent.occupiedUnits === "number") set("weeks", String(rent.occupiedUnits)); }
   }
-  set("decisionNotes", [data.notes, ...(["worksHypothesis","resaleHypothesis","rentalHypothesis"] as GuidedKey[]).filter(key=>text(key)).map(key=>`Hypothèse personnelle (${key === "worksHypothesis" ? "travaux" : key === "resaleHypothesis" ? "revente" : "location"}) : ${text(key)}`)].filter(Boolean).join("\n"));
+  set("decisionNotes", [data.notes, ...(["worksHypothesis","resaleHypothesis","rentalHypothesis"] as GuidedKey[]).filter(key=>text(key) && (key !== "resaleHypothesis" || saleActive) && (key !== "rentalHypothesis" || rentalActive)).map(key=>`Hypothèse personnelle (${key === "worksHypothesis" ? "travaux" : key === "resaleHypothesis" ? "revente" : "location"}) : ${text(key)}`)].filter(Boolean).join("\n"));
   const fullText = Object.fromEntries(FONCIERE_FIELDS.filter(key => !["agentContactId","agencyContactId"].includes(key)).map(key => [key, data[key]]));
   result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedState: structuredClone(result.state), ...(data.propertyAddressDetails ? { propertyAddressDetails: structuredClone(data.propertyAddressDetails) } : {}), ...(data.agencyAddressDetails ? { agencyAddressDetails: structuredClone(data.agencyAddressDetails) } : {}) } as unknown as import("../izord/model").JsonValue };
   if (source) result.importMeta.fonciereSource = { id: source.id, revision: source.revision, capturedAt: new Date().toISOString() };

@@ -1,0 +1,133 @@
+{
+  "slides": 3,
+  "notes": 3,
+  "geometry": [
+    {
+      "x": 44,
+      "y": 28,
+      "w": 872,
+      "h": 42,
+      "text": "Calendrier prévisionnel du projet"
+    },
+    {
+      "x": 44,
+      "y": 88,
+      "w": 350,
+      "h": 35,
+      "text": "Stratégie personnelle"
+    },
+    {
+      "x": 410,
+      "y": 88,
+      "w": 506,
+      "h": 35,
+      "text": "Location puis revente"
+    },
+    {
+      "x": 44,
+      "y": 126,
+      "w": 350,
+      "h": 35,
+      "text": "Début prévisionnel des travaux"
+    },
+    {
+      "x": 410,
+      "y": 126,
+      "w": 506,
+      "h": 35,
+      "text": "31/01/2028"
+    },
+    {
+      "x": 44,
+      "y": 164,
+      "w": 350,
+      "h": 35,
+      "text": "Durée prévisionnelle des travaux"
+    },
+    {
+      "x": 410,
+      "y": 164,
+      "w": 506,
+      "h": 35,
+      "text": "4 mois"
+    },
+    {
+      "x": 44,
+      "y": 202,
+      "w": 350,
+      "h": 35,
+      "text": "Fin prévisionnelle / disponibilité après travaux"
+    },
+    {
+      "x": 410,
+      "y": 202,
+      "w": 506,
+      "h": 35,
+      "text": "31/05/2028"
+    },
+    {
+      "x": 44,
+      "y": 240,
+      "w": 350,
+      "h": 35,
+      "text": "Premier loyer prévisionnel"
+    },
+    {
+      "x": 410,
+      "y": 240,
+      "w": 506,
+      "h": 35,
+      "text": "30/06/2028"
+    },
+    {
+      "x": 44,
+      "y": 278,
+      "w": 350,
+      "h": 35,
+      "text": "Encaissement prévisionnel de la vente"
+    },
+    {
+      "x": 410,
+      "y": 278,
+      "w": 506,
+      "h": 35,
+      "text": "30/11/2028"
+    },
+    {
+      "x": 44,
+      "y": 316,
+      "w": 350,
+      "h": 35,
+      "text": "Premiers encaissements prévisionnels"
+    },
+    {
+      "x": 410,
+      "y": 316,
+      "w": 506,
+      "h": 35,
+      "text": "30/06/2028"
+    },
+    {
+      "x": 44,
+      "y": 354,
+      "w": 350,
+      "h": 35,
+      "text": "Délai cumulé depuis le début des travaux jusqu’aux premiers encaissements"
+    },
+    {
+      "x": 410,
+      "y": 354,
+      "w": 506,
+      "h": 35,
+      "text": "5 mois"
+    },
+    {
+      "x": 44,
+      "y": 454,
+      "w": 872,
+      "h": 66,
+      "text": "Calcul en mois calendaires, à chaque étape : si le jour n’existe pas dans le mois d’arrivée, le dernier jour de ce mois est retenu (31 janvier + 1 mois = 28 ou 29 février). Les dates sont civiles, sans effet de fuseau horaire. Les échéances restent des hypothèses, sans garantie de rentabilité ni de récupération de l’investissement."
+    }
+  ],
+  "privateMarkerOccurrences": 0
+}

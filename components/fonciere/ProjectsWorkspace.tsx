@@ -20,6 +20,7 @@ import { claimFonciereDraft, confirmFonciereDraft, markFonciereDraftAttempted, F
 import { readFonciereLocalDraft, saveFonciereLocalDraft, deleteFonciereLocalDraft } from "@/lib/fonciere/draftRecovery";
 import { searchProjects } from "@/lib/fonciere/projectSearch";
 import ProjectDriveSync from "./ProjectDriveSync";
+import ProjectCalendarSummary from "./ProjectCalendarSummary";
 import ProjectArbitrage, { ARBITRAGE_LABELS } from "./ProjectArbitrage";
 import { createArbitrageRepository, type ArbitrationState } from "@/lib/fonciere/arbitrage";
 import styles from "./ProjectsWorkspace.module.css";
@@ -31,7 +32,7 @@ import { AddressMapLink } from "@/components/address/AddressMapLink";
 import { propertyAddressDetails, propertyAddressText } from "@/lib/fonciere/address";
 import GuidedProjectField, { type GuidedFieldSpec } from "./GuidedProjectField";
 import { sortSelectOptions } from "@/lib/selectOptions";
-import { GUIDED_FIELD_DEFINITIONS, currentGuidedValue, guidedReadableFields, isGuidedFieldApplicable, readGuidedField, reconfirmGuidedField, suggestedFonciereName, type GuidedKey } from "@/lib/fonciere/guided";
+import { GUIDED_FIELD_DEFINITIONS, currentGuidedValue, formatGuidedValue, guidedReadableFields, isGuidedFieldApplicable, readGuidedField, reconfirmGuidedField, suggestedFonciereName, type GuidedKey } from "@/lib/fonciere/guided";
 
 type DocumentCategory = "agency" | "plans" | "photos" | "other";
 const documentCategoryLabels: Record<DocumentCategory, [string, string]> = { agency: ["Documents agence", "Agency documents"], plans: ["Plans", "Plans"], photos: ["Photos", "Photos"], other: ["Autres documents", "Other documents"] };
@@ -80,6 +81,7 @@ const sections: Section[] = [
     { key: "diagnostics", fr: "Diagnostics mentionnés", en: "Mentioned diagnostic reports", long: true, wide: true }, { key: "charges", fr: "Charges et périodicité", en: "Charges and frequency", long: true, wide: true }, { key: "constraints", fr: "Contraintes mentionnées", en: "Mentioned constraints", long: true, wide: true },
   ] },
   { id: "hypotheses", fr: "Hypothèses personnelles", en: "Personal assumptions", noteFr: "Estimations et hypothèses de travail à renseigner personnellement. Elles restent distinctes des informations issues de la fiche d’agence.", noteEn: "Estimates and working assumptions to enter personally. These remain separate from the agency brochure information.", fields: [
+    { key: "personalStrategy", fr: "Stratégie personnelle du projet", en: "Personal project strategy", wide: true },
     { key: "worksHypothesis", fr: "Travaux envisagés / budget estimé", en: "Planned works / estimated budget", long: true, wide: true },
     { key: "resaleHypothesis", fr: "Hypothèses de revente", en: "Resale assumptions", long: true, wide: true }, { key: "rentalHypothesis", fr: "Hypothèses de location", en: "Rental assumptions", long: true, wide: true },
     { key: "notes", fr: "Notes personnelles", en: "Personal notes", long: true, wide: true },
@@ -307,7 +309,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     if (!data || !writable || busy || review) return;
     if (contactPending) { setError(t("Terminez ou annulez la création du contact avant d’enregistrer le projet. Les deux brouillons sont conservés.", "Finish or cancel contact creation before saving the project. Both drafts are retained.")); document.querySelector<HTMLElement>('[aria-label="Création de contact CRM"], [aria-label="Create CRM contact"]')?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     const invalid = document.querySelector<HTMLElement>('[data-fonciere-projects] [aria-invalid="true"]');
-    if (invalid) { setError(t("Corrigez le nombre signalé avant d’enregistrer. Le brouillon est conservé.", "Correct the highlighted number before saving. Your draft is retained.")); invalid.focus(); return; }
+    if (invalid) { setError(t("Corrigez la valeur signalée avant d’enregistrer. Le brouillon est conservé.", "Correct the highlighted value before saving. Your draft is retained.")); invalid.focus(); return; }
     if (!data.name.trim()) { setActiveSection("identity"); setError(t("Le nom du projet est obligatoire. Les autres champs peuvent rester vides.", "A project name is required. Other fields can remain empty.")); document.getElementById("fonciere-name")?.focus(); return; }
     setBusy(true); setError(""); setNotice(t("Enregistrement des informations et des documents…", "Saving information and documents…"));
     let op: Awaited<ReturnType<typeof operation>> | undefined;
@@ -415,10 +417,24 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     if (key === "seaExtent") return hasSelections("view", ["sea"]);
     return true;
   }
+  function scenarioFieldActive(key: FieldKey) {
+    const strategy = data ? currentGuidedValue(data, "personalStrategy") : null;
+    if (key === "resaleHypothesis") return strategy === "resale" || strategy === "rental_then_resale";
+    if (key === "rentalHypothesis") return strategy === "rental" || strategy === "rental_then_resale";
+    return true;
+  }
+  function retainedScenarioFields() {
+    if (!data) return [];
+    return sections.find(section => section.id === "hypotheses")!.fields.filter(field => !scenarioFieldActive(field.key) && (readGuidedField(data, field.key as GuidedKey) != null || data[field.key as FonciereField] || data.guided.details[field.key as GuidedKey]));
+  }
+  function retainedScenarioText(key: GuidedKey) {
+    if (!data) return "";
+    return [formatGuidedValue(key, readGuidedField(data, key), lang), data[key as FonciereField], data.guided.details[key]].filter(Boolean).join("\n");
+  }
   function isVisibleField(key: FieldKey) { return fieldContextApplies(key) && !(data && key in GUIDED_FIELD_DEFINITIONS && data.guided.inactive.includes(key as GuidedKey)); }
   function retainedFields(section: Section) {
     if (!data) return [];
-    return section.fields.filter(field => field.key in GUIDED_FIELD_DEFINITIONS && !isVisibleField(field.key) && (readGuidedField(data, field.key as GuidedKey) !== undefined && readGuidedField(data, field.key as GuidedKey) !== null || typeof data[field.key as FonciereField] === "string" && Boolean(data[field.key as FonciereField]) || Boolean(data.guided.details[field.key as GuidedKey])));
+    return section.fields.filter(field => scenarioFieldActive(field.key) && field.key in GUIDED_FIELD_DEFINITIONS && !isVisibleField(field.key) && (readGuidedField(data, field.key as GuidedKey) !== undefined && readGuidedField(data, field.key as GuidedKey) !== null || typeof data[field.key as FonciereField] === "string" && Boolean(data[field.key as FonciereField]) || Boolean(data.guided.details[field.key as GuidedKey])));
   }
   function suggestionsFor(key: FieldKey): string[] {
     if (!["propertyAddress", "city", "postalCode"].includes(key)) return [];
@@ -452,7 +468,8 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       <div className={styles.recordLayout}>
         <nav className={styles.sectionNav} aria-label={t("Sections de la fiche projet", "Project record sections")}>{sections.map((section, index) => <a key={section.id} href={`#fonciere-section-${section.id}`} aria-current={activeSection === section.id ? "location" : undefined} onClick={() => setActiveSection(section.id)}><span>{String(index + 1).padStart(2, "0")}</span>{t(section.fr, section.en)}</a>)}<a href="#fonciere-documents" onClick={() => setActiveSection("documents")} aria-current={activeSection === "documents" ? "location" : undefined}><span>07</span>{t("Documents et visuels", "Documents and visuals")}</a><a href="#fonciere-arbitrage" onClick={() => setActiveSection("arbitrage")} aria-current={activeSection === "arbitrage" ? "location" : undefined}><span>08</span>{t("— Arbitrage", "— Arbitration")}</a></nav>
         <div className={styles.sections}>
-          {sections.map((section, index) => <section key={section.id} id={`fonciere-section-${section.id}`} className={`${styles.section} ${section.id === "hypotheses" ? styles.assumptions : ""}`}><header className={styles.sectionHeading}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{t(section.fr, section.en)}</h3>{section.noteFr && <p>{t(section.noteFr, section.noteEn || "")}</p>}</div></header><fieldset disabled={!writable || busy || importPending} className={styles.fieldset}><div className={styles.fieldGrid}>{section.id === "identity" && <label className={styles.wide}><span>{t("Référence projet", "Project reference")}</span><input readOnly aria-readonly="true" value={loaded?.project.project_reference || t("Numéro attribué à l’enregistrement", "Number assigned on save")} /></label>}{section.fields.filter(field => section.id !== "agency" && isVisibleField(field.key)).map(field => <GuidedProjectField key={field.key} field={field} data={data} onChange={edit} lang={lang} disabled={!writable || busy || importPending} suggestions={suggestionsFor(field.key)} documents={documentOptions} />)}</div>{section.id === "identity" && !data.name.trim() && suggestedName && <div className={styles.suggestedName}><span>{t("Nom suggéré", "Suggested name")} : {suggestedName}</span><button type="button" onClick={() => editField("name", suggestedName)}>{t("Utiliser ce nom", "Use this name")}</button></div>}</fieldset>
+          {sections.map((section, index) => <section key={section.id} id={`fonciere-section-${section.id}`} className={`${styles.section} ${section.id === "hypotheses" ? styles.assumptions : ""}`}><header className={styles.sectionHeading}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{t(section.fr, section.en)}</h3>{section.noteFr && <p>{t(section.noteFr, section.noteEn || "")}</p>}</div></header><fieldset disabled={!writable || busy || importPending} className={styles.fieldset}><div className={styles.fieldGrid}>{section.id === "identity" && <label className={styles.wide}><span>{t("Référence projet", "Project reference")}</span><input readOnly aria-readonly="true" value={loaded?.project.project_reference || t("Numéro attribué à l’enregistrement", "Number assigned on save")} /></label>}{section.fields.filter(field => section.id !== "agency" && scenarioFieldActive(field.key) && isVisibleField(field.key)).map(field => <GuidedProjectField key={field.key} field={field} data={data} onChange={edit} lang={lang} disabled={!writable || busy || importPending} suggestions={suggestionsFor(field.key)} documents={documentOptions} />)}</div>{section.id === "identity" && !data.name.trim() && suggestedName && <div className={styles.suggestedName}><span>{t("Nom suggéré", "Suggested name")} : {suggestedName}</span><button type="button" onClick={() => editField("name", suggestedName)}>{t("Utiliser ce nom", "Use this name")}</button></div>}</fieldset>
+            {section.id === "hypotheses" && <><ProjectCalendarSummary data={data} lang={lang} />{retainedScenarioFields().length > 0 && <details className={styles.contextNote} data-retained-scenarios><summary>{t("Hypothèses conservées des autres scénarios", "Retained assumptions from other scenarios")} ({retainedScenarioFields().length})</summary><p>{t("Ces valeurs sont conservées. Sélectionnez la stratégie correspondante pour les consulter et les modifier dans le formulaire ; elles ne servent pas au calendrier du scénario actif.", "These values are retained. Select the corresponding strategy to view and edit them in the form; they are excluded from the active scenario calendar.")}</p><dl className={styles.retainedScenarioList}>{retainedScenarioFields().map(field => <div key={field.key}><dt>{t(field.fr, field.en)}</dt><dd>{retainedScenarioText(field.key as GuidedKey) || t("À renseigner", "To complete")}</dd></div>)}</dl></details>}</>}
             {retainedFields(section).length > 0 && <details className={styles.contextNote} data-retained-fields><summary>{t("Informations conservées à revoir", "Retained information to review")} ({retainedFields(section).length})</summary><p>{t("Ces informations restent enregistrées. Elles ne sont pas utilisées comme caractéristiques actuelles tant que leur contexte n’est pas confirmé. Revenez au type concerné pour les confirmer, ou consultez-les ici.", "This information remains saved. It is excluded from current property characteristics until its context is confirmed. Return to the relevant property type to confirm it, or review it here.")}</p><fieldset disabled={!writable || busy || importPending}><div className={styles.fieldGrid}>{retainedFields(section).map(field => <div key={field.key} className={field.wide ? styles.wide : ""}><GuidedProjectField field={field} data={data} onChange={next => { const key = field.key as GuidedKey; edit({ ...next, guided: { ...next.guided, inactive: [...new Set([...next.guided.inactive, key])] } }); }} lang={lang} disabled={!writable || busy || importPending} documents={documentOptions} idPrefix="fonciere-retained" />{fieldContextApplies(field.key) && <button type="button" className={styles.reconfirm} onClick={() => edit(reconfirmGuidedField(data, field.key as GuidedKey))}>{t("Confirmer pour ce type de bien", "Confirm for this property type")}</button>}</div>)}</div></fieldset></details>}
             {section.id === "agency" && <ProjectContacts key={loaded?.project.id || "new"} data={data} onChange={edit} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setContactPending} onCreateContact={intent => {
               if (!writable || busy || importPending || !onCreateContact) return false;

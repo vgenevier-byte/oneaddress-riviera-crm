@@ -1,0 +1,19 @@
+{
+  "passed": 9,
+  "checks": [
+    "Approved bank snapshot freezes calendar before a later saved source edit",
+    "Presentation reimport persists a new project with the entire structured calendar and legacy timing",
+    "A retried bank preparation keeps a manually edited deck after new calendar approvals",
+    "Actual browser preview displays the approved calendar with unclipped shared slide geometry",
+    "Actual JSON export retains the captured calendar through JSON reimport",
+    "Actual PowerPoint export includes editable calendar, exact approved dates, speaker notes and valid slide relationships",
+    "A real photo appendix and calendar coexist as separate editable slides with correct metadata",
+    "Incomplete calendar preview preserves explicit missing-field messages without clipped text",
+    "Historical presentation without new calendar fields keeps its original slide preview count"
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "services": "Real local Auth/PostgreSQL/PostgREST/Storage and Chromium browser exports",
+  "rendering": "Actual browser preview plus generated editable PPTX XML/relationships/geometry; PowerPoint desktop and LibreOffice not used",
+  "productionWrites": 0
+}
