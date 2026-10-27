@@ -67,6 +67,7 @@ try {
  const admin=users.admin.client;
  const businessTables=Object.keys(fingerprints);
  if(!(await sql.query("select to_regclass('app_private.fonciere_drive_jobs') t")).rows[0].t)await sql.query(readFileSync(join('supabase/migrations',migration),'utf8'));
+ for(const followup of readdirSync('supabase/migrations').filter(name=>name>migration&&name.endsWith('_fonciere_drive_report_projection.sql')).sort())await sql.query(readFileSync(join('supabase/migrations',followup),'utf8'));
  for(let attempt=0;attempt<30;attempt++){const ready=await service.rpc('fonciere_drive_worker',{p_operation:'get_config'});if(!ready.error)break;if(ready.error.code!=='PGRST202')throw new Error(ready.error.message);await new Promise(resolve=>setTimeout(resolve,100));}
  const numbered=(await sql.query('select * from fonciere_projects order by project_number')).rows;
  assert.deepEqual(numbered.map(p=>p.id),before.map(p=>p.id));assert.deepEqual(numbered.map(p=>p.project_reference),['PRJ-000001','PRJ-000002','PRJ-000003']);
@@ -152,6 +153,9 @@ try {
  await sql.query("select setval('app_private.fonciere_project_number_seq',1000000,false)");
  const seven=await ok(admin.rpc('fonciere_create_project',{p_creation_key:randomUUID(),p_payload:payload('Projet sept chiffres'),p_contact:'',p_agency_contact:''}));assert.equal((await ok(admin.from('fonciere_projects').select('project_reference').eq('id',seven).single())).project_reference,'PRJ-1000000');
  checks.push('Reference expands beyond six digits without truncation or sequence wrap');
+ const populatedReport=await worker('report');assert.equal(populatedReport.references,Number((await sql.query('select count(*) from fonciere_projects')).rows[0].count));assert.equal(populatedReport.projects.length,populatedReport.references);
+ await sql.query('begin');try{await sql.query('truncate public.fonciere_projects cascade');const emptyReport=(await sql.query("select app_private.fonciere_drive_worker('report') r")).rows[0].r;assert.equal(emptyReport.references,0);assert.deepEqual(emptyReport.projects,[]);assert.deepEqual(emptyReport.jobs,[]);assert.deepEqual(emptyReport.errors,[]);}finally{await sql.query('rollback');}
+ assert.equal((await worker('report')).references,populatedReport.references);checks.push('Service report works with populated and transactionally empty project sets; rollback preserves all local fixture rows');
  await sql.query("update crm_module_grants set level='contribute' where user_id=$1 and module='fonciere'",[users.writer.id]);
  fixture={statusPath,users:Object.fromEntries(Object.entries(users).map(([k,{client,...rest}])=>[k,rest])),projects:{assigned:first.id,archived:historical[2],replayed:ids[0]},assets};
  writeFileSync(join(dirname(statusPath),'fonciere-drive-fixture.private.json'),JSON.stringify(fixture),{mode:0o600});
