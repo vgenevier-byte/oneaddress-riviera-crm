@@ -1,0 +1,59 @@
+{
+  "passed": 3,
+  "checks": [
+    "fr-two-pages",
+    "en-two-pages",
+    "en-three-pages-public-resume"
+  ],
+  "cases": [
+    {
+      "key": "fr-two-pages",
+      "id": "372c7834-635a-4bb0-a2f0-b171436029f7",
+      "lang": "fr",
+      "pages": 2,
+      "asking": "",
+      "area": "120",
+      "privateMarker": "",
+      "filename": "agency-fr-two-pages-fictitious.pdf",
+      "sourceDocuments": 1,
+      "provenance": {
+        "page": 1,
+        "extract": "PAGE 1\nBaisses de prix annoncées :\nPAGE 2\n80000 EUR"
+      }
+    },
+    {
+      "key": "en-two-pages",
+      "id": "440e50f4-c5a9-496c-9c69-f51d5c2fb52b",
+      "lang": "en",
+      "pages": 2,
+      "asking": "",
+      "area": "120",
+      "privateMarker": "PRIVATE_EN_PAGES_IMPORT_4321",
+      "filename": "agency-en-two-pages-fictitious.pdf",
+      "sourceDocuments": 1,
+      "provenance": {
+        "page": 1,
+        "extract": "PAGE 1\nReported price reductions :\nPAGE 2\n80000 EUR\nPRIVATE_EN_PAGES_IMPORT_4321"
+      }
+    },
+    {
+      "key": "en-three-pages-public-resume",
+      "id": "8ca97996-c93b-432b-8762-51f216b0c09b",
+      "lang": "en",
+      "pages": 3,
+      "asking": "900000",
+      "area": "120",
+      "privateMarker": "PRIVATE_THREE_PAGES_IMPORT_4321",
+      "filename": "agency-en-three-pages-public-resume-fictitious.pdf",
+      "sourceDocuments": 1,
+      "provenance": {
+        "page": 1,
+        "extract": "PAGE 1\nReported price reductions :\nPAGE 2\n80000 EUR\nPRIVATE_THREE_PAGES_IMPORT_4321 first continuation\nPAGE 3\nPRIVATE_THREE_PAGES_IMPORT_4321 final continuation"
+      }
+    }
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "services": "Actual final browser PDF extraction/review, local Auth/RPC/PostgreSQL/Storage and fresh Auth",
+  "productionWrites": 0
+}

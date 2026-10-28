@@ -1,4 +1,5 @@
 import type { AgencyReport } from "../izord/agency";
+import { isPublicAgencyHeading, ownerContextHeading } from "../izord/agency-privacy";
 import { isCivilDate } from "./calendarDates";
 import { validateOwnerContext, type OwnerContext, type OwnerImportEvidence } from "./owners";
 
@@ -21,17 +22,27 @@ export function proposeOwnerImport(report: Pick<AgencyReport, "rawText" | "filen
   const sourceLines = report.rawText.split(/\r?\n/);
   for (let at = 0; at < sourceLines.length; at++) {
     const rawLine = sourceLines[at], pageMatch = rawLine.match(/^PAGE\s+(\d+)\s*$/i); if (pageMatch) { page = Number(pageMatch[1]); continue; }
-    let line = rawLine.trim();
-    const headingOnly = line.match(/^([^:]{3,90})\s*:\s*$/);
-    if (headingOnly) {
-      const chunks: string[] = [];
-      for (let next = at + 1; next < sourceLines.length; next++) {
-        const continuation = sourceLines[next].trim();
-        if (/^PAGE\s+\d+\s*$/i.test(continuation) || /^[^:]{3,90}\s*:/.test(continuation)) break;
-        if (continuation) chunks.push(continuation);
-      }
-      if (chunks.length) line = `${headingOnly[1]} : ${chunks.join("\n")}`;
+    const heading = rawLine.trim();
+    if (!ownerContextHeading.test(heading)) continue;
+    const labelled = heading.match(/^([^:]{3,90})\s*:\s*([\s\S]*)$/);
+    if (!labelled) continue;
+    const chunks = labelled[2].trim() ? [labelled[2].trim()] : [];
+    const span = [heading], pendingPageMarkers: string[] = [];
+    let spansPages = false;
+    for (let next = at + 1; next < sourceLines.length; next++) {
+      const continuation = sourceLines[next].trim();
+      if (/^PAGE\s+\d+\s*$/i.test(continuation)) { pendingPageMarkers.push(continuation); continue; }
+      if (/^[^:]{3,90}\s*:/.test(continuation) || isPublicAgencyHeading(continuation) || ownerContextHeading.test(continuation)) break;
+      if (!continuation) continue;
+      if (pendingPageMarkers.length) { spansPages = true; span.push(...pendingPageMarkers); pendingPageMarkers.length = 0; }
+      chunks.push(continuation); span.push(continuation);
     }
+    if (!chunks.length) continue;
+    const line = `${labelled[1]} : ${chunks.join("\n")}`;
+    const extract = (spansPages && page !== null ? [`PAGE ${page}`, ...span] : span).join("\n");
+    // Never accept a truncated cross-page claim or lose its source pages.
+    // Oversized claims stay in the attached original for manual review.
+    if (line.length > 2000 || extract.length > 2000) continue;
     const match = line.match(/^([^:]{3,90})\s*:\s*([\s\S]{1,2000})$/); if (!match) continue;
     const key = normalize(match[1]), text = match[2].trim(), valueText = normalize(text);
     let field: OwnerImportField | undefined, value: string | number | string[] | undefined;
@@ -57,7 +68,7 @@ export function proposeOwnerImport(report: Pick<AgencyReport, "rawText" | "filen
     // reviewed text is appended; it never replaces an existing identification note.
     if (field === "unlinkedOwners" && typeof existing === "string" && existing.split("\n").includes(String(value))) continue;
     if (field !== "unlinkedOwners" && proposals.some(item=>item.field===field)) continue;
-    proposals.push({ id: `${field}:${proposals.length}`, field, label: labels[field], value, display: typeof value === "number" ? String(value) : text, current: empty(existing) ? "" : typeof existing === "string" ? existing : JSON.stringify(existing), evidence: { field: `ownerContext.${field}`, filename: report.filename.slice(0,240), page, extract: line.slice(0,2000), importedAt } });
+    proposals.push({ id: `${field}:${proposals.length}`, field, label: labels[field], value, display: typeof value === "number" ? String(value) : text, current: empty(existing) ? "" : typeof existing === "string" ? existing : JSON.stringify(existing), evidence: { field: `ownerContext.${field}`, filename: report.filename.slice(0,240), page, extract, importedAt } });
   }
   return proposals;
 }

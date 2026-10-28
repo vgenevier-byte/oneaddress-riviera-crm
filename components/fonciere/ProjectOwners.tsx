@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SearchableBusinessContactPicker from "@/components/SearchableBusinessContactPicker";
 import { SearchableSelect } from "@/components/search/SearchableSelect";
 import { isCancelled, useScopedOperations } from "@/lib/access/operations";
@@ -16,6 +16,7 @@ import styles from "./ProjectOwners.module.css";
 
 type Props = { data: FonciereData; onChange: (data: FonciereData) => void; lang: "fr" | "en"; canReadContacts: boolean; canWriteContacts: boolean; disabled?: boolean; accessSignal?: AbortSignal; documents: { id: string; label: string }[]; onOpenContact?: (id: string) => void; onPendingChange?: (pending: boolean) => void; onCreateContact?: (intent: ContactCreateIntent) => boolean; contactReturn?: ProjectContactReturn; onContactReturnHandled?: () => void };
 type LinkRole = "owner" | "representative";
+type PendingRepresentative = { contact: ProjectContact; ownerChoice: string | null };
 const COUNTRY_CODES = "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW".split(" ");
 const asPicker = (row: ProjectContact): Contact => ({ ...row, kind: "Client", budget: 0, source: "", notes: "", createdAt: "" });
 const asProject = (row: Contact): ProjectContact => ({ ...row, firstName: row.firstName || "", companyName: row.companyName || "" });
@@ -55,19 +56,32 @@ function InformationFields({ value, onChange, lang, disabled, linked, canReadCon
 }
 
 export default function ProjectOwners({ data, onChange, lang, canReadContacts, canWriteContacts, disabled = false, accessSignal, documents, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
-  const context = data.ownerContext, begin = useScopedOperations("fonciere"), t = (fr: string, en: string) => lang === "fr" ? fr : en;
+  const context = data.ownerContext, begin = useScopedOperations("fonciere"), t = useCallback((fr: string, en: string) => lang === "fr" ? fr : en, [lang]);
   const [query, setQuery] = useState(""), [rows, setRows] = useState<ProjectContact[]>([]), [loading, setLoading] = useState(false), [error, setError] = useState("");
   const [linked, setLinked] = useState<Record<string, ProjectContact>>({}), [linkError, setLinkError] = useState("");
   const [role, setRole] = useState<LinkRole>("owner"), [representedOwner, setRepresentedOwner] = useState("");
+  const [representedOwnerNeedsReview, setRepresentedOwnerNeedsReview] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [pendingRepresentative, setPendingRepresentative] = useState<PendingRepresentative | null>(null);
+  const representativePending = Boolean(pendingRepresentative);
   const [viewedAt] = useState(() => {
     const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map(part => [part.type, part.value]));
     return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
   });
-  const pending = useRef<{ id: string; role: LinkRole; ownerId: string } | null>(null);
+  const pending = useRef<{ id: string; role: LinkRole; ownerId: string; requiresOwnerSelection: boolean } | null>(null);
+  // A disappeared choice is transient UI state, not a saved orphan relation.
+  // Reset it locally while remembering that the next new link needs an explicit
+  // replacement choice. This does not write to the project or erase old links.
+  if (representedOwner && !context.owners.some(owner => owner.contactId === representedOwner)) {
+    setRepresentedOwner("");
+    setRepresentedOwnerNeedsReview(true);
+  }
+  if (pendingRepresentative?.ownerChoice && !context.owners.some(owner => owner.contactId === pendingRepresentative.ownerChoice)) {
+    setPendingRepresentative({ ...pendingRepresentative, ownerChoice: null });
+  }
   const latest = useRef({ data, onChange, disabled, canReadContacts, accessSignal });
   useLayoutEffect(() => { latest.current = { data, onChange, disabled, canReadContacts, accessSignal }; }, [data, onChange, disabled, canReadContacts, accessSignal]);
-  useEffect(() => { onPendingChange?.(creating); return () => onPendingChange?.(false); }, [creating, onPendingChange]);
+  useEffect(() => { onPendingChange?.(creating || representativePending); return () => onPendingChange?.(false); }, [creating, representativePending, onPendingChange]);
   const linkedIds = [...new Set([...context.owners.map(owner => owner.contactId), ...context.representatives.map(person => person.contactId), data.agentContactId, data.agencyContactId, context.sale.information.contactId, ...context.owners.flatMap(owner => owner.person?.information.contactId || [])].filter(Boolean))].sort().join(",");
   useEffect(() => {
     const local = new AbortController();
@@ -93,31 +107,52 @@ export default function ProjectOwners({ data, onChange, lang, canReadContacts, c
   }, [query, canReadContacts, accessSignal, begin, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function change(next: OwnerContext) { if (!disabled && !creating && !accessSignal?.aborted) onChange({ ...data, ownerContext: next }); }
-  function addContact(contact: ProjectContact, linkRole: LinkRole, ownerId = "") {
+  const addContact = useCallback((contact: ProjectContact, linkRole: LinkRole, ownerId = "", requiresOwnerSelection = false) => {
     const current = latest.current;
     if (current.disabled || !current.canReadContacts || current.accessSignal?.aborted) return false;
     const c = current.data.ownerContext;
-    if (linkRole === "owner" && c.owners.some(owner => owner.contactId === contact.id) || linkRole === "representative" && c.representatives.some(person => person.contactId === contact.id)) return false;
+    if (linkRole === "owner" && c.owners.some(owner => owner.contactId === contact.id) || linkRole === "representative" && c.representatives.some(person => person.contactId === contact.id)) {
+      if (linkRole === "representative") setPendingRepresentative(null);
+      setError(t("Ce contact est déjà lié avec ce rôle. Aucun doublon n’a été ajouté.", "This contact is already linked with this role. No duplicate was added."));
+      return false;
+    }
     if (linkRole === "representative" && contact.entityType === "company") return false;
     setLinked(previous => ({ ...previous, [contact.id]: contact }));
+    // Validate the transient choice against the current draft, including after
+    // a round-trip through the complete Contacts form. Old saved orphan links
+    // remain untouched; a new link must never inherit their stale owner ID.
+    if (linkRole === "representative" && (requiresOwnerSelection || ownerId && !c.owners.some(owner => owner.contactId === ownerId))) {
+      setPendingRepresentative({ contact, ownerChoice: null });
+      setError(t("Le propriétaire choisi n’est plus lié au projet. Le contact est conservé ; choisissez à nouveau sa représentation avant de le lier.", "The selected owner is no longer linked to the project. The contact is retained; choose its representation again before linking it."));
+      setQuery(""); setRows([]);
+      return false;
+    }
+    if (linkRole === "representative") { setPendingRepresentative(null); setRepresentedOwner(ownerId); setRepresentedOwnerNeedsReview(false); }
+    setError("");
     current.onChange({ ...current.data, ownerContext: linkRole === "owner" ? { ...c, owners: [...c.owners, { contactId: contact.id, entityType: contact.entityType === "company" ? "company" : "person", note: "", ...(contact.entityType !== "company" ? { person: createOwnerPerson() } : {}) }] } : { ...c, representatives: [...c.representatives, { contactId: contact.id, ownerContactId: ownerId, role: "" }] } });
     setQuery(""); setRows([]); return true;
-  }
+  }, [t]);
   function prepareCreate(entityType: "person" | "company") {
-    if (!onCreateContact || disabled || !canReadContacts || !canWriteContacts || pending.current || creating) return;
+    if (!onCreateContact || disabled || !canReadContacts || !canWriteContacts || pending.current || creating || role === "representative" && representativePending) return;
     const intent = ownerContactCreateIntent(role, entityType);
-    pending.current = { id: intent.id, role, ownerId: representedOwner };
+    pending.current = { id: intent.id, role, ownerId: representedOwner, requiresOwnerSelection: role === "representative" && representedOwnerNeedsReview };
     if (onCreateContact(intent)) setCreating(true); else pending.current = null;
   }
   useEffect(() => {
     if (!contactReturn || !pending.current || contactReturn.intentId !== pending.current.id) return;
     const timer = window.setTimeout(() => {
       const intent = pending.current; pending.current = null; setCreating(false);
-      if (contactReturn.contact && intent) addContact(asProject(contactReturn.contact), intent.role, intent.ownerId);
+      if (contactReturn.contact && intent) {
+        const contact = asProject(contactReturn.contact);
+        // Retain a successfully created CRM contact before consuming the return,
+        // even if project permissions temporarily prevent admission of the link.
+        if (intent.role === "representative") setPendingRepresentative({ contact, ownerChoice: null });
+        addContact(contact, intent.role, intent.ownerId, intent.requiresOwnerSelection);
+      }
       onContactReturnHandled?.();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [contactReturn, onContactReturnHandled]);
+  }, [contactReturn, onContactReturnHandled, addContact]);
   function updateOwner(index: number, next: OwnerLink) { change({ ...context, owners: context.owners.map((owner, at) => at === index ? next : owner) }); }
   const contactLabel = (id: string) => canReadContacts && linked[id] ? projectContactLabel(linked[id]) : t("Contact lié — indisponible", "Linked contact — unavailable");
   const primaryPeople = [...new Set([...context.owners.filter(owner => owner.entityType === "person").map(owner => owner.contactId), ...context.representatives.map(person => person.contactId), data.agentContactId].filter(Boolean))];
@@ -137,11 +172,13 @@ export default function ProjectOwners({ data, onChange, lang, canReadContacts, c
     {warnings.length > 0 && <ul className={styles.warning} role="status">{warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}
     {canReadContacts ? <div className={styles.linker} data-contact-role={role === "owner" ? "owners" : "representatives"}>
       <div className={styles.grid}><label className={styles.field}><span>{t("Rôle du contact à lier", "Role of contact to link")}</span><select id="fonciere-owner-link-role" disabled={blocked} value={role} onChange={event => { setRole(event.target.value as LinkRole); setQuery(""); setRows([]); }}>{options([["owner", "Propriétaire", "Owner"], ["representative", "Représentant / interlocuteur", "Representative / contact"]])}</select></label>
-      {role === "representative" && <label className={styles.field}><span>{t("Représente le propriétaire", "Represents owner")}</span><select id="fonciere-represented-owner" disabled={blocked} value={representedOwner} onChange={event => setRepresentedOwner(event.target.value)}><option value="">{t("À préciser", "To specify")}</option>{context.owners.map(owner => <option key={owner.contactId} value={owner.contactId}>{contactLabel(owner.contactId)}</option>)}</select></label>}</div>
-      <SearchableBusinessContactPicker value="" queryValue={query} selectedRecord={null} contacts={rows.filter(row => role === "owner" ? !context.owners.some(owner => owner.contactId === row.id) : row.entityType !== "company" && !context.representatives.some(person => person.contactId === row.id)).map(asPicker)} onSelect={row => row ? addContact(asProject(row), role, representedOwner) : false} onQueryChange={value => { setQuery(value); setRows([]); setLoading(false); setError(""); }} searchMode="all" name="ownerContactToAdd" label={role === "owner" ? t("Ajouter un propriétaire identifié du CRM", "Add an identified CRM owner") : t("Ajouter un représentant du CRM", "Add a CRM representative")} disabled={blocked} loading={loading} resultLabel={row => projectContactLabel(asProject(row))} labels={{ placeholder: t("Prénom, nom, entreprise, ville…", "First name, last name, company, city…"), empty: t("Aucun contact correspondant", "No matching contacts"), loading: t("Recherche des contacts autorisés…", "Searching authorized contacts…") }} />
+      {role === "representative" && !pendingRepresentative && <label className={styles.field}><span>{t("Représente le propriétaire", "Represents owner")}</span><select id="fonciere-represented-owner" disabled={blocked} value={representedOwner} onChange={event => { setRepresentedOwner(event.target.value); setRepresentedOwnerNeedsReview(false); }}><option value="">{t("À préciser", "To specify")}</option>{context.owners.map(owner => <option key={owner.contactId} value={owner.contactId}>{contactLabel(owner.contactId)}</option>)}</select></label>}</div>
+      {role === "representative" && representedOwnerNeedsReview && !pendingRepresentative && <p role="status">{t("Le propriétaire précédemment choisi n’est plus lié. Choisissez à nouveau sa représentation ; le prochain contact sera conservé en attente de confirmation si ce choix reste à préciser.", "The previously selected owner is no longer linked. Choose its representation again; the next contact will be retained for confirmation if this is still unspecified.")}</p>}
+      <SearchableBusinessContactPicker value="" queryValue={query} selectedRecord={null} contacts={rows.filter(row => role === "owner" ? !context.owners.some(owner => owner.contactId === row.id) : row.entityType !== "company" && !context.representatives.some(person => person.contactId === row.id)).map(asPicker)} onSelect={row => row ? addContact(asProject(row), role, representedOwner, role === "representative" && representedOwnerNeedsReview) : false} onQueryChange={value => { setQuery(value); setRows([]); setLoading(false); setError(""); }} searchMode="all" name="ownerContactToAdd" label={role === "owner" ? t("Ajouter un propriétaire identifié du CRM", "Add an identified CRM owner") : t("Ajouter un représentant du CRM", "Add a CRM representative")} disabled={blocked || role === "representative" && representativePending} loading={loading} resultLabel={row => projectContactLabel(asProject(row))} labels={{ placeholder: t("Prénom, nom, entreprise, ville…", "First name, last name, company, city…"), empty: t("Aucun contact correspondant", "No matching contacts"), loading: t("Recherche des contacts autorisés…", "Searching authorized contacts…") }} />
       {error && <p className={styles.error} role="alert">{error}</p>}
-      {canWriteContacts && onCreateContact && !disabled && <div className={styles.actions}><button type="button" disabled={creating} onClick={() => prepareCreate("person")}>{role === "owner" ? t("Créer un propriétaire personne", "Create a person owner") : t("Créer un représentant", "Create a representative")}</button>{role === "owner" && <button type="button" disabled={creating} onClick={() => prepareCreate("company")}>{t("Créer une entreprise propriétaire", "Create a company owner")}</button>}</div>}
+      {canWriteContacts && onCreateContact && !disabled && <div className={styles.actions}><button type="button" disabled={creating || role === "representative" && representativePending} onClick={() => prepareCreate("person")}>{role === "owner" ? t("Créer un propriétaire personne", "Create a person owner") : t("Créer un représentant", "Create a representative")}</button>{role === "owner" && <button type="button" disabled={creating} onClick={() => prepareCreate("company")}>{t("Créer une entreprise propriétaire", "Create a company owner")}</button>}</div>}
     </div> : <p>{t("Les liens Contacts sont protégés. Les liens existants sont conservés.", "Contact links are protected. Existing links are retained.")}</p>}
+    {pendingRepresentative && <div className={styles.card} data-pending-representative role="status"><strong>{t("Représentant conservé — choix à confirmer", "Representative retained — confirm selection")}</strong><p>{canReadContacts ? projectContactLabel(pendingRepresentative.contact) : t("Contact CRM conservé", "CRM contact retained")}</p><p>{t("Le contact reste disponible dans Contacts. Aucune nouvelle relation de représentation n’a été ajoutée. Choisissez un propriétaire actuel ou indiquez explicitement que la représentation reste à préciser.", "The contact remains available in Contacts. No new representative relationship was added. Choose a current owner or explicitly indicate that representation is still to be specified.")}</p><label className={styles.field}><span>{t("Propriétaire représenté à sélectionner de nouveau", "Select represented owner again")}</span><select id="fonciere-pending-represented-owner" value={pendingRepresentative.ownerChoice === null ? "__choose" : pendingRepresentative.ownerChoice} disabled={blocked || !canReadContacts} onChange={event => setPendingRepresentative(previous => previous ? { ...previous, ownerChoice: event.target.value } : previous)}><option value="__choose" disabled>{t("Choisissez une option", "Choose an option")}</option><option value="">{t("À préciser — sans propriétaire relié", "To specify — no linked owner")}</option>{context.owners.map(owner => <option key={owner.contactId} value={owner.contactId}>{contactLabel(owner.contactId)}</option>)}</select></label><div className={styles.actions}><button type="button" disabled={blocked || !canReadContacts || pendingRepresentative.ownerChoice === null || Boolean(pendingRepresentative.ownerChoice && !context.owners.some(owner => owner.contactId === pendingRepresentative.ownerChoice))} onClick={() => { if (pendingRepresentative.ownerChoice !== null) addContact(pendingRepresentative.contact, "representative", pendingRepresentative.ownerChoice); }}>{t("Lier ce représentant", "Link this representative")}</button><button type="button" disabled={creating} onClick={() => { setPendingRepresentative(null); setError(""); }}>{t("Abandonner ce lien — conserver le contact CRM", "Discard link — keep CRM contact")}</button></div></div>}
     {canReadContacts && linkError && <p className={styles.error} role="alert">{linkError}</p>}
     <details className={styles.details} data-owner-unlinked-details><summary>{t("Propriétaires annoncés à identifier", "Announced owners to identify")}</summary><label className={styles.field}><span>{t("Information communiquée, sans lien CRM automatique", "Reported information, without automatic CRM link")}</span><textarea id="fonciere-owner-unlinked" maxLength={2000} rows={2} value={context.unlinkedOwners} disabled={blocked} onChange={event => change({ ...context, unlinkedOwners: event.target.value })} /></label></details>
     <div className={styles.cards}>{context.owners.map((storedOwner, index) => { const owner = storedOwner.entityType === "person" && !storedOwner.person ? { ...storedOwner, person: createOwnerPerson() } : storedOwner; return <article className={styles.card} key={owner.contactId} data-owner-card={owner.contactId}><div className={styles.cardHeading}><div><strong>{contactLabel(owner.contactId)}</strong><small>{owner.entityType === "company" ? t("Entreprise propriétaire", "Company owner") : t("Personne propriétaire", "Person owner")}</small></div>{canReadContacts && <div className={styles.actions}>{onOpenContact && linked[owner.contactId] && <button type="button" onClick={() => onOpenContact(owner.contactId)}>{t("Ouvrir le contact", "Open contact")}</button>}<button type="button" disabled={blocked} onClick={() => change({ ...context, owners: context.owners.filter((_, at) => at !== index) })}>{t("Retirer le lien propriétaire", "Remove owner link")}</button></div>}</div>

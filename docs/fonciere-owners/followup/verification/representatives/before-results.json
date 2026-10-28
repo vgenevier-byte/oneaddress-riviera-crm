@@ -1,0 +1,13 @@
+{
+  "mode": "before",
+  "passed": 3,
+  "checks": [
+    "Stale represented owner after unlink cannot create a new orphan representative",
+    "A new never-saved project clears role, represented-owner and search transient states",
+    "Contacts return retains the created contact and PDF while invalid owner choice needs renewed selection"
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "services": "Real isolated Auth/RPC/PostgreSQL/Storage",
+  "productionWrites": 0
+}

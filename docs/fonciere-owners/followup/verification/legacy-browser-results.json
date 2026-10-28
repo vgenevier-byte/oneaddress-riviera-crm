@@ -1,0 +1,19 @@
+{
+  "passed": 9,
+  "checks": [
+    "Optional unknown values; sole ownership, full rights and incomplete declared indivision are independent",
+    "Fractional owner count is highlighted and blocks save while preserving the draft",
+    "Full person creation and cancellation retain unsaved project, ownership values and source attachment",
+    "Company creation does not turn its new representative into an owner; explicit representative and primary role",
+    "Optional personal and sale details, searchable countries and manually authored negotiation save through real RPC",
+    "Import and reimport require explicit choices and retain manual assessment, CRM identities and existing corrections",
+    "Fictitious FR desktop capture; derived listing age performs no writes; real reload preserves internal values",
+    "Fresh authenticated EN mobile reconnect restores values; new project starts without inherited owners",
+    "Project-only contributor sees retained context but cannot search or create Contacts; readonly user cannot edit"
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "mobile": "Chromium 390px touch emulation",
+  "services": "Real isolated password Auth, RPC, PostgreSQL and Storage",
+  "productionWrites": 0
+}

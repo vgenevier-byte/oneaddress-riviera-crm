@@ -1,13 +1,13 @@
 /** Conservative extra agency facts. Every value carries an exact document excerpt. */
 import type { AgencyExtraction, ExtractionEvidence, PdfPage } from "./agency";
-import { ownerContextHeading, publicAgencyText } from "./agency-privacy";
+import { ownerContextHeading, publicAgencyPages } from "./agency-privacy";
 
 const tidy = (value: string) => value.replace(/[\u00a0\u202f]/g, " ").replace(/\s+/g, " ").trim();
 const headings = /^(?:nom du (?:projet|bien)|projet|r[ée]f[ée]rence|type de bien|adresse|ville|code postal|localisation|agence|contact|agent|conseiller|t[ée]l[ée]phone|mobile|e-?mail|prix|honoraires|surfaces?|terrain|pi[èe]ces|chambres|[ée]tat|[ée]quipements?|annexes?|ext[ée]rieur|piscine|vue|description|potentiel|travaux|diagnostics?|dpe|ges|charges|contraintes|points? d.int[ée]r[êe]t|points? [àa] v[ée]rifier)\b/i;
 
 export function enrichAgencyFacts(base: AgencyExtraction, pages: PdfPage[]): AgencyExtraction {
   const fields = { ...base.fields }, evidence = { ...base.evidence }, warnings = [...base.warnings];
-  const entries = pages.flatMap(page => publicAgencyText(page.text).split(/\r?\n/).map(text => ({ page: page.page, text: tidy(text) })).filter(line => line.text));
+  const entries = publicAgencyPages(pages).flatMap(page => page.text.split(/\r?\n/).map(text => ({ page: page.page, text: tidy(text) })).filter(line => line.text));
   const set = (key: string, value: string, page: number, excerpt: string) => {
     if (!value) return;
     fields[key] = value.slice(0, key === "description" || key === "agencyPotential" ? 12_000 : 4_000);

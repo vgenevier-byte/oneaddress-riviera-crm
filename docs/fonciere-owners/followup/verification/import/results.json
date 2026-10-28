@@ -1,0 +1,75 @@
+{
+  "baseline": "9125b9da701bf16f026febf0fbf145239533ae00",
+  "before": {
+    "tests": 5,
+    "failed": 4,
+    "bug": "80000 EUR private cross-page reduction became asking=80000; internal proposal absent"
+  },
+  "after": {
+    "focusedTests": 17,
+    "passed": 17,
+    "typescript": true,
+    "lint": true,
+    "diffCheck": true
+  },
+  "schemaChanges": 0,
+  "productionWrites": 0,
+  "cases": [
+    {
+      "name": "fr-private-reduction-two-pages",
+      "pages": [
+        {
+          "page": 1,
+          "text": "Baisses de prix annoncées :"
+        },
+        {
+          "page": 2,
+          "text": "80000 EUR\nSurface habitable : 120 m2"
+        }
+      ],
+      "asking": null,
+      "area": "120",
+      "proposals": [
+        {
+          "field": "sale.priceReductions",
+          "value": "80000 EUR",
+          "evidence": {
+            "field": "ownerContext.sale.priceReductions",
+            "filename": "fictitious-pages.pdf",
+            "page": 1,
+            "extract": "PAGE 1\nBaisses de prix annoncées :\nPAGE 2\n80000 EUR",
+            "importedAt": "2026-10-28T12:00:00Z"
+          }
+        }
+      ]
+    },
+    {
+      "name": "en-explicit-public-price-resumes",
+      "pages": [
+        {
+          "page": 1,
+          "text": "Reported price reductions :"
+        },
+        {
+          "page": 2,
+          "text": "80000 EUR\nAsking price : 1250000 EUR\nLiving area : 120 m2"
+        }
+      ],
+      "asking": "1250000",
+      "area": "120",
+      "proposals": [
+        {
+          "field": "sale.priceReductions",
+          "value": "80000 EUR",
+          "evidence": {
+            "field": "ownerContext.sale.priceReductions",
+            "filename": "fictitious-pages.pdf",
+            "page": 1,
+            "extract": "PAGE 1\nReported price reductions :\nPAGE 2\n80000 EUR",
+            "importedAt": "2026-10-28T12:00:00Z"
+          }
+        }
+      ]
+    }
+  ]
+}

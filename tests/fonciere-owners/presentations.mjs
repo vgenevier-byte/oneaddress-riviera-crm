@@ -13,6 +13,10 @@ const { createOwnerPerson } = require('../../lib/fonciere/owners');
 const { prepareBankPresentation } = require('../../lib/fonciere/bankPresentation');
 const { exportProjectJson } = require('../../lib/izord/model');
 const { calculate } = require('../../lib/izord/finance');
+const { parseAgency } = require('../../lib/izord/agency');
+const { enrichAgencyFacts } = require('../../lib/izord/agency-details');
+const { agencyReportToFonciere } = require('../../lib/fonciere/import');
+const { proposeOwnerImport, applyOwnerImport } = require('../../lib/fonciere/ownerImport');
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || '/Users/vg/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');
 const fixture = JSON.parse(readFileSync(fixtureFile, 'utf8')), users = {}, checks = [], errors = [], external = [];
 const dir = join(output, 'presentations'); mkdirSync(dir, { recursive: true });
@@ -20,7 +24,7 @@ assert.equal(fixture.app, 'http://127.0.0.1:3197'); assert.equal(fixture.api, 'h
 const MARKER = 'PRIVATE_OWNER_CANARY_7651', CONTACT_MARKER = fixture.owners.person1;
 for (const name of ['admin', 'vincent', 'annCharlotte']) users[name] = await login(fixture.users[name]);
 await connect();
-let browser, context, page, project, manualId, bankId, initial, persisted;
+let browser, context, page, project, manualId, bankId, initial, persisted, importedCrossPage;
 const source = createFonciereRepository(users.admin.client), generator = createGeneratorRepository(users.admin.client);
 const read = () => ok(users.admin.client.rpc('fonciere_arbitrage_read', { p_project: project }));
 async function vote(who) { const state = await read(); return ok(users[who].client.rpc('fonciere_arbitrage_vote', { p_project: project, p_fingerprint: state.fingerprint, p_choice: 'approved', p_remark: MARKER + ' approval' })); }
@@ -49,18 +53,31 @@ async function browserExports(name, id) {
 }
 const exported = {};
 try {
+  await test('Explicitly reviewed cross-page internal reduction stays out of public fields and provenance', async () => {
+    const pages = [{ page: 1, text: 'Nom du bien : Villa fictive\nBaisses de prix annoncées :' }, { page: 2, text: '80000 EUR\n' + MARKER + '\nSurface habitable : 120 m2' }];
+    const report = { ...enrichAgencyFacts(parseAgency(pages, 'cross-page-fictional.pdf'), pages), gallery: [], readerWarnings: [], roles: { main: -1, view: -1, inside: -1, operation: -1 }, sourceFile: new File(['fictional'], 'cross-page-fictional.pdf', { type: 'application/pdf' }) };
+    assert.equal(report.fields.asking, undefined); assert.equal(report.fields.area, '120');
+    for (const publicPart of [report.fields, report.evidence, report.extra]) assert(!JSON.stringify(publicPart).includes(MARKER));
+    importedCrossPage = await agencyReportToFonciere(report);
+    const proposals = proposeOwnerImport(report, importedCrossPage.ownerContext), reduction = proposals.find(p => p.field === 'sale.priceReductions'); assert(reduction);
+    assert(reduction.evidence.extract.includes('PAGE 1')); assert(reduction.evidence.extract.includes('PAGE 2')); assert.equal(reduction.evidence.page, 1);
+    assert.equal(applyOwnerImport(importedCrossPage.ownerContext, proposals, []).sale.priceReductions, '');
+    importedCrossPage.ownerContext = applyOwnerImport(importedCrossPage.ownerContext, proposals, [reduction.id]);
+    assert(importedCrossPage.ownerContext.sale.priceReductions.includes('80000 EUR')); assert(!JSON.stringify(importedCrossPage.provenance).includes(MARKER));
+  });
   await test('Fictional complete owner context persists and reloads after a new authenticated session', async () => {
-    const data = createFonciereData(); data.name = 'Propriétaires fictifs — confidentialité'; Object.assign(data, { askingPrice: '950000', area: '120', worksHypothesis: '150000', resaleHypothesis: '1450000', notes: 'Note publique volontaire' });
+    const data = structuredClone(importedCrossPage); data.name = 'Propriétaires fictifs — confidentialité'; Object.assign(data, { area: '120', worksHypothesis: '150000', resaleHypothesis: '1450000', notes: 'Note publique volontaire' });
     Object.assign(data.presentationData.state, { acq: '820000', notaryQuote: '25000', finance: '20000', holding: '18', rentalPeriod: '12', costsReviewed: true });
     Object.assign(data.ownerContext, { organization: 'indivision', rights: 'split', declaredCount: 4, unlinkedOwners: MARKER + ' quoted name' });
     data.ownerContext.owners = [{ contactId: fixture.owners.person1, entityType: 'person', note: MARKER, person: { ...createOwnerPerson(), age: 73, ageAsOf: '2026-10-28', residenceCountry: 'IT', nationalities: ['FR', 'IT'], note: MARKER, information: { source: 'owner', contactId: fixture.owners.person1, documentId: '', detail: MARKER, date: '2026-10-28', confirmation: 'confirm' } } }, { contactId: fixture.owners.company, entityType: 'company', note: MARKER }];
     data.ownerContext.representatives = [{ contactId: fixture.owners.representative, ownerContactId: fixture.owners.company, role: MARKER }]; data.ownerContext.primaryContactId = fixture.owners.representative; data.ownerContext.primaryRole = MARKER;
-    Object.assign(data.ownerContext.sale, { agreement: 'confirm', reasons: ['inheritance'], listedOn: '2026-01-31', sellerDeadline: '2027-06-30', priceReductions: MARKER, pricePosition: 'discussion', openQuestions: MARKER });
+    Object.assign(data.ownerContext.sale, { agreement: 'confirm', reasons: ['inheritance'], listedOn: '2026-01-31', sellerDeadline: '2027-06-30', pricePosition: 'discussion', openQuestions: MARKER });
     Object.assign(data.ownerContext.negotiation, { potential: 'high', justification: MARKER, favorablePoints: MARKER, blockingPoints: MARKER, nextQuestion: MARKER });
-    data.ownerContext.provenance = [{ field: 'ownerContext.unlinkedOwners', filename: 'fiche-fictive.pdf', page: 2, extract: MARKER, importedAt: '2026-10-28T12:00:00Z' }];
+    data.ownerContext.provenance.push({ field: 'ownerContext.unlinkedOwners', filename: 'fiche-fictive.pdf', page: 2, extract: MARKER, importedAt: '2026-10-28T12:00:00Z' });
     initial = await source.saveProject({ data, creationKey: randomUUID() }); project = initial.project.id;
     for (const who of ['vincent', 'annCharlotte']) await sql.query('insert into public.fonciere_project_assignments(project_id,user_id) values($1,$2)', [project, users[who].id]);
     const reconnect = await login(fixture.users.admin); persisted = await createFonciereRepository(reconnect.client).loadProject(project); assert.equal(persisted.data.ownerContext.owners[0].person.note, MARKER); assert.equal(persisted.data.ownerContext.declaredCount, 4); assert.equal(persisted.data.ownerContext.owners.length, 2); assert.equal(persisted.data.ownerContext.representatives[0].contactId, fixture.owners.representative);
+    assert.equal(persisted.data.askingPrice, ''); assert(persisted.data.ownerContext.sale.priceReductions.includes('80000 EUR')); assert(persisted.data.ownerContext.provenance.some(p => p.page === 1 && p.extract.includes('PAGE 2')));
     assert.equal(persisted.data.ownerContext.negotiation.updatedBy, users.admin.id); assert(persisted.data.ownerContext.negotiation.updatedAt);
   });
   await test('Manual persisted presentation excludes owner fields, identifiers, provenance and appraisal without changing finance', async () => {
@@ -73,7 +90,7 @@ try {
   await test('Approved bank presentation uses the approved snapshot and excludes the dedicated internal context from stored data', async () => {
     await vote('vincent'); await vote('annCharlotte'); assert.equal((await read()).status, 'approved');
     await prepareBankPresentation(users.admin.client, project); bankId = (await read()).bank.presentationId; assert(bankId); const bank = await generator.loadProject(bankId); privateAbsent(bank.data); privateAbsent(await row(bankId)); privateAbsent(exportProjectJson(bank.data));
-    assert.equal(bank.data.state.asking, '950000'); assert.equal(bank.data.state.works, '150000'); assert.equal(bank.data.state.acq, '820000'); assert.equal(bank.data.state.resale, '1450000');
+    assert.equal(bank.data.state.asking, ''); assert.equal(bank.data.state.works, '150000'); assert.equal(bank.data.state.acq, '820000'); assert.equal(bank.data.state.resale, '1450000');
   });
   await test('Presentation reimport starts with empty internal context and preserves an existing project context during reviewed reconciliation', async () => {
     const manual = await generator.loadProject(manualId); const newProject = fromPresentationData(manual.data); assert.deepEqual(newProject.ownerContext, createFonciereData().ownerContext);

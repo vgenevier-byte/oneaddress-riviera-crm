@@ -1,0 +1,25 @@
+✔ Explicit property type and surface nature retain exact source categories (5.909625ms)
+✔ Unknown surface categories and uncertain characteristics are retained verbatim (0.445125ms)
+✔ FR private price reduction continuing on the next page cannot become asking price (5.47725ms)
+✔ EN private names, context and notes remain private across several pages until explicit public heading (21.162833ms)
+✔ reviewed cross-page price reduction preserves heading page and exact PAGE-labelled source span (0.95975ms)
+✔ FR and EN labelled field values continue across pages without swallowing public labels or PAGE markers (0.635167ms)
+✔ unlinked owner statement spans multiple pages with faithful source and remains distinct from CRM identities (0.298625ms)
+✔ EN explicit asking price and living area resume public parsing after a cross-page private section (0.163958ms)
+✔ project-only owner context is excluded from manual/bank persisted DTO, JSON and hidden notes without financial effects (35.676791ms)
+✔ nested ownerContext hidden in presentation metadata is removed on admission, export and direct speaker notes (14.480959ms)
+✔ explicit agency owner statements are reviewable with exact page/extract and never resolve CRM identities (1.74625ms)
+✔ unlabelled narrative, ambiguous dates, names and photographs do not infer owner traits or motivation (0.316125ms)
+✔ reimport keeps internal corrections, personal profiles and manual appraisal until explicit field choice (4.614791ms)
+✔ labelled private context cannot be swallowed by public multiline agency descriptions or metadata (6.795583ms)
+✔ sale-context reductions cannot become public asking price or financial assumptions (0.69975ms)
+✔ multiline internal sections cannot leak names, context or monetary continuations into public parsing (6.156958ms)
+✔ every English owner proposal heading terminates public descriptions and keeps context out of metadata (0.857917ms)
+ℹ tests 17
+ℹ suites 0
+ℹ pass 17
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 391.269583

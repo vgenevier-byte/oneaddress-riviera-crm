@@ -4,7 +4,7 @@ import { LIMITS, PHOTO_ROLES, createProjectData, assertProjectImageBudget, type 
 import { fileData, resizeImported, cropPhoto, RATIOS, checkAbort } from "./photos";
 import { PDF_READER_SOURCE } from "./agency-worker";
 import { enrichAgencyFacts } from "./agency-details";
-import { publicAgencyText } from "./agency-privacy";
+import { publicAgencyPages } from "./agency-privacy";
 import { normalizeAddressValue, type AddressValue } from "../address";
 export type PdfPage = { page:number; text:string };
 export type ExtractionEvidence = { page:number|null; extract:string };
@@ -16,7 +16,7 @@ export const ROLE_LABELS={main:'1 · Vue d’ensemble',view:'2 · Vue / environn
 export function cleanText(s: unknown){return String(s||'').replace(/[\u00a0\u202f]/g,' ').replace(/\s+/g,' ').trim();}
 export function importNum(s: unknown){let x=cleanText(s).replace(/\s/g,'');if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(x))x=x.replace(/\./g,'');const n=Number(x.replace(',','.'));return Number.isFinite(n)&&n>=0?String(n):'';}
 export function parseAgency(pages: PdfPage[],filename: string): AgencyExtraction{
- const originalPages = pages; pages = pages.map(page => ({ ...page, text: publicAgencyText(page.text) }));
+ const originalPages = pages; pages = publicAgencyPages(pages);
  const fields: Record<string,string>={},evidence: Record<string,ExtractionEvidence>={},extra: string[]=[],warnings: string[]=[];const cleaned=pages.map(x=>({...x,flat:cleanText(x.text)}));const all=cleaned.map(x=>x.flat).join('\n');const raw=pages.map(x=>x.text).join('\n');
  const record=(key:string,value:unknown,pg:number|null,extract:unknown)=>{if(value===undefined||value===null||value==='')return;fields[key]=String(value);evidence[key]={page:pg,extract:cleanText(extract).slice(0,230)};};
  const match=(key:string,re:RegExp,group=1,fn:(value:string)=>string=x=>x)=>{for(const p of cleaned){const m=p.flat.match(re);if(m){record(key,fn(m[group]),p.page,m[0]);return m;}}return null;};
@@ -31,10 +31,10 @@ export function parseAgency(pages: PdfPage[],filename: string): AgencyExtraction
  let exact: string|null=null;for(const p of pages){const m=p.text.match(/(?:^|\n)Adresse (?:du bien|du logement|exacte)\s*:?\s*\n?\s*([^\n]+)(?:\n([^\n]+))?/i);if(m&&/\d/.test(m[1])&&/\b(?:rue|avenue|boulevard|chemin|place|route|allée|impasse|quai)\b/i.test(m[1])){exact=cleanText(m[1]+(/\b\d{5}\b/.test(m[2]||'')?' — '+m[2]:''));record('address',exact,p.page,m[0]);break;}}
  if(!exact){const loc=[postal,city].filter(Boolean).join(' ')+(sector?' / '+sector:'');fields.address=loc?loc+' — adresse exacte à confirmer':'';evidence.address={page:city?1:null,extract:'Localisation seulement ; aucune adresse du bien identifiée. L’adresse de l’agence n’est pas utilisée.'};warnings.push('Adresse exacte non communiquée ou non reconnue.');}
  fields.project=[fields.type==='Maison'?'Maison':fields.type||'Projet',city?('— '+city):'',sector?('/ '+sector):''].filter(Boolean).join(' ').slice(0,58);if(fields.ref)fields.ref=fields.ref.slice(0,75);
- const nr='([0-9][0-9 .,]{0,14})';let ar=match('area',new RegExp('\\bSURFACE HABITABLE\\s*:?\\s*'+nr+'\\s*m\\s*[²2]','i'),1,importNum);if(ar)fields.measurement='Surface habitable annoncée par l’agence ; mesurage à confirmer.';
- if(!ar){ar=match('area',new RegExp('\\bSurface(?: totale| du bien| Loi Carrez| Carrez)?\\s*:?\\s*'+nr+'\\s*m\\s*[²2]','i'),1,importNum);if(ar)fields.measurement='Surface annoncée ; qualification habitable / Carrez à confirmer.';}
+ const nr='([0-9][0-9 .,]{0,14})';let ar=match('area',new RegExp('\\b(?:SURFACE HABITABLE|LIVING AREA)\\s*:?\\s*'+nr+'\\s*m\\s*[²2]','i'),1,importNum);if(ar)fields.measurement='Surface habitable annoncée par l’agence ; mesurage à confirmer.';
+ if(!ar){ar=match('area',new RegExp('\\b(?:Surface(?: totale| du bien| Loi Carrez| Carrez)?|Area)\\s*:?\\s*'+nr+'\\s*m\\s*[²2]','i'),1,importNum);if(ar)fields.measurement='Surface annoncée ; qualification habitable / Carrez à confirmer.';}
  match('land',new RegExp('\\b(?:Surface (?:du |de )?terrain|Terrain)\\s*:?\\s*'+nr+'\\s*m\\s*[²2]','i'),1,importNum);if(!fields.land)warnings.push('Surface du terrain non communiquée ou non reconnue.');
- const pprice=match('asking',/\bPrix(?: affiché| demandé| de vente)?\s*:?\s*([0-9][0-9 .,]{3,18})\s*(?:EUR|€|¤)/i,1,importNum);
+ const pprice=match('asking',/\b(?:Prix(?: affiché| demandé| de vente)?|Asking price|Price)\s*:?\s*([0-9][0-9 .,]{3,18})\s*(?:EUR|€|¤)/i,1,importNum);
  if(!pprice){for(const p of cleaned){let found=false;for(const m of p.flat.slice(0,1000).matchAll(/([0-9][0-9 .,]{3,18})\s*(?:EUR|€|¤)/gi)){const v=importNum(m[1]),prev=p.flat.slice(Math.max(0,(m.index??0)-60),m.index);if(+v>=50000&&!/capital|garanti|d[ée]pense|estim[ée]|loyer/i.test(prev)){record('asking',v,p.page,m[0]);found=true;break;}}if(found)break;}}
  let sea=false;if(match('sea',/\b(sans vue mer|pas de vue mer|aucune vue mer|vue mer\s*:?\s*non)\b/i,1,()=>'Non'))sea=true;
  else if(match('sea',/\b((?:vue mer|vue sur la mer)[^.;]{0,15}partielle|aper[çc]u mer)\b/i,1,()=>'Partielle'))sea=true;

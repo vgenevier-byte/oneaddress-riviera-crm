@@ -1,0 +1,15 @@
+{
+  "mode": "after",
+  "passed": 5,
+  "checks": [
+    "Stale represented owner after unlink cannot create a new orphan representative",
+    "A new never-saved project clears role, represented-owner and search transient states",
+    "Contacts return retains the created contact and PDF while invalid owner choice needs renewed selection",
+    "An intentionally retained existing orphan relation stays visible and saveable",
+    "EN mobile stale-choice recovery and new unsaved draft reset"
+  ],
+  "errors": [],
+  "externalRequests": [],
+  "services": "Real isolated Auth/RPC/PostgreSQL/Storage",
+  "productionWrites": 0
+}

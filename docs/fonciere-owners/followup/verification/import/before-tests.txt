@@ -1,0 +1,96 @@
+✖ FR private price reduction continuing on the next page cannot become asking price (3.292125ms)
+✔ EN private names, context and notes remain private across several pages until explicit public heading (28.066625ms)
+✖ reviewed cross-page price reduction preserves heading page and exact PAGE-labelled source span (2.556584ms)
+✖ FR and EN labelled field values continue across pages without swallowing public labels or PAGE markers (0.286625ms)
+✖ unlinked owner statement spans multiple pages with faithful source and remains distinct from CRM identities (0.407958ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 1
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 303.8925
+
+✖ failing tests:
+
+test at tests/fonciere/owners-import-pages.test.ts:21:25
+✖ FR private price reduction continuing on the next page cannot become asking price (3.292125ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + '80000'
+  - undefined
+
+      at TestContext.<anonymous> (/private/tmp/oarcrm-fonciere-owners/tests/fonciere/owners-import-pages.test.ts:24:22)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.start (node:internal/test_runner/test:1177:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:385:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '80000',
+    expected: undefined,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+test at tests/fonciere/owners-import-pages.test.ts:45:25
+✖ reviewed cross-page price reduction preserves heading page and exact PAGE-labelled source span (2.556584ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+    (price)
+
+      at TestContext.<anonymous> (/private/tmp/oarcrm-fonciere-owners/tests/fonciere/owners-import-pages.test.ts:48:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/fonciere/owners-import-pages.test.ts:58:25
+✖ FR and EN labelled field values continue across pages without swallowing public labels or PAGE markers (0.286625ms)
+  AssertionError [ERR_ASSERTION]: Motif communiqué
+      at TestContext.<anonymous> (/private/tmp/oarcrm-fonciere-owners/tests/fonciere/owners-import-pages.test.ts:62:30)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at tests/fonciere/owners-import-pages.test.ts:69:25
+✖ unlinked owner statement spans multiple pages with faithful source and remains distinct from CRM identities (0.407958ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+
+    (proposal)
+
+      at TestContext.<anonymous> (/private/tmp/oarcrm-fonciere-owners/tests/fonciere/owners-import-pages.test.ts:72:26)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1306:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:897:18)
+      at Test.postRun (node:internal/test_runner/test:1447:19)
+      at Test.run (node:internal/test_runner/test:1372:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:897:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

@@ -314,7 +314,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   }, [taskFocus, loaded]);
   async function save() {
     if (!data || !writable || busy || review) return;
-    if (contactPending) { setError(t("Terminez ou annulez la création du contact avant d’enregistrer le projet. Les deux brouillons sont conservés.", "Finish or cancel contact creation before saving the project. Both drafts are retained.")); document.querySelector<HTMLElement>('[aria-label="Création de contact CRM"], [aria-label="Create CRM contact"]')?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    if (contactPending) { setError(t("Terminez ou annulez la sélection ou la création du contact avant d’enregistrer le projet. Le contact et le brouillon sont conservés.", "Finish or cancel contact selection or creation before saving the project. The contact and draft are retained.")); document.querySelector<HTMLElement>('[data-pending-representative], [aria-label="Création de contact CRM"], [aria-label="Create CRM contact"]')?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
     const invalid = document.querySelector<HTMLElement>('[data-fonciere-projects] [aria-invalid="true"]');
     if (invalid) { setError(t("Corrigez la valeur signalée avant d’enregistrer. Le brouillon est conservé.", "Correct the highlighted value before saving. Your draft is retained.")); invalid.focus(); return; }
     if (!data.name.trim()) { setActiveSection("identity"); setError(t("Le nom du projet est obligatoire. Les autres champs peuvent rester vides.", "A project name is required. Other fields can remain empty.")); document.getElementById("fonciere-name")?.focus(); return; }
@@ -488,7 +488,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
               if (contactReturn?.contact) setNotice(t("Contact enregistré. Les modifications du projet restent à enregistrer.", "Contact saved. Project changes still need to be saved."));
               onContactReturnConsumed?.();
               document.getElementById("fonciere-section-agency")?.scrollIntoView({ block: "start" });
-            }} /><ProjectOwners key={`owners-${loaded?.project.id || "new"}`} data={data} onChange={edit} lang={lang} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} documents={documentOptions} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setContactPending} onCreateContact={intent => {
+            }} /><ProjectOwners key={`owners-${loaded?.project.id || "new"}-${calendarInputEpoch}`} data={data} onChange={edit} lang={lang} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} documents={documentOptions} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setContactPending} onCreateContact={intent => {
               if (!writable || busy || importPending || !onCreateContact) return false;
               setActiveSection("agency");
               return onCreateContact(intent);
