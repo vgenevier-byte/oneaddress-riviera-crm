@@ -64,6 +64,7 @@ export default function ProjectOwners({ data, onChange, lang, canReadContacts, c
   const [creating, setCreating] = useState(false);
   const [pendingRepresentative, setPendingRepresentative] = useState<PendingRepresentative | null>(null);
   const representativePending = Boolean(pendingRepresentative);
+  const queryPending = Boolean(query.trim());
   const [viewedAt] = useState(() => {
     const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date()).map(part => [part.type, part.value]));
     return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
@@ -81,7 +82,7 @@ export default function ProjectOwners({ data, onChange, lang, canReadContacts, c
   }
   const latest = useRef({ data, onChange, disabled, canReadContacts, accessSignal });
   useLayoutEffect(() => { latest.current = { data, onChange, disabled, canReadContacts, accessSignal }; }, [data, onChange, disabled, canReadContacts, accessSignal]);
-  useEffect(() => { onPendingChange?.(creating || representativePending); return () => onPendingChange?.(false); }, [creating, representativePending, onPendingChange]);
+  useEffect(() => { onPendingChange?.(creating || representativePending || queryPending); return () => onPendingChange?.(false); }, [creating, representativePending, queryPending, onPendingChange]);
   const linkedIds = [...new Set([...context.owners.map(owner => owner.contactId), ...context.representatives.map(person => person.contactId), data.agentContactId, data.agencyContactId, context.sale.information.contactId, ...context.owners.flatMap(owner => owner.person?.information.contactId || [])].filter(Boolean))].sort().join(",");
   useEffect(() => {
     const local = new AbortController();
@@ -170,7 +171,7 @@ export default function ProjectOwners({ data, onChange, lang, canReadContacts, c
     </div></fieldset>
     <p className={styles.count} data-owner-count-summary>{context.declaredCount === null ? t("Nombre déclaré non renseigné", "Declared number not provided") : `${context.declaredCount} ${t("propriétaire(s) déclaré(s)", "declared owner(s)")}`} · {context.owners.length} {t("contact(s) propriétaire(s) identifié(s)", "identified owner contact(s)")}</p>
     {warnings.length > 0 && <ul className={styles.warning} role="status">{warnings.map(warning => <li key={warning}>{warning}</li>)}</ul>}
-    {canReadContacts ? <div className={styles.linker} data-contact-role={role === "owner" ? "owners" : "representatives"}>
+    {canReadContacts ? <div className={styles.linker} data-contact-role={role === "owner" ? "owners" : "representatives"} data-contact-pending={queryPending || creating || undefined}>
       <div className={styles.grid}><label className={styles.field}><span>{t("Rôle du contact à lier", "Role of contact to link")}</span><select id="fonciere-owner-link-role" disabled={blocked} value={role} onChange={event => { setRole(event.target.value as LinkRole); setQuery(""); setRows([]); }}>{options([["owner", "Propriétaire", "Owner"], ["representative", "Représentant / interlocuteur", "Representative / contact"]])}</select></label>
       {role === "representative" && !pendingRepresentative && <label className={styles.field}><span>{t("Représente le propriétaire", "Represents owner")}</span><select id="fonciere-represented-owner" disabled={blocked} value={representedOwner} onChange={event => { setRepresentedOwner(event.target.value); setRepresentedOwnerNeedsReview(false); }}><option value="">{t("À préciser", "To specify")}</option>{context.owners.map(owner => <option key={owner.contactId} value={owner.contactId}>{contactLabel(owner.contactId)}</option>)}</select></label>}</div>
       {role === "representative" && representedOwnerNeedsReview && !pendingRepresentative && <p role="status">{t("Le propriétaire précédemment choisi n’est plus lié. Choisissez à nouveau sa représentation ; le prochain contact sera conservé en attente de confirmation si ce choix reste à préciser.", "The previously selected owner is no longer linked. Choose its representation again; the next contact will be retained for confirmation if this is still unspecified.")}</p>}

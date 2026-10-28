@@ -1,7 +1,7 @@
 "use client";
 
 import { TaskSourceActions } from "@/components/TaskLinkProvider";
-import { useTaskTargetFocus, scrollTaskTarget } from "@/lib/tasks/navigation";
+import { useTaskTargetFocus } from "@/lib/tasks/navigation";
 import { usePageRefreshGuard } from "@/lib/usePageRefreshGuard";
 import { beginPageRefreshOperation } from "@/lib/pageRefresh";
 import Image from "next/image";
@@ -29,6 +29,8 @@ import styles from "./ProjectsWorkspace.module.css";
 import ProjectAccess from "./ProjectAccess";
 import ProjectContacts from "./ProjectContacts";
 import ProjectOwners from "./ProjectOwners";
+import ProjectSection from "./ProjectSection";
+import { PROJECT_SECTION_IDS, readProjectSections, writeProjectSections, type ProjectSectionId, type ProjectSectionIdentity } from "@/lib/fonciere/projectSectionState";
 import type { ContactCreateIntent } from "@/lib/contacts/createIntent";
 import type { ProjectContactReturn } from "@/lib/fonciere/contactCreation";
 import { AddressMapLink } from "@/components/address/AddressMapLink";
@@ -123,11 +125,16 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [accessBusy,setAccessBusy]=useState(false);
-  const [contactPending, setContactPending] = useState(false);
+  const [agencyContactPending, setAgencyContactPending] = useState(false);
+  const [ownerContactPending, setOwnerContactPending] = useState(false);
+  const contactPending = agencyContactPending || ownerContactPending;
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [review, setReview] = useState<ImportReview | null>(null);
   const [activeSection, setActiveSection] = useState("identity");
+  const [openSections, setOpenSections] = useState<Set<ProjectSectionId>>(new Set());
+  const [sectionIdentity, setSectionIdentity] = useState<ProjectSectionIdentity | null>(null);
+  const sectionState = useRef<{ identity: ProjectSectionIdentity | null; opened: Set<ProjectSectionId> }>({ identity: null, opened: new Set() });
   const controller = useRef<AbortController | null>(null);
   const epoch = useRef(0);
   const initialProjectHandled = useRef(false);
@@ -140,6 +147,77 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   const label = (key: string) => { const value = fieldLabels.get(key as FieldKey); return value ? t(value.fr, value.en) : key; };
   const importPending = review !== null;
   const writable = canWrite && loaded?.project.status !== "archived";
+
+  function selectSectionIdentity(identity: ProjectSectionIdentity) {
+    const opened = readProjectSections(userId, identity);
+    sectionState.current = { identity, opened };
+    setSectionIdentity(identity); setOpenSections(opened);
+  }
+  function rememberOpenSections(opened: Set<ProjectSectionId>) {
+    sectionState.current.opened = opened;
+    if (sectionState.current.identity) writeProjectSections(userId, sectionState.current.identity, opened);
+    // A partially created record can still retain its durable recovery draft.
+    if (draftLease.current) writeProjectSections(userId, { kind: "draft", id: draftLease.current.identity.draftId }, opened);
+    setOpenSections(opened);
+  }
+  function adoptProjectSections(id: string) {
+    const identity: ProjectSectionIdentity = { kind: "project", id };
+    writeProjectSections(userId, identity, sectionState.current.opened);
+    // Saving adopts the durable ID without replaying an already handled URL anchor.
+    sectionState.current.identity = identity;
+  }
+  function changeSections(opened: Set<ProjectSectionId>) {
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement) {
+      const section = focused.closest<HTMLElement>("[data-project-section]");
+      const id = section?.dataset.projectSection as ProjectSectionId | undefined;
+      if (id && !opened.has(id) && document.getElementById(`fonciere-panel-${id}`)?.contains(focused)) document.getElementById(`fonciere-toggle-${id}`)?.focus();
+    }
+    rememberOpenSections(opened);
+  }
+  function toggleSection(id: ProjectSectionId) {
+    const next = new Set(sectionState.current.opened);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    changeSections(next);
+  }
+  const revealProjectElement = useCallback((target: HTMLElement | null, focus = false) => {
+    if (!target) return;
+    const section = target.closest<HTMLElement>("[data-project-section]");
+    const id = section?.dataset.projectSection as ProjectSectionId | undefined;
+    if (id) {
+      const opened = new Set(sectionState.current.opened).add(id);
+      sectionState.current.opened = opened;
+      if (sectionState.current.identity) writeProjectSections(userId, sectionState.current.identity, opened);
+      if (draftLease.current) writeProjectSections(userId, { kind: "draft", id: draftLease.current.identity.draftId }, opened);
+      setOpenSections(opened); setActiveSection(id);
+    }
+    // Nested owner/retained-field details can also conceal a validation target.
+    for (let parent = target.parentElement; parent && parent !== section; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
+    const show = (attempt = 0) => window.requestAnimationFrame(() => {
+      if (!target.isConnected) return;
+      if (!target.getClientRects().length) { if (attempt < 10) show(attempt + 1); return; }
+      target.scrollIntoView({ block: "center" });
+      if (focus) { if (!target.matches("input,textarea,select,button,a[href],[tabindex]")) target.tabIndex = -1; target.focus({ preventScroll: true }); }
+    });
+    show();
+  }, [userId]);
+  function navigateSection(event: React.MouseEvent<HTMLAnchorElement>, anchor: string) {
+    event.preventDefault();
+    window.history.replaceState(null, "", `#${anchor}`);
+    revealProjectElement(document.getElementById(anchor));
+  }
+  useEffect(() => {
+    if (!sectionIdentity) return;
+    const revealHash = () => {
+      let anchor: string;
+      try { anchor = decodeURIComponent(window.location.hash.slice(1)); } catch { return; }
+      const target = document.getElementById(anchor);
+      if (target?.closest("[data-project-section]")) revealProjectElement(target);
+    };
+    const timer = window.setTimeout(revealHash, 0);
+    window.addEventListener("hashchange", revealHash);
+    return () => { window.clearTimeout(timer); window.removeEventListener("hashchange", revealHash); };
+  }, [sectionIdentity, revealProjectElement]);
 
   const operation = useCallback(async () => {
     controller.current?.abort();
@@ -160,6 +238,21 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     draftPersistence.current = draftPersistence.current.catch(() => {}).then(() => saveFonciereLocalDraft(identity, snapshot)).finally(finished);
     await draftPersistence.current;
   }
+  function current(id: number) { return epoch.current === id && !controller.current?.signal.aborted && !accessSignal?.aborted; }
+  function leave() { return !(dirty || accessBusy || contactPending || arbitrageDirty) || window.confirm(t("Ce projet contient des modifications non enregistrées. Quitter sans les enregistrer ?", "This project has unsaved changes. Leave without saving?")); }
+  function edit(next: FonciereData) { if (!writable || busy || accessSignal?.aborted) return; setData(next); setDirty(true); setError(""); setNotice(""); }
+  function editField(key: FonciereField, value: string) { if (data) edit({ ...data, [key]: value }); }
+
+  async function open(id: string, preserveUrl = false) {
+    if (busy || !leave()) return;
+    draftEpoch.current++;
+    setBusy(true); setError(""); setReview(null);
+    let op: Awaited<ReturnType<typeof operation>> | undefined;
+    try { op = await operation(); const value = await op.scoped.run(() => op!.repository.loadProject(id, { signal: op!.signal, arbitration: true })); if (current(op.id)) { if (!preserveUrl) window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(value.project.id)}`); draftLease.current?.release(); draftLease.current = null; setDraftReady(false); setCreationReconciled(false); setCreationConflict(null); setReconciliation(null); selectSectionIdentity({ kind: "project", id: value.project.id }); setLoaded(value); setData(value.data); setCalendarInputEpoch(previous => previous + 1); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setNotice(""); setActiveSection("identity"); } }
+    catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) setError(messageOf(failure)); }
+    finally { if (!op || current(op.id)) setBusy(false); }
+  }
+
   useEffect(() => {
     const candidate = new URL(window.location.href).searchParams.get("draft");
     const controller = new AbortController();
@@ -179,6 +272,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       if (!restored && lease.identity.confirmedProjectId) { lease.release(); draftLease.current = null; await open(lease.identity.confirmedProjectId, true); return; }
       if (restored) { setData(restored.data); setLoaded(restored.loaded); setSourceFiles(restored.sourceFiles); setSourceFileCategories(restored.sourceFileCategories); setCreationReconciled(restored.creationReconciled); setDirty(true); }
       else setData(createFonciereData());
+      selectSectionIdentity({ kind: "draft", id: lease.identity.draftId });
       setCalendarInputEpoch(previous => previous + 1);
       setDraftReady(true);
     })().catch(failure => { if (!controller.signal.aborted && generation === draftEpoch.current && !isCancelled(failure)) setError(draftError(failure)); });
@@ -194,10 +288,6 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
     // Persist the current committed editor snapshot, scoped to its captured identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, loaded, sourceFiles, sourceFileCategories, creationReconciled, draftReady, dirty]);
-  function current(id: number) { return epoch.current === id && !controller.current?.signal.aborted && !accessSignal?.aborted; }
-  function leave() { return !(dirty || accessBusy || contactPending || arbitrageDirty) || window.confirm(t("Ce projet contient des modifications non enregistrées. Quitter sans les enregistrer ?", "This project has unsaved changes. Leave without saving?")); }
-  function edit(next: FonciereData) { if (!writable || busy || accessSignal?.aborted) return; setData(next); setDirty(true); setError(""); setNotice(""); }
-  function editField(key: FonciereField, value: string) { if (data) edit({ ...data, [key]: value }); }
 
   const reload = useCallback(async () => {
     const op = await operation();
@@ -267,20 +357,13 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       const lease = await claimFonciereDraft(creationScope);
       if (generation !== draftEpoch.current) { lease.release(); return; }
       draftLease.current?.release(); draftLease.current = lease;
+      selectSectionIdentity({ kind: "draft", id: lease.identity.draftId });
       controller.current?.abort(); epoch.current++;
       window.history.replaceState(null, "", draftUrl(lease.identity.draftId)); setData(createFonciereData()); setCalendarInputEpoch(previous => previous + 1); setLoaded(null); setDraftReady(true); setCreationReconciled(false); setCreationConflict(null); setReconciliation(null); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setReview(null); setError(""); setNotice(""); setActiveSection("identity");
     } catch (failure) { if (generation === draftEpoch.current) setError(draftError(failure)); }
     finally { if (generation === draftEpoch.current) setBusy(false); }
   }
-  async function open(id: string, preserveUrl = false) {
-    if (busy || !leave()) return;
-    draftEpoch.current++;
-    setBusy(true); setError(""); setReview(null);
-    let op: Awaited<ReturnType<typeof operation>> | undefined;
-    try { op = await operation(); const value = await op.scoped.run(() => op!.repository.loadProject(id, { signal: op!.signal, arbitration: true })); if (current(op.id)) { if (!preserveUrl) window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(value.project.id)}`); draftLease.current?.release(); draftLease.current = null; setDraftReady(false); setCreationReconciled(false); setCreationConflict(null); setReconciliation(null); setLoaded(value); setData(value.data); setCalendarInputEpoch(previous => previous + 1); setDirty(false); setSourceFiles([]); setSourceFileCategories([]); setNotice(""); setActiveSection("identity"); } }
-    catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) setError(messageOf(failure)); }
-    finally { if (!op || current(op.id)) setBusy(false); }
-  }
+
   useEffect(() => {
     if (listLoading || initialProjectHandled.current) return;
     initialProjectHandled.current = true;
@@ -309,15 +392,15 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   }, [taskFocus, listLoading, busy]);
   useEffect(() => {
     if (taskFocus?.type !== "document" || taskFocus.context?.catalog !== "fonciere" || loaded?.project.id !== taskFocus.context.projectId) return;
-    const timer = window.setTimeout(() => scrollTaskTarget(`fonciere-asset-${taskFocus.id}`), 0);
+    const timer = window.setTimeout(() => revealProjectElement(document.getElementById(`fonciere-asset-${taskFocus.id}`), true), 0);
     return () => window.clearTimeout(timer);
-  }, [taskFocus, loaded]);
+  }, [taskFocus, loaded?.project.id, revealProjectElement]);
   async function save() {
     if (!data || !writable || busy || review) return;
-    if (contactPending) { setError(t("Terminez ou annulez la sélection ou la création du contact avant d’enregistrer le projet. Le contact et le brouillon sont conservés.", "Finish or cancel contact selection or creation before saving the project. The contact and draft are retained.")); document.querySelector<HTMLElement>('[data-pending-representative], [aria-label="Création de contact CRM"], [aria-label="Create CRM contact"]')?.scrollIntoView({ behavior: "smooth", block: "center" }); return; }
+    if (contactPending) { setError(t("Terminez ou annulez la sélection ou la création du contact avant d’enregistrer le projet. Le contact et le brouillon sont conservés.", "Finish or cancel contact selection or creation before saving the project. The contact and draft are retained.")); const pending = document.querySelector<HTMLElement>('[data-fonciere-projects] [data-pending-representative], [data-fonciere-projects] [data-contact-pending="true"], [data-fonciere-projects] [aria-label="Création de contact CRM"], [data-fonciere-projects] [aria-label="Create CRM contact"]') || document.querySelector<HTMLElement>(ownerContactPending ? "[data-project-owners]" : "[data-project-contacts]"); revealProjectElement(pending?.querySelector<HTMLElement>('[role="combobox"]:not(:disabled), input:not([type="hidden"]):not(:disabled),select:not(:disabled),button:not(:disabled)') || pending, true); return; }
     const invalid = document.querySelector<HTMLElement>('[data-fonciere-projects] [aria-invalid="true"]');
-    if (invalid) { setError(t("Corrigez la valeur signalée avant d’enregistrer. Le brouillon est conservé.", "Correct the highlighted value before saving. Your draft is retained.")); invalid.focus(); return; }
-    if (!data.name.trim()) { setActiveSection("identity"); setError(t("Le nom du projet est obligatoire. Les autres champs peuvent rester vides.", "A project name is required. Other fields can remain empty.")); document.getElementById("fonciere-name")?.focus(); return; }
+    if (invalid) { setError(t("Corrigez la valeur signalée avant d’enregistrer. Le brouillon est conservé.", "Correct the highlighted value before saving. Your draft is retained.")); revealProjectElement(invalid, true); return; }
+    if (!data.name.trim()) { setActiveSection("identity"); setError(t("Le nom du projet est obligatoire. Les autres champs peuvent rester vides.", "A project name is required. Other fields can remain empty.")); revealProjectElement(document.getElementById("fonciere-name"), true); return; }
     setBusy(true); setError(""); setNotice(t("Enregistrement des informations et des documents…", "Saving information and documents…"));
     let op: Awaited<ReturnType<typeof operation>> | undefined;
     try {
@@ -325,8 +408,8 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       const identity = draftLease.current?.identity;
       if (!loaded && !identity) throw new Error(t("L’identité du brouillon n’est pas encore confirmée. Votre saisie est conservée.", "Draft identity is not confirmed yet. Your entries are retained."));
       if (identity && !creationReconciled) markFonciereDraftAttempted(identity);
-      op = await operation(); const saved = await op.scoped.run(() => op!.repository.saveProject({ data, previous: loaded || undefined, creationKey: identity?.creationKey, creationReconciled, sourceFiles, sourceFileCategories, onCreated: draft => { if (op && current(op.id)) setLoaded(draft); } }, { signal: op!.signal, arbitration: true, onProgress: progress => { if (op && current(op.id)) setNotice(`${progress.label} · ${progress.total ? Math.round(progress.completed / progress.total * 100) : 0} %`); } }));
-      if (current(op.id)) { window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(saved.project.id)}`); setLoaded(saved); setData(saved.data); setSourceFiles([]); setSourceFileCategories([]); setDirty(false); if (identity) { try { confirmFonciereDraft(identity, saved.project.id); await draftPersistence.current.catch(() => {}); await deleteFonciereLocalDraft(identity); } catch { /* The canonical project remains confirmed; retain its own recovery data if cleanup fails. */ } draftLease.current?.release(); draftLease.current = null; setDraftReady(false); } setCreationConflict(null); setReconciliation(null); setCreationReconciled(false); setNotice(t("Projet enregistré. Copie Google Drive en attente.", "Project saved. Google Drive copy pending.") + ` · ${t("révision", "revision")} ${saved.project.revision}`); setProjects(previous => [saved.project, ...previous.filter(project => project.id !== saved.project.id)]); }
+      op = await operation(); const saved = await op.scoped.run(() => op!.repository.saveProject({ data, previous: loaded || undefined, creationKey: identity?.creationKey, creationReconciled, sourceFiles, sourceFileCategories, onCreated: draft => { if (op && current(op.id)) { adoptProjectSections(draft.project.id); setLoaded(draft); } } }, { signal: op!.signal, arbitration: true, onProgress: progress => { if (op && current(op.id)) setNotice(`${progress.label} · ${progress.total ? Math.round(progress.completed / progress.total * 100) : 0} %`); } }));
+      if (current(op.id)) { adoptProjectSections(saved.project.id); window.history.replaceState(null, "", `/fonciere?project=${encodeURIComponent(saved.project.id)}`); setLoaded(saved); setData(saved.data); setSourceFiles([]); setSourceFileCategories([]); setDirty(false); if (identity) { try { confirmFonciereDraft(identity, saved.project.id); await draftPersistence.current.catch(() => {}); await deleteFonciereLocalDraft(identity); } catch { /* The canonical project remains confirmed; retain its own recovery data if cleanup fails. */ } draftLease.current?.release(); draftLease.current = null; setDraftReady(false); } setCreationConflict(null); setReconciliation(null); setCreationReconciled(false); setNotice(t("Projet enregistré. Copie Google Drive en attente.", "Project saved. Google Drive copy pending.") + ` · ${t("révision", "revision")} ${saved.project.revision}`); setProjects(previous => [saved.project, ...previous.filter(project => project.id !== saved.project.id)]); }
     } catch (failure) { if ((!op || current(op.id)) && !isCancelled(failure)) { if (failure instanceof FonciereCreationConflictError) { setCreationConflict(failure); setReconciliation(null); setError(t("Cette identité de création correspond à une autre intention d’enregistrement. Votre brouillon et ses pièces jointes sont conservés ; comparez la fiche avant de continuer.", "This creation identity belongs to a different save request. Your draft and attachments are retained; compare the saved record before continuing.")); } else setError(draftError(failure)); setNotice(t("Le brouillon et les documents à enregistrer sont conservés dans cet onglet.", "The draft and pending documents remain in this tab.")); } }
     finally { if (!op || current(op.id)) setBusy(false); }
   }
@@ -339,7 +422,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   }
   function reconcileCreation() {
     if (!reconciliation || busy || reconciliation.project.status === "archived") return;
-    setLoaded(reconciliation); setCreationReconciled(true); setCreationConflict(null); setReconciliation(null); setDirty(true); setError("");
+    adoptProjectSections(reconciliation.project.id); setLoaded(reconciliation); setCreationReconciled(true); setCreationConflict(null); setReconciliation(null); setDirty(true); setError("");
     setNotice(t("La fiche existante sert maintenant de base. Votre saisie et vos pièces jointes sont conservées. Vérifiez-les avant d’enregistrer.", "The existing record is now the baseline. Your entries and attachments are retained. Review them before saving."));
   }
   async function archive() {
@@ -353,7 +436,7 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
   }
   async function importAgency(file: File) {
     if (!canWrite || busy || review || data && !writable) return;
-    if (!data) { const generation = ++draftEpoch.current; try { const lease = await claimFonciereDraft(creationScope); if (generation !== draftEpoch.current) { lease.release(); return; } draftLease.current?.release(); draftLease.current = lease; setDraftReady(true); window.history.replaceState(null, "", draftUrl(lease.identity.draftId)); } catch (failure) { setError(draftError(failure)); return; } }
+    if (!data) { const generation = ++draftEpoch.current; try { const lease = await claimFonciereDraft(creationScope); if (generation !== draftEpoch.current) { lease.release(); return; } draftLease.current?.release(); draftLease.current = lease; selectSectionIdentity({ kind: "draft", id: lease.identity.draftId }); setDraftReady(true); window.history.replaceState(null, "", draftUrl(lease.identity.draftId)); } catch (failure) { setError(draftError(failure)); return; } }
     const initial = data || createFonciereData();
     setData(initial); setBusy(true); setError(""); setNotice(t("Analyse de la fiche d’agence…", "Reading agency brochure…"));
     let op: Awaited<ReturnType<typeof operation>> | undefined;
@@ -474,12 +557,13 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
       <div className={styles.recordHero}><div><p className={styles.eyebrow}>{loaded?.project.status === "archived" ? t("PROJET ARCHIVÉ", "ARCHIVED PROJECT") : t("FICHE PROJET", "PROJECT RECORD")}</p><p className={styles.projectReference}>{loaded?.project.project_reference || t("Numéro attribué à l’enregistrement", "Number assigned on save")}</p><h2>{data.name || t("Nouveau projet", "New project")}</h2><p><MapPin size={15} />{[data.propertyAddress, data.city].filter(Boolean).join(" · ") || t("Adresse du bien à renseigner", "Property address to complete")}</p><AddressMapLink address={propertyAddressText(data)} metadata={propertyAddressDetails(data)} lang={lang} /></div><div className={styles.heroMetrics}>{guidedText?.askingPrice && <div><span>{t("Prix demandé", "Asking price")}</span><strong>{guidedText.askingPrice}</strong></div>}{guidedText?.area && <div><span>{guidedText?.areaKind || t("Surface annoncée", "Advertised area")}</span><strong>{guidedText.area}</strong></div>}{data.agencyReference && <div><span>{t("Référence agence", "Agency reference")}</span><strong className={styles.reference}>{data.agencyReference}</strong></div>}</div></div>
       {duplicates.length > 0 && <div className={styles.warning} role="status"><strong>{t("Doublon possible", "Possible duplicate")}</strong><p>{t("Une référence agence ou une adresse correspond à : ", "An agency reference or address matches: ")}{duplicates.map(project => project.title).join(", ")}. {t("Vérifiez avant d’enregistrer. Aucun rapprochement automatique.", "Check before saving. Records are never merged automatically.")}</p></div>}
       <div className={styles.recordLayout}>
-        <nav className={styles.sectionNav} aria-label={t("Sections de la fiche projet", "Project record sections")}>{sections.map((section, index) => <a key={section.id} href={`#fonciere-section-${section.id}`} aria-current={activeSection === section.id ? "location" : undefined} onClick={() => setActiveSection(section.id)}><span>{String(index + 1).padStart(2, "0")}</span>{t(section.fr, section.en)}</a>)}<a href="#fonciere-documents" onClick={() => setActiveSection("documents")} aria-current={activeSection === "documents" ? "location" : undefined}><span>07</span>{t("Documents et visuels", "Documents and visuals")}</a><a href="#fonciere-arbitrage" onClick={() => setActiveSection("arbitrage")} aria-current={activeSection === "arbitrage" ? "location" : undefined}><span>08</span>{t("— Arbitrage", "— Arbitration")}</a></nav>
+        <nav className={styles.sectionNav} aria-label={t("Sections de la fiche projet", "Project record sections")}>{sections.map((section, index) => <a key={section.id} href={`#fonciere-section-${section.id}`} aria-current={activeSection === section.id ? "location" : undefined} onClick={event => navigateSection(event, `fonciere-section-${section.id}`)}><span>{String(index + 1).padStart(2, "0")}</span>{t(section.fr, section.en)}</a>)}<a href="#fonciere-documents" onClick={event => navigateSection(event, "fonciere-documents")} aria-current={activeSection === "documents" ? "location" : undefined}><span>07</span>{t("Documents et visuels", "Documents and visuals")}</a><a href="#fonciere-arbitrage" onClick={event => navigateSection(event, "fonciere-arbitrage")} aria-current={activeSection === "arbitrage" ? "location" : undefined}><span>08</span>{t("— Arbitrage", "— Arbitration")}</a></nav>
         <div className={styles.sections}>
-          {sections.map((section, index) => <section key={section.id} id={`fonciere-section-${section.id}`} className={`${styles.section} ${section.id === "hypotheses" ? styles.assumptions : ""}`}><header className={styles.sectionHeading}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{t(section.fr, section.en)}</h3>{section.noteFr && <p>{t(section.noteFr, section.noteEn || "")}</p>}</div></header><fieldset disabled={!writable || busy || importPending} className={styles.fieldset}><div className={styles.fieldGrid}>{section.id === "identity" && <label className={styles.wide}><span>{t("Référence projet", "Project reference")}</span><input readOnly aria-readonly="true" value={loaded?.project.project_reference || t("Numéro attribué à l’enregistrement", "Number assigned on save")} /></label>}{section.fields.filter(field => section.id !== "agency" && scenarioFieldActive(field.key) && isVisibleField(field.key)).map(field => <GuidedProjectField key={field.key} calendarInputEpoch={calendarInputEpoch} field={field} data={data} onChange={edit} lang={lang} disabled={!writable || busy || importPending} suggestions={suggestionsFor(field.key)} documents={documentOptions} />)}</div>{section.id === "identity" && !data.name.trim() && suggestedName && <div className={styles.suggestedName}><span>{t("Nom suggéré", "Suggested name")} : {suggestedName}</span><button type="button" onClick={() => editField("name", suggestedName)}>{t("Utiliser ce nom", "Use this name")}</button></div>}</fieldset>
+          <div className={styles.sectionCommands}><button type="button" className={styles.secondary} onClick={() => changeSections(new Set())}>{t("Tout replier", "Collapse all")}</button><button type="button" className={styles.secondary} onClick={() => changeSections(new Set(PROJECT_SECTION_IDS))}>{t("Tout déplier", "Expand all")}</button></div>
+          {sections.map((section, index) => <ProjectSection key={section.id} sectionId={section.id as ProjectSectionId} anchor={`fonciere-section-${section.id}`} number={String(index + 1).padStart(2, "0")} title={t(section.fr, section.en)} note={section.noteFr ? t(section.noteFr, section.noteEn || "") : undefined} open={openSections.has(section.id as ProjectSectionId)} onToggle={() => toggleSection(section.id as ProjectSectionId)}><fieldset disabled={!writable || busy || importPending} className={styles.fieldset}><div className={styles.fieldGrid}>{section.id === "identity" && <label className={styles.wide}><span>{t("Référence projet", "Project reference")}</span><input readOnly aria-readonly="true" value={loaded?.project.project_reference || t("Numéro attribué à l’enregistrement", "Number assigned on save")} /></label>}{section.fields.filter(field => section.id !== "agency" && scenarioFieldActive(field.key) && isVisibleField(field.key)).map(field => <GuidedProjectField key={field.key} calendarInputEpoch={calendarInputEpoch} field={field} data={data} onChange={edit} lang={lang} disabled={!writable || busy || importPending} suggestions={suggestionsFor(field.key)} documents={documentOptions} />)}</div>{section.id === "identity" && !data.name.trim() && suggestedName && <div className={styles.suggestedName}><span>{t("Nom suggéré", "Suggested name")} : {suggestedName}</span><button type="button" onClick={() => editField("name", suggestedName)}>{t("Utiliser ce nom", "Use this name")}</button></div>}</fieldset>
             {section.id === "hypotheses" && <><ProjectCalendarSummary data={data} lang={lang} />{retainedScenarioFields().length > 0 && <details className={styles.contextNote} data-retained-scenarios><summary>{t("Hypothèses conservées des autres scénarios", "Retained assumptions from other scenarios")} ({retainedScenarioFields().length})</summary><p>{t("Ces valeurs sont conservées. Sélectionnez la stratégie correspondante pour les consulter et les modifier dans le formulaire ; elles ne servent pas au calendrier du scénario actif.", "These values are retained. Select the corresponding strategy to view and edit them in the form; they are excluded from the active scenario calendar.")}</p><dl className={styles.retainedScenarioList}>{retainedScenarioFields().map(field => <div key={field.key}><dt>{t(field.fr, field.en)}</dt><dd>{retainedScenarioText(field.key as GuidedKey) || t("À renseigner", "To complete")}</dd></div>)}</dl></details>}</>}
             {retainedFields(section).length > 0 && <details className={styles.contextNote} data-retained-fields><summary>{t("Informations conservées à revoir", "Retained information to review")} ({retainedFields(section).length})</summary><p>{t("Ces informations restent enregistrées. Elles ne sont pas utilisées comme caractéristiques actuelles tant que leur contexte n’est pas confirmé. Revenez au type concerné pour les confirmer, ou consultez-les ici.", "This information remains saved. It is excluded from current property characteristics until its context is confirmed. Return to the relevant property type to confirm it, or review it here.")}</p><fieldset disabled={!writable || busy || importPending}><div className={styles.fieldGrid}>{retainedFields(section).map(field => <div key={field.key} className={field.wide ? styles.wide : ""}><GuidedProjectField calendarInputEpoch={calendarInputEpoch} field={field} data={data} onChange={next => { const key = field.key as GuidedKey; edit({ ...next, guided: { ...next.guided, inactive: [...new Set([...next.guided.inactive, key])] } }); }} lang={lang} disabled={!writable || busy || importPending} documents={documentOptions} idPrefix="fonciere-retained" />{fieldContextApplies(field.key) && <button type="button" className={styles.reconfirm} onClick={() => edit(reconfirmGuidedField(data, field.key as GuidedKey))}>{t("Confirmer pour ce type de bien", "Confirm for this property type")}</button>}</div>)}</div></fieldset></details>}
-            {section.id === "agency" && <><ProjectContacts key={loaded?.project.id || "new"} data={data} onChange={edit} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setContactPending} onCreateContact={intent => {
+            {section.id === "agency" && <><ProjectContacts key={loaded?.project.id || "new"} data={data} onChange={edit} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setAgencyContactPending} onCreateContact={intent => {
               if (!writable || busy || importPending || !onCreateContact) return false;
               setActiveSection("agency");
               return onCreateContact(intent);
@@ -487,8 +571,8 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
               setActiveSection("agency");
               if (contactReturn?.contact) setNotice(t("Contact enregistré. Les modifications du projet restent à enregistrer.", "Contact saved. Project changes still need to be saved."));
               onContactReturnConsumed?.();
-              document.getElementById("fonciere-section-agency")?.scrollIntoView({ block: "start" });
-            }} /><ProjectOwners key={`owners-${loaded?.project.id || "new"}-${calendarInputEpoch}`} data={data} onChange={edit} lang={lang} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} documents={documentOptions} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setContactPending} onCreateContact={intent => {
+              revealProjectElement(document.querySelector<HTMLElement>(`[data-project-contacts] [data-contact-role="${contactReturn?.role === "agent" ? "agent" : "agency"}"]`));
+            }} /><ProjectOwners key={`owners-${loaded?.project.id || "new"}-${calendarInputEpoch}`} data={data} onChange={edit} lang={lang} canReadContacts={canReadContacts} canWriteContacts={canWriteContacts} documents={documentOptions} disabled={!writable || busy || importPending} accessSignal={accessSignal} onOpenContact={onOpenContact} onPendingChange={setOwnerContactPending} onCreateContact={intent => {
               if (!writable || busy || importPending || !onCreateContact) return false;
               setActiveSection("agency");
               return onCreateContact(intent);
@@ -496,11 +580,11 @@ export default function ProjectsWorkspace({ userId, canWrite, canReadContacts = 
               setActiveSection("agency");
               if (contactReturn?.contact) setNotice(t("Contact enregistré. Les modifications du projet restent à enregistrer.", "Contact saved. Project changes still need to be saved."));
               onContactReturnConsumed?.();
-              document.querySelector("[data-project-owners]")?.scrollIntoView({ block: "start" });
+              revealProjectElement(document.querySelector<HTMLElement>("[data-project-owners]"));
             }} /></>}
-          </section>)}
-          <section id="fonciere-documents" className={styles.section}><header className={styles.sectionHeading}><span>07</span><div><h3>{t("Documents et visuels", "Documents and visuals")}</h3><p>{t("Conservez la fiche originale, les plans et les photos. Les fichiers sont enregistrés avec le projet.", "Keep the original brochure, plans and photos. Files are saved with the project.")}</p></div></header>{writable && <div className={styles.documentActions}><button className={styles.secondary} disabled={busy || importPending} onClick={() => importInput.current?.click()}><Upload size={16} />{t("Importer une fiche d’agence", "Import an agency brochure")}</button><button className={styles.secondary} disabled={busy || importPending} onClick={() => attachmentInput.current?.click()}><FileText size={16} />{t("Ajouter un document / plan", "Add a document / plan")}</button><button className={styles.secondary} disabled={busy || importPending} onClick={() => photoInput.current?.click()}><ImagePlus size={16} />{t("Ajouter des photos", "Add photos")}</button></div>}{loaded && <ProjectDriveSync key={loaded.project.id} projectId={loaded.project.id} revision={loaded.project.revision} lang={lang} accessSignal={accessSignal}/>}<p className={styles.muted}>{t("PDF, JPEG, PNG ou WebP · 25 Mo par fichier · 30 documents sources maximum. Les originaux ajoutés sont conservés ; les aperçus sont optimisés pour les présentations.", "PDF, JPEG, PNG or WebP · 25 MB per file · up to 30 source documents. Added originals are retained; previews are optimized for presentations.")}</p>{!canDownload && sourceAssets.length > 0 && <p className={styles.muted}>{t("Le téléchargement des originaux nécessite le droit Export et téléchargement. Les références documentaires et la consultation du projet restent disponibles.", "Downloading originals requires Export and download permission. Document references and project viewing remain available.")}</p>}<div className={styles.documentList}>{sourceAssets.map(asset => <div id={`fonciere-asset-${asset.id}`} key={asset.id} className={styles.document} style={{ flexWrap: "wrap" }}><FileText size={20} /><span><TaskSourceActions reference={{ type: "document", id: asset.id, context: { catalog: "fonciere", projectId: loaded!.project.id } }} title={t("Vérifier le document", "Review the document")} /><strong>{asset.original_name || t("Document original", "Original document")}</strong><span>{bytes(asset.expected_size)} · {t(...documentCategoryLabels[asset.drive_category || "other"])} · {t("Enregistré", "Saved")}</span></span><button disabled={busy || !canDownload} className={styles.iconButton} onClick={() => void download(asset)} aria-label={`${t("Télécharger", "Download")} ${asset.original_name || "document"}`}><Download size={17} /></button></div>)}{sourceFiles.map((file, index) => <div key={`${file.name}-${index}`} className={styles.document} style={{ flexWrap: "wrap" }}><FileText size={20} /><span><strong>{file.name}</strong><span>{bytes(file.size)} · {t("À enregistrer avec le projet", "Pending project save")}</span></span><label className={styles.fileCategory}><span>{t("Classement Drive", "Drive category")}</span><select aria-label={`${t("Classement", "Category")} · ${file.name}`} disabled={busy || !writable} value={sourceFileCategories[index] || "other"} onChange={event => { const category = event.target.value as DocumentCategory; setSourceFileCategories(previous => sourceFiles.map((_, at) => at === index ? category : previous[at] || "other")); setDirty(true); }}>{(Object.keys(documentCategoryLabels) as DocumentCategory[]).map(category => <option key={category} value={category}>{t(...documentCategoryLabels[category])}</option>)}</select></label><span className={styles.pending}>{t("Brouillon", "Draft")}</span></div>)}</div>{gallery.length > 0 && <div className={styles.gallery} data-project-gallery>{gallery.map((photo, index) => <figure key={`${index}-${photo.label}`}><Image src={photo.data} alt={photo.label || `${t("Photo du projet", "Project photo")} ${index + 1}`} width={260} height={170} unoptimized /><figcaption>{photo.label || `${t("Photo", "Photo")} ${index + 1}`}{photo.source && <span>{photo.source}</span>}</figcaption></figure>)}</div>}{!gallery.length && !sourceFiles.length && !sourceAssets.length && <div className={styles.documentEmpty}><FileText size={23} /><p>{t("Aucun document joint pour le moment.", "No documents attached yet.")}</p></div>}{data.provenance.length > 0 && <details className={styles.provenance}><summary>{t("Provenance des informations importées", "Imported information sources")} <span>{data.provenance.length}</span></summary><p className={styles.muted}>{t("Sources lues lors des imports. Les valeurs retenues dans la fiche restent modifiables.", "Sources read during import. Values retained in the record remain editable.")}</p>{data.provenance.map(source => <article className={styles.source} key={source.id}><h4>{source.filename}</h4><p>{source.method === "ocr" ? t("Lecture OCR", "OCR reading") : source.method === "mixed" ? t("Texte et OCR", "Text and OCR") : t("Lecture du texte", "Text extraction")} · {new Intl.DateTimeFormat(lang === "fr" ? "fr-FR" : "en-GB", { dateStyle: "medium" }).format(new Date(source.importedAt))}</p>{Object.keys(source.fields).some(key => key !== "coordinates") && <dl>{Object.entries(source.fields).filter(([key]) => key !== "coordinates").map(([key, evidence]) => <div key={key}><dt>{label(key)}{evidence.page ? ` · p. ${evidence.page}` : ""}</dt><dd>{evidence.extract}</dd></div>)}</dl>}{source.warnings.length > 0 && <ul>{source.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</article>)}</details>}</section>
-          <section id="fonciere-arbitrage" className={styles.section}><header className={styles.sectionHeading}><div><h3>{t("08 — Arbitrage", "08 — Arbitration")}</h3><p>{t("Deux avis séparés sur le même dossier enregistré, puis une décision commune calculée automatiquement.", "Two separate opinions on the same saved file, then an automatically calculated joint decision.")}</p></div></header>{loaded ? <ProjectArbitrage key={loaded.project.id} projectId={loaded.project.id} userId={userId} loadedRevision={loaded.project.revision} loadedFingerprint={loaded.arbitrationFingerprint} projectDirty={dirty || sourceFiles.length > 0 || importPending} lang={lang} accessRevision={accessRevision} accessSignal={accessSignal} onDirty={setArbitrageDirty} onStatusChange={updateArbitrageStatus} onReloadProject={rereadForArbitrage}/> : <p className={styles.muted}>{t("Enregistrez le projet pour recueillir les avis sur sa première version. Aucun avis n’est attribué automatiquement.", "Save the project to collect opinions on its first version. No opinion is assigned automatically.")}</p>}</section>
+          </ProjectSection>)}
+          <ProjectSection sectionId="documents" anchor="fonciere-documents" number="07" title={t("Documents et visuels", "Documents and visuals")} note={t("Conservez la fiche originale, les plans et les photos. Les fichiers sont enregistrés avec le projet.", "Keep the original brochure, plans and photos. Files are saved with the project.")} open={openSections.has("documents")} onToggle={() => toggleSection("documents")}>{writable && <div className={styles.documentActions}><button className={styles.secondary} disabled={busy || importPending} onClick={() => importInput.current?.click()}><Upload size={16} />{t("Importer une fiche d’agence", "Import an agency brochure")}</button><button className={styles.secondary} disabled={busy || importPending} onClick={() => attachmentInput.current?.click()}><FileText size={16} />{t("Ajouter un document / plan", "Add a document / plan")}</button><button className={styles.secondary} disabled={busy || importPending} onClick={() => photoInput.current?.click()}><ImagePlus size={16} />{t("Ajouter des photos", "Add photos")}</button></div>}{loaded && <ProjectDriveSync key={loaded.project.id} projectId={loaded.project.id} revision={loaded.project.revision} lang={lang} accessSignal={accessSignal}/>}<p className={styles.muted}>{t("PDF, JPEG, PNG ou WebP · 25 Mo par fichier · 30 documents sources maximum. Les originaux ajoutés sont conservés ; les aperçus sont optimisés pour les présentations.", "PDF, JPEG, PNG or WebP · 25 MB per file · up to 30 source documents. Added originals are retained; previews are optimized for presentations.")}</p>{!canDownload && sourceAssets.length > 0 && <p className={styles.muted}>{t("Le téléchargement des originaux nécessite le droit Export et téléchargement. Les références documentaires et la consultation du projet restent disponibles.", "Downloading originals requires Export and download permission. Document references and project viewing remain available.")}</p>}<div className={styles.documentList}>{sourceAssets.map(asset => <div id={`fonciere-asset-${asset.id}`} key={asset.id} className={styles.document} style={{ flexWrap: "wrap" }}><FileText size={20} /><span><TaskSourceActions reference={{ type: "document", id: asset.id, context: { catalog: "fonciere", projectId: loaded!.project.id } }} title={t("Vérifier le document", "Review the document")} /><strong>{asset.original_name || t("Document original", "Original document")}</strong><span>{bytes(asset.expected_size)} · {t(...documentCategoryLabels[asset.drive_category || "other"])} · {t("Enregistré", "Saved")}</span></span><button disabled={busy || !canDownload} className={styles.iconButton} onClick={() => void download(asset)} aria-label={`${t("Télécharger", "Download")} ${asset.original_name || "document"}`}><Download size={17} /></button></div>)}{sourceFiles.map((file, index) => <div key={`${file.name}-${index}`} className={styles.document} style={{ flexWrap: "wrap" }}><FileText size={20} /><span><strong>{file.name}</strong><span>{bytes(file.size)} · {t("À enregistrer avec le projet", "Pending project save")}</span></span><label className={styles.fileCategory}><span>{t("Classement Drive", "Drive category")}</span><select aria-label={`${t("Classement", "Category")} · ${file.name}`} disabled={busy || !writable} value={sourceFileCategories[index] || "other"} onChange={event => { const category = event.target.value as DocumentCategory; setSourceFileCategories(previous => sourceFiles.map((_, at) => at === index ? category : previous[at] || "other")); setDirty(true); }}>{(Object.keys(documentCategoryLabels) as DocumentCategory[]).map(category => <option key={category} value={category}>{t(...documentCategoryLabels[category])}</option>)}</select></label><span className={styles.pending}>{t("Brouillon", "Draft")}</span></div>)}</div>{gallery.length > 0 && <div className={styles.gallery} data-project-gallery>{gallery.map((photo, index) => <figure key={`${index}-${photo.label}`}><Image src={photo.data} alt={photo.label || `${t("Photo du projet", "Project photo")} ${index + 1}`} width={260} height={170} unoptimized /><figcaption>{photo.label || `${t("Photo", "Photo")} ${index + 1}`}{photo.source && <span>{photo.source}</span>}</figcaption></figure>)}</div>}{!gallery.length && !sourceFiles.length && !sourceAssets.length && <div className={styles.documentEmpty}><FileText size={23} /><p>{t("Aucun document joint pour le moment.", "No documents attached yet.")}</p></div>}{data.provenance.length > 0 && <details className={styles.provenance}><summary>{t("Provenance des informations importées", "Imported information sources")} <span>{data.provenance.length}</span></summary><p className={styles.muted}>{t("Sources lues lors des imports. Les valeurs retenues dans la fiche restent modifiables.", "Sources read during import. Values retained in the record remain editable.")}</p>{data.provenance.map(source => <article className={styles.source} key={source.id}><h4>{source.filename}</h4><p>{source.method === "ocr" ? t("Lecture OCR", "OCR reading") : source.method === "mixed" ? t("Texte et OCR", "Text and OCR") : t("Lecture du texte", "Text extraction")} · {new Intl.DateTimeFormat(lang === "fr" ? "fr-FR" : "en-GB", { dateStyle: "medium" }).format(new Date(source.importedAt))}</p>{Object.keys(source.fields).some(key => key !== "coordinates") && <dl>{Object.entries(source.fields).filter(([key]) => key !== "coordinates").map(([key, evidence]) => <div key={key}><dt>{label(key)}{evidence.page ? ` · p. ${evidence.page}` : ""}</dt><dd>{evidence.extract}</dd></div>)}</dl>}{source.warnings.length > 0 && <ul>{source.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</article>)}</details>}</ProjectSection>
+          <ProjectSection sectionId="arbitrage" anchor="fonciere-arbitrage" number="08" title={t("Arbitrage", "Arbitration")} note={t("Deux avis séparés sur le même dossier enregistré, puis une décision commune calculée automatiquement.", "Two separate opinions on the same saved file, then an automatically calculated joint decision.")} open={openSections.has("arbitrage")} onToggle={() => toggleSection("arbitrage")}>{loaded ? <ProjectArbitrage key={loaded.project.id} projectId={loaded.project.id} userId={userId} loadedRevision={loaded.project.revision} loadedFingerprint={loaded.arbitrationFingerprint} projectDirty={dirty || sourceFiles.length > 0 || importPending} lang={lang} accessRevision={accessRevision} accessSignal={accessSignal} onDirty={setArbitrageDirty} onStatusChange={updateArbitrageStatus} onReloadProject={rereadForArbitrage}/> : <p className={styles.muted}>{t("Enregistrez le projet pour recueillir les avis sur sa première version. Aucun avis n’est attribué automatiquement.", "Save the project to collect opinions on its first version. No opinion is assigned automatically.")}</p>}</ProjectSection>
           {canManageAccess && loaded && <ProjectAccess key={loaded.project.id} projectId={loaded.project.id} userId={userId} accessSignal={accessSignal} onDirty={setAccessBusy}/>}
           {writable && <div className={styles.footerSave}><p>{t("Le nom suffit pour enregistrer. Vous pourrez enrichir cette fiche à tout moment.", "A name is enough to save. You can enrich this record at any time.")}</p><button className={styles.primary} disabled={busy || importPending} onClick={() => void save()}><Save size={16} />{t("Enregistrer le projet", "Save project")}</button></div>}
         </div>

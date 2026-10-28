@@ -15,10 +15,10 @@ import { useFonciereLocale } from "@/lib/fonciere/locale";
 import styles from "./ProjectContacts.module.css";
 
 type Props = { data: FonciereData; onChange: (data: FonciereData) => void; canReadContacts: boolean; canWriteContacts: boolean; disabled?: boolean; accessSignal?: AbortSignal; onOpenContact?: (id: string) => void; onPendingChange?: (pending: boolean) => void; onCreateContact?: (intent: ContactCreateIntent) => boolean; contactReturn?: ProjectContactReturn; onContactReturnHandled?: () => void };
-type SearchState = { query: string; rows: ProjectContact[]; loading: boolean; error: string };
+type SearchState = { query: string; rows: ProjectContact[]; loading: boolean; error: string; pending: boolean };
 const asPickerContact = (row: ProjectContact): Contact => ({ ...row, kind: "Client", budget: 0, source: "", notes: "", createdAt: "" });
 const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entityType: row.entityType, companyId: row.companyId, primaryContactId: row.primaryContactId, mergedIntoCompanyId: row.mergedIntoCompanyId, name: row.name, firstName: row.firstName || "", companyName: row.companyName || "", email: row.email, phone: row.phone, city: row.city, postalAddress: row.postalAddress, postalAddressDetails: row.postalAddressDetails, organizationFunction: row.organizationFunction, supplierCategory: row.supplierCategory, searchText: (row as Contact & { searchText?: string }).searchText });
-const blankSearch = (query = ""): SearchState => ({ query, rows: [], loading: false, error: "" });
+const blankSearch = (query = ""): SearchState => ({ query, rows: [], loading: false, error: "", pending: false });
 
 export default function ProjectContacts({ data, onChange, canReadContacts, canWriteContacts, disabled = false, accessSignal, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
   const [lang] = useFonciereLocale(), begin = useScopedOperations("fonciere");
@@ -27,12 +27,14 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
   const [agentSearch, setAgentSearch] = useState(() => blankSearch(data.agentContactId ? "" : data.agentName));
   const [linked, setLinked] = useState<Record<string, ProjectContact>>({});
   const [linkError, setLinkError] = useState("");
-  const [creating, setCreating] = useState(false);
+  const [creatingRole, setCreatingRole] = useState<ContactRole | null>(null);
+  const creating = creatingRole !== null;
   const pendingIntent = useRef<string | null>(null);
   const [filterAgency, setFilterAgency] = useState(false), [opened, setOpened] = useState<ProjectContact | null>(null);
   const latest = useRef({ data, onChange, disabled, canReadContacts, accessSignal });
   useLayoutEffect(() => { latest.current = { data, onChange, disabled, canReadContacts, accessSignal }; }, [data, onChange, disabled, canReadContacts, accessSignal]);
-  useEffect(() => { onPendingChange?.(creating); return () => onPendingChange?.(false); }, [creating, onPendingChange]);
+  const pendingSelection = agencySearch.pending || agentSearch.pending;
+  useEffect(() => { onPendingChange?.(creating || pendingSelection); return () => onPendingChange?.(false); }, [creating, pendingSelection, onPendingChange]);
   useEffect(() => {
     // A newly accepted import proposes matching CRM contacts, without selecting
     // any record or replacing a search that the user has already typed.
@@ -80,25 +82,26 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
     if (replaced.length && !window.confirm(t("Remplacer les coordonnées corrigées manuellement ou importées dans ce projet ? La fiche CRM restera inchangée.", "Replace the manually corrected or imported details in this project? The CRM contact record will remain unchanged."))) return false;
     if (contact) setLinked(previous => ({ ...previous, [contact.id]: contact }));
     current.onChange(applyProjectContact(current.data, role, contact));
+    (role === "agency" ? setAgencySearch : setAgentSearch)(blankSearch());
     return true;
   }
   function prepareCreate(role: ContactRole) {
     if (!onCreateContact || creating || pendingIntent.current || disabled || !canWriteContacts || !canReadContacts) return;
     const intent = projectContactCreateIntent(data, role, linked[data.agentContactId]);
     pendingIntent.current = intent.id;
-    if (onCreateContact(intent)) setCreating(true);
+    if (onCreateContact(intent)) setCreatingRole(role);
     else pendingIntent.current = null;
   }
   useEffect(() => {
     if (!contactReturn || !["agency", "agent"].includes(contactReturn.role) || contactReturn.intentId !== pendingIntent.current) return;
     const timer = window.setTimeout(() => {
       pendingIntent.current = null;
-      setCreating(false);
+      setCreatingRole(null);
       if (contactReturn.contact) {
         const row = asProjectContact(contactReturn.contact);
         if (!select(contactReturn.role as ContactRole, row)) {
           const setter = contactReturn.role === "agency" ? setAgencySearch : setAgentSearch;
-          setter({ query: row.companyName || [row.firstName, row.name].filter(Boolean).join(" "), rows: [row], loading: false, error: "" });
+          setter({ query: row.companyName || [row.firstName, row.name].filter(Boolean).join(" "), rows: [row], loading: false, error: "", pending: true });
         }
       }
       onContactReturnHandled?.();
@@ -112,8 +115,8 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
     const search = role === "agency" ? agencySearch : agentSearch, setter = role === "agency" ? setAgencySearch : setAgentSearch;
     const id = data[role === "agency" ? "agencyContactId" : "agentContactId"];
     const rows = search.rows.filter(row => role !== "agent" || !filterAgency || contactCompanyMatches(row, data.agencyName, data.agencyContactId));
-    return <div className={styles.picker} key={role}>
-      <SearchableBusinessContactPicker contacts={rows.map(asPickerContact)} value={id} queryValue={search.query} fallbackContactName={id ? role === "agency" ? data.agencyName : data.agentName : ""} selectedRecord={canReadContacts && linked[id] ? asPickerContact(linked[id]) : null} onSelect={row => select(role, row ? asProjectContact(row) : null)} searchMode="all" name={`${role}ContactId`} disabled={disabled || !canReadContacts || creating} loading={search.loading} onQueryChange={query => setter(previous => ({ ...previous, query, rows: [], error: "", loading: false }))} onOpenContact={openContact} resultLabel={row => projectContactLabel(asProjectContact(row))} label={role === "agency" ? t("Agence / entreprise du CRM", "CRM agency / company") : t("Agent immobilier / interlocuteur du CRM", "CRM estate agent / contact")} labels={{ placeholder: t("Entreprise, prénom, nom, email ou téléphone…", "Company, first or last name, email or phone…"), empty: t("Aucun contact correspondant", "No matching contacts"), change: t("Changer", "Change"), clear: t("Retirer le lien", "Unlink"), open: t("Ouvrir le contact", "Open contact"), loading: t("Recherche des contacts autorisés…", "Searching authorized contacts…"), unavailable: t("Contact lié — chargement indisponible", "Linked contact — loading unavailable") }} />
+    return <div className={styles.picker} key={role} data-contact-role={role} data-contact-pending={search.pending || creatingRole === role || undefined}>
+      <SearchableBusinessContactPicker contacts={rows.map(asPickerContact)} value={id} queryValue={search.query} fallbackContactName={id ? role === "agency" ? data.agencyName : data.agentName : ""} selectedRecord={canReadContacts && linked[id] ? asPickerContact(linked[id]) : null} onSelect={row => select(role, row ? asProjectContact(row) : null)} searchMode="all" name={`${role}ContactId`} disabled={disabled || !canReadContacts || creating} loading={search.loading} onQueryChange={query => setter(previous => ({ ...previous, query, rows: [], error: "", loading: false, pending: Boolean(query.trim()) }))} onOpenContact={openContact} resultLabel={row => projectContactLabel(asProjectContact(row))} label={role === "agency" ? t("Agence / entreprise du CRM", "CRM agency / company") : t("Agent immobilier / interlocuteur du CRM", "CRM estate agent / contact")} labels={{ placeholder: t("Entreprise, prénom, nom, email ou téléphone…", "Company, first or last name, email or phone…"), empty: t("Aucun contact correspondant", "No matching contacts"), change: t("Changer", "Change"), clear: t("Retirer le lien", "Unlink"), open: t("Ouvrir le contact", "Open contact"), loading: t("Recherche des contacts autorisés…", "Searching authorized contacts…"), unavailable: t("Contact lié — chargement indisponible", "Linked contact — loading unavailable") }} />
       {search.loading && <p role="status">{t("Recherche des contacts autorisés…", "Searching authorized contacts…")}</p>}
       {search.error && <p className={styles.error} role="alert">{search.error}</p>}
       {role === "agency" && !id && data.agencyName && <p className={styles.note}>{t("Nom d’entreprise conservé dans le projet. Un nom seul ne crée pas de relation CRM.", "Company name retained in the project. A name alone does not create a CRM link.")}</p>}

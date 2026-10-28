@@ -88,6 +88,24 @@
 .sectionNav a[aria-current] { color:#305e3e; background:#edf3e7; font-weight:600; }
 .sectionNav a[aria-current]>span { color:#8ba078; }
 .sections { min-width:0; }
+.sectionCommands { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:8px; margin:0 0 12px; }
+.workspace .sectionCommands button { font-size:12px; min-height:40px; padding:9px 12px; }
+.workspace .collapsibleSection { padding:0; margin-bottom:12px; overflow-wrap:anywhere; }
+.workspace .collapsibleSection .sectionHeading { display:block; margin:0 !important; }
+.collapsibleSection .sectionHeading h3 { margin:0; }
+.workspace .sectionToggle { width:100%; min-height:64px; padding:17px 22px; border:0; background:transparent; color:var(--ink); justify-content:flex-start; text-align:left; font-size:17px; border-radius:10px; gap:14px; }
+.sectionNumber { font-size:10px; color:#839473; background:#f1f4eb; display:grid; place-items:center; height:28px; width:28px; border-radius:50%; flex:none; }
+.sectionTitle { flex:1; min-width:0; }
+.sectionToggle>svg { flex:none; }
+.sectionChevronOpen { transform:rotate(90deg); }
+.sectionPanel { padding:4px 27px 26px; }
+.sectionPanel[hidden] { display:none !important; }
+.sectionNote { font-size:12px; color:#78836f; line-height:1.75; margin:0 0 20px !important; max-width:670px; }
+@media(max-width:600px) {
+  .workspace .sectionToggle { min-height:62px; padding:15px 14px; font-size:15px; gap:10px; }
+  .sectionPanel { padding:2px 17px 20px; }
+  .sectionNote { font-size:11px; }
+}
 .section { border:1px solid #e2e7dd; background:#fff; padding:26px 27px; border-radius:10px; margin-bottom:20px; scroll-margin-top:22px; }
 .sectionHeading { display:flex; align-items:flex-start; gap:14px; margin-bottom:24px; }
 .sectionHeading>span { font-size:10px; color:#a3b091; background:#f1f4eb; display:grid; place-items:center; height:28px; width:28px; border-radius:50%; flex:none; }
