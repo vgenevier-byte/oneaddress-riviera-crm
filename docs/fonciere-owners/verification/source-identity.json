@@ -1,0 +1,7 @@
+{
+  "mode": "production",
+  "filesChecked": 272,
+  "mismatches": [],
+  "network": "Owned loopback services; browser blocks non-local HTTP origins",
+  "productionBusinessWrites": 0
+}

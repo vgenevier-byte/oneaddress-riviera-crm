@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addressFingerprint, formatAddress, type AddressValue } from "../../lib/address";
-import { projectContactCreateIntent } from "../../lib/fonciere/contactCreation";
+import { ownerContactCreateIntent, projectContactCreateIntent } from "../../lib/fonciere/contactCreation";
 import { createFonciereData } from "../../lib/fonciere/model";
 import type { ProjectContact } from "../../lib/fonciere/contacts";
 
@@ -55,4 +55,24 @@ test("an explicit agency selection preselects the canonical company for a new pe
   assert.equal(intent.prefill.companyId, data.agencyContactId);
   data.agencyContactId = "";
   assert.equal(projectContactCreateIntent(data, "agent").prefill.companyId, undefined);
+});
+
+
+test("owner and representative creation never inherit project agency or supplier defaults", () => {
+  for (const [role, type] of [["owner", "person"], ["owner", "company"], ["representative", "person"]] as const) {
+    const intent = ownerContactCreateIntent(role, type);
+    assert.equal(intent.origin, "fonciere");
+    assert.equal(intent.role, role);
+    assert.equal(intent.entityType, type);
+    assert.deepEqual(intent.prefill, {});
+    assert.equal(intent.identityHint, undefined);
+    assert.equal("companyId" in intent.prefill, false);
+    assert.equal("supplierCategory" in intent.prefill, false);
+    assert.equal("kind" in intent.prefill, false);
+  }
+});
+
+test("a representative is a person even if an incompatible company request is passed", () => {
+  assert.equal(ownerContactCreateIntent("representative", "company").entityType, "person");
+  assert.notEqual(ownerContactCreateIntent("owner").id, ownerContactCreateIntent("owner").id);
 });

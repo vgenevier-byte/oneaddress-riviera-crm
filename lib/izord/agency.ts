@@ -4,6 +4,7 @@ import { LIMITS, PHOTO_ROLES, createProjectData, assertProjectImageBudget, type 
 import { fileData, resizeImported, cropPhoto, RATIOS, checkAbort } from "./photos";
 import { PDF_READER_SOURCE } from "./agency-worker";
 import { enrichAgencyFacts } from "./agency-details";
+import { publicAgencyText } from "./agency-privacy";
 import { normalizeAddressValue, type AddressValue } from "../address";
 export type PdfPage = { page:number; text:string };
 export type ExtractionEvidence = { page:number|null; extract:string };
@@ -15,6 +16,7 @@ export const ROLE_LABELS={main:'1 · Vue d’ensemble',view:'2 · Vue / environn
 export function cleanText(s: unknown){return String(s||'').replace(/[\u00a0\u202f]/g,' ').replace(/\s+/g,' ').trim();}
 export function importNum(s: unknown){let x=cleanText(s).replace(/\s/g,'');if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(x))x=x.replace(/\./g,'');const n=Number(x.replace(',','.'));return Number.isFinite(n)&&n>=0?String(n):'';}
 export function parseAgency(pages: PdfPage[],filename: string): AgencyExtraction{
+ const originalPages = pages; pages = pages.map(page => ({ ...page, text: publicAgencyText(page.text) }));
  const fields: Record<string,string>={},evidence: Record<string,ExtractionEvidence>={},extra: string[]=[],warnings: string[]=[];const cleaned=pages.map(x=>({...x,flat:cleanText(x.text)}));const all=cleaned.map(x=>x.flat).join('\n');const raw=pages.map(x=>x.text).join('\n');
  const record=(key:string,value:unknown,pg:number|null,extract:unknown)=>{if(value===undefined||value===null||value==='')return;fields[key]=String(value);evidence[key]={page:pg,extract:cleanText(extract).slice(0,230)};};
  const match=(key:string,re:RegExp,group=1,fn:(value:string)=>string=x=>x)=>{for(const p of cleaned){const m=p.flat.match(re);if(m){record(key,fn(m[group]),p.page,m[0]);return m;}}return null;};
@@ -55,7 +57,7 @@ export function parseAgency(pages: PdfPage[],filename: string): AgencyExtraction
  fields.program='Programme de rénovation à définir.\nActe et livraison : dates à valider.';fields.decisionNotes='Prix cible, travaux, revente et location à estimer.\nFinancement et pièces techniques à vérifier.';
  if(!fields.area)warnings.push('Surface du bien non renseignée ou non reconnue.');if(!fields.asking)warnings.push('Prix demandé non renseigné ou non reconnu.');
  const chars=raw.replace(/\s/g,'');if(chars.length<60)warnings.unshift('Texte non exploitable : ce PDF peut être scanné. Aucun OCR n’est intégré ; compléter les champs manuellement.');if((raw.match(/�/g)||[]).length>8)warnings.unshift('Encodage de texte partiellement illisible : vérifiez tous les champs.');
- return {filename,pages:pages.length,fields,evidence,extra,warnings,agency,parser:isLogi?'Fiche structurée Logi Service':isHR?'Brochure Hermitage Riviera':'Détection générique — vérification renforcée',rawText:pages.map(p=>'PAGE '+p.page+'\n'+p.text).join('\n\n')};
+ return {filename,pages:pages.length,fields,evidence,extra,warnings,agency,parser:isLogi?'Fiche structurée Logi Service':isHR?'Brochure Hermitage Riviera':'Détection générique — vérification renforcée',rawText:originalPages.map(p=>'PAGE '+p.page+'\n'+p.text).join('\n\n')};
 }
 
 export function workerRead(buffer: ArrayBuffer, options: { signal?: AbortSignal; onProgress?: (page:number,total:number)=>void } = {}): Promise<PdfReadResult> {
@@ -130,12 +132,17 @@ export async function analyzeAgencyFiles(files: File[] | FileList, options: { si
 }
 /** Caller must explicitly obtain review consent and replacement confirmation before applying. */
 export async function applyAgencyReport(report: AgencyReport, signal?: AbortSignal): Promise<ProjectData> {
+  // This is a public presentation source. Dedicated ownership/sale-context
+  // proposals are read separately from rawText and never copied to metadata.
+  const publicFields = new Set([...Object.keys(BASE), "city", "postalCode", "location", "agencyName", "agencyAddress", "agencyPhone", "agencyEmail", "agentName", "agentPhone", "agentEmail", "condition", "equipment", "annexes", "exterior", "pool", "view", "description", "agencyPotential", "renovation", "division", "extension", "resale", "rental", "pointsOfInterest", "pointsToVerify", "diagnostics", "charges", "constraints", "fees", "areaKind", "rooms", "bedrooms", "agencyCharges", "berth", "mainArea", "secondArea", "mainLabel", "secondLabel"]);
+  const fields = Object.fromEntries(Object.entries(report.fields).filter(([key]) => publicFields.has(key)));
+  const evidence = Object.fromEntries(Object.entries(report.evidence).filter(([key]) => publicFields.has(key)));
   checkAbort(signal); const next = createProjectData();
-  for (const key of Object.keys(BASE)) if (key in report.fields && typeof next.state[key] === "string") { if (report.fields[key].length > 1000) throw new Error(`Champ importé trop long : ${key}.`); next.state[key] = report.fields[key]; }
+  for (const key of Object.keys(BASE)) if (key in fields && typeof next.state[key] === "string") { if (fields[key].length > 1000) throw new Error(`Champ importé trop long : ${key}.`); next.state[key] = fields[key]; }
   if (report.addressDetails) next.addressDetails = normalizeAddressValue(report.addressDetails, next.state.address);
   for (const key of ["acq","works","resale","weekly"]) next.state[key] = "";
   next.state.costsReviewed = false;
   for (const role of PHOTO_ROLES) { const index = report.roles[role]; if (index === -1) continue; const photo = report.gallery[index]; if (!Number.isInteger(index) || !photo) throw new Error("Affectation de photographie invalide."); next.photos[role] = await cropPhoto(photo.data, RATIOS[role], signal); next.photoGalleryRoles[role] = index; }
-  next.importMeta = { filename:report.filename,pages:report.pages,agency:report.agency,parser:report.parser,evidence:report.evidence,agencyFields:{...report.fields},extractionMethod:report.extractionMethod||"text",ocrPages:report.ocrPages||[],extra:report.extra,warnings:[...report.warnings,...report.readerWarnings],validatedAt:new Date().toISOString(),roles:{...report.roles} };
+  next.importMeta = { filename:report.filename,pages:report.pages,agency:report.agency,parser:report.parser,evidence,agencyFields:fields,extractionMethod:report.extractionMethod||"text",ocrPages:report.ocrPages||[],extra:report.extra,warnings:[...report.warnings,...report.readerWarnings],validatedAt:new Date().toISOString(),roles:{...report.roles} };
   next.importGallery = report.gallery.map(photo=>({...photo})); assertProjectImageBudget(next); checkAbort(signal); return next;
 }

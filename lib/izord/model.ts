@@ -52,7 +52,7 @@ function safeMetadata(value: unknown, depth = 0, budget = { count: 0 }): JsonVal
   if (typeof value === "string") { if (value.length > 100_000) throw new Error("Texte de métadonnées trop volumineux."); return value; }
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (Array.isArray(value)) return value.map(entry => safeMetadata(entry, depth + 1, budget));
-  if (record(value)) { const result: { [key: string]: JsonValue } = {}; for (const [key, entry] of Object.entries(value)) { if (["__proto__", "constructor", "prototype"].includes(key)) throw new Error("Référence de métadonnées interdite."); result[key] = safeMetadata(entry, depth + 1, budget); } return result; }
+  if (record(value)) { const result: { [key: string]: JsonValue } = {}; for (const [key, entry] of Object.entries(value)) { if (["__proto__", "constructor", "prototype"].includes(key)) throw new Error("Référence de métadonnées interdite."); if (key === "ownerContext") continue; result[key] = safeMetadata(entry, depth + 1, budget); } return result; }
   throw new Error("Type de métadonnée JSON invalide.");
 }
 export function validateProjectData(input: unknown): ProjectData {

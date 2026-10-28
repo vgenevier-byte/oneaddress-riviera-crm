@@ -3,6 +3,7 @@ import { AGENCY_FIELD_MAP } from "./import-fields";
 import { number as financeNumber, finite } from "../izord/finance";
 import { normalizeAddressValue, type AddressValue } from "../address";
 import { propertyAddressDetails, selectPropertyAddress } from "./address";
+import { createOwnerContext, validateOwnerContext, type OwnerContext } from "./owners";
 import { createGuidedProperty, validateGuidedProperty, guidedReadableFields, deriveGuidedProperty, currentGuidedValue, setGuidedField, type GuidedProperty, type GuidedComposite, type GuidedKey } from "./guided";
 
 /** Property records are independent from the versioned presentation dossiers. */
@@ -19,14 +20,14 @@ export type ImportProvenance = {
   warnings: string[]; fields: Record<string, { page: number | null; extract: string }>;
 };
 export type ContactSources = { agent?: { baseline: Partial<Record<"agentName" | "agentEmail" | "agentPhone" | "agencyName", string>> }; agency?: { baseline: Partial<Record<"agencyName" | "agencyAddress" | "agencyPhone" | "agencyEmail", string>> } };
-export type FonciereData = Record<FonciereField, string> & { presentationData: ProjectData; provenance: ImportProvenance[]; guided: GuidedProperty; contactSources: ContactSources; propertyAddressDetails?: AddressValue; agencyAddressDetails?: AddressValue };
+export type FonciereData = Record<FonciereField, string> & { presentationData: ProjectData; provenance: ImportProvenance[]; guided: GuidedProperty; contactSources: ContactSources; ownerContext: OwnerContext; propertyAddressDetails?: AddressValue; agencyAddressDetails?: AddressValue };
 export const FONCIERE_SCHEMA = "FONCIERE_PROPERTY_V1";
 export const FONCIERE_DOCUMENT_LIMIT = 30;
 function numericHypothesis(value: string): string { const parsed = financeNumber(value); return finite(parsed) ? String(parsed) : ""; }
 
 export function createFonciereData(): FonciereData {
   const fields = Object.fromEntries(FONCIERE_FIELDS.map(key => [key, ""])) as Record<FonciereField, string>;
-  return { ...fields, presentationData: createProjectData(), provenance: [], guided: createGuidedProperty(), contactSources: {} };
+  return { ...fields, presentationData: createProjectData(), provenance: [], guided: createGuidedProperty(), contactSources: {}, ownerContext: createOwnerContext() };
 }
 
 export function validateFonciereData(input: unknown, requireName = true): FonciereData {
@@ -38,6 +39,7 @@ export function validateFonciereData(input: unknown, requireName = true): Foncie
     result[key] = value;
   }
   result.guided = validateGuidedProperty(raw.guided);
+  result.ownerContext = validateOwnerContext(raw.ownerContext);
   if (raw.propertyAddressDetails !== undefined) result.propertyAddressDetails = propertyAddressDetails({ ...result, propertyAddressDetails: normalizeAddressValue(raw.propertyAddressDetails) });
   if (raw.agencyAddressDetails !== undefined) result.agencyAddressDetails = normalizeAddressValue(raw.agencyAddressDetails, result.agencyAddress);
   if (raw.contactSources !== undefined) {
@@ -104,14 +106,19 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
     if (rent.period === "week") { set("weekly", String(rent.amount)); set("rentalMode", "seasonal"); if (typeof rent.occupiedUnits === "number") set("weeks", String(rent.occupiedUnits)); }
   }
   set("decisionNotes", [data.notes, ...(["worksHypothesis","resaleHypothesis","rentalHypothesis"] as GuidedKey[]).filter(key=>text(key) && (key !== "resaleHypothesis" || saleActive) && (key !== "rentalHypothesis" || rentalActive)).map(key=>`Hypothèse personnelle (${key === "worksHypothesis" ? "travaux" : key === "resaleHypothesis" ? "revente" : "location"}) : ${text(key)}`)].filter(Boolean).join("\n"));
+  // Deliberate public-field allowlist: ownerContext and its internal evidence never
+  // enter the presentation snapshot, persisted metadata, JSON or PowerPoint notes.
   const fullText = Object.fromEntries(FONCIERE_FIELDS.filter(key => !["agentContactId","agencyContactId"].includes(key)).map(key => [key, data[key]]));
   result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedState: structuredClone(result.state), ...(data.propertyAddressDetails ? { propertyAddressDetails: structuredClone(data.propertyAddressDetails) } : {}), ...(data.agencyAddressDetails ? { agencyAddressDetails: structuredClone(data.agencyAddressDetails) } : {}) } as unknown as import("../izord/model").JsonValue };
   if (source) result.importMeta.fonciereSource = { id: source.id, revision: source.revision, capturedAt: new Date().toISOString() };
   return validateProjectData(result);
 }
 
-export function fromPresentationData(input: ProjectData): FonciereData {
+export function fromPresentationData(input: ProjectData, existing?: FonciereData): FonciereData {
   const presentation = validateProjectData(input), result = createFonciereData(), state = presentation.state;
+  // This dedicated internal block is never restored from presentation metadata.
+  // A reviewed reconciliation can update public fields while retaining the project context.
+  if (existing) result.ownerContext = structuredClone(validateFonciereData(existing, false).ownerContext);
   const agencyFields = presentation.importMeta?.agencyFields;
   let importedAddress = "";
   if (agencyFields && typeof agencyFields === "object" && !Array.isArray(agencyFields)) {

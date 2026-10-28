@@ -4,7 +4,7 @@ import type { Contact } from "@/lib/types";
 export type ContactCreateIntent = {
   id: string;
   origin: "fonciere";
-  role: "agency" | "agent";
+  role: "agency" | "agent" | "owner" | "representative";
   entityType: "company" | "person";
   prefill: Pick<Partial<Contact>, "name" | "firstName" | "civility" | "companyName" | "companyId" | "email" | "phone" | "postalAddress" | "postalAddressDetails" | "city">;
   identityHint?: string;

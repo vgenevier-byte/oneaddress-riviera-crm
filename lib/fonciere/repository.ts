@@ -7,6 +7,7 @@ import { assertEncodedImageBudget, assertImageByteBudget, encodedJpegLength } fr
 import { photoDataToBlob, validateUploadBlob, type OperationOptions } from "../izord/repository";
 import { searchProjectContacts, duplicateProjectContacts, type ProjectContact, type ContactCreateInput } from "./contacts";
 import { FONCIERE_DOCUMENT_LIMIT, FONCIERE_SCHEMA, validateFonciereData, type FonciereData } from "./model";
+import { validateOwnerContext } from "./owners";
 
 export type FonciereProjectRecord = { id: string; owner_id: string; title: string; project_number?: number; project_reference?: string; creation_key?: string; revision: number; status: "active" | "archived"; payload: StoredFoncierePayload; created_at: string; updated_at: string };
 export type FonciereDocumentCategory = "agency" | "plans" | "photos" | "other";
@@ -228,6 +229,8 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       const saved = await guarded(options.signal, () => client.rpc("fonciere_save_project", { p_id: target.id, p_expected_revision: target.revision, p_payload: value, p_contact: data.agentContactId, p_agency_contact: data.agencyContactId })); failure(saved.error);
       const confirmed = await readProject(target.id, options);
       if (confirmed.revision !== target.revision + 1) throw new FonciereConflictError();
+      // Attribution is owned by the server; reflect its confirmed value at once.
+      data.ownerContext = validateOwnerContext(confirmed.payload.data.ownerContext);
       if (options.arbitration) {
         const reviewed = await loadProject(target.id, options);
         if (reviewed.project.revision !== confirmed.revision) throw new FonciereConflictError();

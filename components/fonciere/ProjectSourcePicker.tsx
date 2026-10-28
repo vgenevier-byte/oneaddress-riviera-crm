@@ -106,7 +106,7 @@ export default function ProjectSourcePicker({ userId, data, sourceFiles, draftId
     if (!name) { setMessage(tr("Renseignez le nom du projet dans le formulaire.", "Enter the project name in the form.")); return; }
     const current = lifetime.current; working(true); setMessage("");
     try {
-      const op = await begin(), signal = AbortSignal.any([op.signal, accessSignal]), repository = createFonciereRepository(op.client, { accessToken: op.token }), property = fromPresentationData(data);
+      const op = await begin(), signal = AbortSignal.any([op.signal, accessSignal]), repository = createFonciereRepository(op.client, { accessToken: op.token }), property = fromPresentationData(data, pendingProject.current?.data);
       const list = await op.run(() => repository.listProjects({ signal }));
       const duplicate = list.some(item => property.agencyReference && normalize(item.payload.data.agencyReference) === normalize(property.agencyReference) || property.propertyAddress && normalize(item.payload.data.propertyAddress) === normalize(property.propertyAddress));
       if (duplicate && !window.confirm(tr("Un projet avec cette référence ou cette adresse existe déjà. Créer une fiche distincte ? Aucune fusion ne sera effectuée.", "A project with this reference or address already exists. Create a separate record? Records will not be merged."))) return;

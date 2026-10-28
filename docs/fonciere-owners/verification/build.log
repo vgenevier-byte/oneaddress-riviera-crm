@@ -1,0 +1,46 @@
+▲ Next.js 16.3.5 (webpack)
+✓ Running next.config.mjs took 5ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 1779ms
+  Running TypeScript ...
+  Finished TypeScript in 1567ms ...
+  Collecting page data using 13 workers ...
+  Generating static pages using 13 workers (0/13) ...
+  Generating static pages using 13 workers (3/13)
+  Generating static pages using 13 workers (6/13)
+  Generating static pages using 13 workers (9/13)
+✓ Generating static pages using 13 workers (13/13) in 155ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin
+├ ƒ /api/access/invite
+├ ƒ /api/contact-documents/file
+├ ƒ /api/drive/delete
+├ ƒ /api/drive/diagnostic
+├ ƒ /api/drive/file
+├ ƒ /api/drive/folders
+├ ƒ /api/drive/upload
+├ ƒ /api/drive/vendor-bank-accounts/upload
+├ ƒ /api/fonciere/drive
+├ ƒ /api/fonciere/drive/folder
+├ ƒ /api/fonciere/drive/root-name
+├ ƒ /api/fonciere/drive/worker
+├ ƒ /api/fonciere/photo-preview
+├ ƒ /api/house-worker-documents/cleanup
+├ ƒ /api/publisher
+├ ƒ /api/tasks/publisher
+├ ○ /charges
+├ ○ /fonciere
+├ ○ /icon.png
+├ ○ /izord
+├ ○ /publisher
+└ ○ /spaces
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

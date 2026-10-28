@@ -1,0 +1,22 @@
+{
+  "passed": 15,
+  "checks": [
+    "Optional sole owner context saves, reauthenticates and reloads with real RPC/SQL",
+    "Four declared indivision owners keep two identified contacts and full ownership",
+    "Company owner, representative and split ownership remain separate identities",
+    "Server rejects duplicate/forged contacts, company person profiles and malformed values",
+    "Manual negotiation records actual actor/date and retains them across unrelated saves",
+    "Contributor without Contacts can retain links and edit context; new identity links fail",
+    "Project reader, unassigned contributor and anonymous access enforce existing project rights",
+    "Omitted context in an old client payload preserves saved project-only information",
+    "Principal must be a linked person; same-save agency agent is accepted and removed links remain reviewable",
+    "Linked owner and representative identities cannot silently disappear or change entity type in Contacts",
+    "Represented-owner identity requires Contacts admission and a linked owner; unchanged orphan remains reviewable",
+    "Source contact and document references require authorized existing identities",
+    "Owner edit invalidates saved arbitration; derived display reads do not write",
+    "Private validators have no public execution privilege; hidden ownerContext rejected at presentation persistence",
+    "New project has no inherited owner claims, negotiation or internal provenance"
+  ],
+  "services": "Real local Auth/PostgREST/PostgreSQL",
+  "productionWrites": 0
+}

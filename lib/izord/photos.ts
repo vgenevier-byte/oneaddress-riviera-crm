@@ -85,6 +85,9 @@ function notesMetadata(meta: ImportMeta): string {
     }
   }
   return JSON.stringify(rendered, (key, value: unknown) => {
+    // Internal ownership and negotiation data must never enter speaker notes,
+    // including metadata supplied directly by older or untrusted callers.
+    if (key === "ownerContext") return undefined;
     if (!["propertyAddressDetails", "agencyAddressDetails", "addressDetails"].includes(key) || !object(value)) return value;
     const address = { ...value }; delete address.latitude; delete address.longitude;
     return address;

@@ -12639,7 +12639,7 @@ function ContactsViewBody({
               }).finally(() => { journeyPending.current = false; });
             }}>
             <ConfirmedFormMessage message={getContactIdentityValidationError(creation.message) ? "" : creation.message} />
-            {journeyError && <p role="alert">{journeyText("Vérifiez vos droits Contacts et conservez la nature Entreprise pour une agence, Personne pour un interlocuteur.", "Check your Contacts permissions and keep Company for an agency or Person for an individual contact.")}</p>}
+            {journeyError && <p role="alert">{journeyText("Vérifiez vos droits Contacts et conservez la nature de fiche choisie depuis le projet.", "Check your Contacts permissions and keep the record type selected from the project.")}</p>}
             {createIntent && duplicateChoices.length > 0 && <section className="stack full" data-project-contact-duplicates>
               <p role="status">{journeyText("Doublon possible détecté. Vous pouvez sélectionner une fiche existante ou confirmer la création d’une nouvelle fiche.", "Possible duplicate detected. Select an existing record or confirm creation of a new one.")}</p>
               {duplicateChoices.map(contact => <BusinessButton key={contact.id} permission="write" type="button" className="secondary-button" onClick={() => {

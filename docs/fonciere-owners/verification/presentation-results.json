@@ -1,0 +1,32 @@
+{
+  "passed": 8,
+  "checks": [
+    "Fictional complete owner context persists and reloads after a new authenticated session",
+    "Manual persisted presentation excludes owner fields, identifiers, provenance and appraisal without changing finance",
+    "Approved bank presentation uses the approved snapshot and excludes the dedicated internal context from stored data",
+    "Presentation reimport starts with empty internal context and preserves an existing project context during reviewed reconciliation",
+    "Actual browser manual JSON and PowerPoint export contain no private markers in every XML part, including notes",
+    "Actual browser bank JSON and PowerPoint export contain no private markers in every XML part, including notes",
+    "Imported JSON cannot recover ownerContext through nested metadata or PowerPoint speaker notes",
+    "Internal saved context edit requires arbitration reconfirmation and keeps existing worked presentations and finance intact"
+  ],
+  "exported": {
+    "manual": {
+      "xmlParts": 45,
+      "notesParts": 2,
+      "markerOccurrences": 0
+    },
+    "bank": {
+      "xmlParts": 45,
+      "notesParts": 2,
+      "markerOccurrences": 0
+    }
+  },
+  "errors": [],
+  "externalRequests": [],
+  "project": "53c09576-6f35-408b-87a5-6db462a7340a",
+  "manualId": "f72e6d9c-2970-41aa-b6f8-3fe77bb33847",
+  "bankId": "5aa586e7-0177-4c97-a2db-c3118625dc7f",
+  "services": "Real isolated Auth/PostgreSQL/PostgREST/Storage and Chromium JSON/PPTX exports",
+  "productionWrites": 0
+}

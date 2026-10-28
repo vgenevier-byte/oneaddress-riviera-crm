@@ -90,13 +90,13 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
     else pendingIntent.current = null;
   }
   useEffect(() => {
-    if (!contactReturn || contactReturn.intentId !== pendingIntent.current) return;
+    if (!contactReturn || !["agency", "agent"].includes(contactReturn.role) || contactReturn.intentId !== pendingIntent.current) return;
     const timer = window.setTimeout(() => {
       pendingIntent.current = null;
       setCreating(false);
       if (contactReturn.contact) {
         const row = asProjectContact(contactReturn.contact);
-        if (!select(contactReturn.role, row)) {
+        if (!select(contactReturn.role as ContactRole, row)) {
           const setter = contactReturn.role === "agency" ? setAgencySearch : setAgentSearch;
           setter({ query: row.companyName || [row.firstName, row.name].filter(Boolean).join(" "), rows: [row], loading: false, error: "" });
         }

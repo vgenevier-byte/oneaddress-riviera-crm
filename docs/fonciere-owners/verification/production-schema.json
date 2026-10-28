@@ -1,0 +1,23 @@
+{
+  "migration": "20261028122339_fonciere_owner_context",
+  "migrationSHA256": "c6f195e08d51cf824d744f889d2041e4d6e90aaf5723fffc0484ff51abe68999",
+  "applied": true,
+  "appliedSQLIdenticalToLocal": true,
+  "rls": {
+    "fonciere_projects": true,
+    "fonciere_project_contacts": true,
+    "fonciere_assets": true,
+    "izord_projects": true
+  },
+  "validatorsPrivate": true,
+  "expectedTriggers": 4,
+  "businessDataWrites": 0,
+  "productionBusinessWorkflowsTested": false,
+  "productionRowFingerprintComparison": "Not performed: automatic approval review rejected aggregation of sensitive real rows",
+  "securityAdvisorCountsUnchanged": {
+    "rls_enabled_no_policy": 37,
+    "function_search_path_mutable": 1,
+    "authenticated_security_definer_function_executable": 61,
+    "auth_leaked_password_protection": 1
+  }
+}
