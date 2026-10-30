@@ -10,10 +10,24 @@ import { FONCIERE_DOCUMENT_LIMIT, FONCIERE_SCHEMA, validateFonciereData, type Fo
 import { validateOwnerContext } from "./owners";
 
 export type FonciereProjectRecord = { id: string; owner_id: string; title: string; project_number?: number; project_reference?: string; creation_key?: string; revision: number; status: "active" | "archived"; payload: StoredFoncierePayload; created_at: string; updated_at: string };
+export type FonciereProjectSummary = Omit<FonciereProjectRecord,"payload"> & {payload:{data:Partial<FonciereData>;creationIntentHash?:string;creationRequestHash?:string}};
+const summaryFields=['name','propertyAddress','city','postalCode','agencyReference','agencyName','agentName','agentEmail','agentPhone','propertyType','askingPrice','area','areaKind','visitDate'] as const;
+const summarySelect=['id','owner_id','title','project_number','project_reference','revision','status','created_at','updated_at',...summaryFields.map(k=>`f_${k}:payload->data->${k}`),'g_values:payload->data->guided->values','g_inactive:payload->data->guided->inactive',...['propertyType','askingPrice','area','areaKind'].map(k=>`g_${k}:payload->data->guided->details->${k}`),'intent:payload->creationIntentHash','request:payload->creationRequestHash'].join(',');
+function summaryRow(row:Record<string,unknown>):FonciereProjectSummary {const {id,owner_id,title,project_number,project_reference,revision,status,created_at,updated_at}=row;const data:Record<string,unknown>={};for(const key of summaryFields)data[key]=typeof row['f_'+key]==='string'?row['f_'+key]:'';data.guided={version:1,values:row.g_values||{},inactive:row.g_inactive||[],details:Object.fromEntries(['propertyType','askingPrice','area','areaKind'].filter(k=>typeof row['g_'+k]==='string').map(k=>[k,row['g_'+k]]))};return {id,owner_id,title,project_number,project_reference,revision,status,created_at,updated_at,payload:{data,...(row.intent?{creationIntentHash:row.intent}:{}),...(row.request?{creationRequestHash:row.request}:{})}} as FonciereProjectSummary;}
 export type FonciereDocumentCategory = "agency" | "plans" | "photos" | "other";
 export type FonciereAssetRecord = { id: string; project_id: string; object_path: string; kind: "pdf" | "photo" | "attachment"; lifecycle: "pending" | "finalized" | "withdrawn"; created_by: string; created_at: string; expected_size: number; expected_mime: string; original_name: string; drive_category?: FonciereDocumentCategory };
 export type StoredFoncierePayload = { schema: typeof FONCIERE_SCHEMA; data: FonciereData; sourceDocuments: string[]; creationRequestHash?: string; creationIntentHash?: string };
-export type LoadedFonciereProject = { project: FonciereProjectRecord; data: FonciereData; assets: FonciereAssetRecord[]; sourceDocuments: string[]; arbitrationFingerprint?: string };
+export type FonciereMediaState = { loadId?: string; status: "pending" | "complete" | "failed"; previews: Record<string,string>; errors: string[] };
+export type LoadedFonciereProject = { media?: FonciereMediaState; project: FonciereProjectRecord; data: FonciereData; assets: FonciereAssetRecord[]; sourceDocuments: string[]; arbitrationFingerprint?: string };
+/** Explicitly accept a fully admitted preview set for media editing; metadata reads never do this implicitly. */
+export function resolveFonciereMedia(loaded:LoadedFonciereProject,data=loaded.data):LoadedFonciereProject {
+ if(!loaded.media)return {...loaded,data};
+ if(loaded.media.status!=='complete')throw new Error("Les photographies ne sont pas toutes disponibles. Vos informations et les références enregistrées sont conservées.");
+ const next=structuredClone(data),saved=loaded.project.payload.data.presentationData;
+ for(const role of PHOTO_ROLES){const ref=saved.photos[role];if(ref){const value=loaded.media.previews[ref];if(!value)throw Error('Aperçu incomplet');if(data.presentationData.photos[role]===loaded.data.presentationData.photos[role])next.presentationData.photos[role]=value;}}
+ next.presentationData.importGallery.forEach((photo,index)=>{const ref=saved.importGallery[index]?.data;if(ref){const value=loaded.media!.previews[ref];if(!value)throw Error('Photothèque incomplète');if(photo.data===loaded.data.presentationData.importGallery[index]?.data)photo.data=value;}});
+ const result={...loaded,data:next};delete result.media;return result;
+}
 export type ContactOption = ProjectContact;
 export type { ContactCreateInput } from "./contacts";
 export class FonciereConflictError extends Error { constructor() { super("Une autre modification a été enregistrée. Votre saisie est conservée ; rechargez la fiche avant de rapprocher les changements."); this.name = "FonciereConflictError"; } }
@@ -25,6 +39,9 @@ export class FonciereCreationConflictError extends Error {
     this.projectId = identity.projectId; this.projectReference = identity.projectReference; this.revision = identity.revision;
   }
 }
+const previewCache = new Map<string,{etag:string;blob:Blob}>();
+let previewCacheBytes=0;
+export function clearFoncierePreviewCache(){previewCache.clear();previewCacheBytes=0;}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function aborted(signal?: AbortSignal) { if (signal?.aborted) throw new DOMException("Opération interrompue.", "AbortError"); }
 async function guarded<T>(signal: AbortSignal | undefined, operation: () => PromiseLike<T>): Promise<T> { aborted(signal); try { return await operation(); } finally { aborted(signal); } }
@@ -88,10 +105,14 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
   async function previewPhoto(asset: FonciereAssetRecord, options: OperationOptions): Promise<Blob> {
     const token = configuration.accessToken || (await guarded(options.signal, () => client.auth.getSession())).data.session?.access_token;
     if (!token) throw new Error("Session CRM requise pour consulter les photographies.");
-    const response = await guarded(options.signal, () => fetch(`${configuration.previewBaseUrl || ""}/api/fonciere/photo-preview?asset=${encodeURIComponent(asset.id)}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store", signal: options.signal }));
-    if (!response.ok) throw new Error("Photographie inaccessible. Votre fiche et ses références sont conservées.");
+    const key=token+":"+asset.id, cached=previewCache.get(key);
+    const response = await guarded(options.signal, () => fetch(`${configuration.previewBaseUrl || ""}/api/fonciere/photo-preview?asset=${encodeURIComponent(asset.id)}`, { headers: { Authorization: `Bearer ${token}`, ...(cached?{"If-None-Match":cached.etag}:{}) }, cache: "no-store", signal: options.signal }));
+    // Every reuse still reaches live server admission; no byte cache bypasses ACL.
+    if(response.status===304&&cached)return cached.blob;
+    if (!response.ok) {if(cached){previewCache.delete(key);previewCacheBytes-=cached.blob.size;}throw new Error("Photographie inaccessible. Votre fiche et ses références sont conservées.");}
     const blob = await guarded(options.signal, () => response.blob());
     if (blob.type !== "image/jpeg" || !blob.size || blob.size > LIMITS.fileBytes) throw new Error("Aperçu photographique invalide.");
+    const etag=response.headers.get('etag');if(etag){if(cached)previewCacheBytes-=cached.blob.size;previewCache.delete(key);previewCache.set(key,{etag,blob});previewCacheBytes+=blob.size;while(previewCacheBytes>32_000_000||previewCache.size>96){const first=previewCache.keys().next().value!;previewCacheBytes-=previewCache.get(first)!.blob.size;previewCache.delete(first);}}
     return blob;
   }
   async function downloadAsset(asset: FonciereAssetRecord, options: OperationOptions = {}): Promise<Blob> {
@@ -106,11 +127,11 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     if (!result.data || typeof result.data.fingerprint !== "string" || !Number.isInteger(result.data.revision)) throw new FonciereConflictError();
     return { fingerprint: result.data.fingerprint, revision: result.data.revision };
   }
-  async function loadProject(id: string, options: OperationOptions & { purpose?: "transfer"; arbitration?: boolean } = {}): Promise<LoadedFonciereProject> {
+  async function loadProject(id: string, options: OperationOptions & { purpose?: "transfer"; arbitration?: boolean; media?: "defer" } = {}): Promise<LoadedFonciereProject> {
     const beforeArbitration = options.arbitration ? await arbitrationToken(id, options) : null;
     if (options.purpose === "transfer") await authorizeTransfer(id, null, options);
-    const project = await readProject(id, options), saved = payload(project.payload), assets = await listAssets(id, options);
-    const link = await guarded(options.signal, () => client.from("fonciere_project_contacts").select("contact_id,agency_contact_id").eq("project_id", id).maybeSingle()); failure(link.error);
+    const [project,assets,link] = await Promise.all([readProject(id,options),listAssets(id,options),guarded(options.signal, () => client.from("fonciere_project_contacts").select("contact_id,agency_contact_id").eq("project_id", id).maybeSingle())]);
+    const saved=payload(project.payload);failure(link.error);
     const data = structuredClone(saved.data), empty = createProjectData(), cache = new Map<string, string>();
     data.agentContactId = link.data?.contact_id || "";
     data.agencyContactId = link.data?.agency_contact_id || "";
@@ -124,15 +145,24 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       if (!cache.has(ref)) cache.set(ref, await blobData(await (options.purpose === "transfer" ? downloadAsset(asset, options) : previewPhoto(asset, options)), options));
       return cache.get(ref)!;
     }
-    for (const role of PHOTO_ROLES) data.presentationData.photos[role] = await hydrate(data.presentationData.photos[role], empty.photos[role]);
-    for (const photo of data.presentationData.importGallery) photo.data = await hydrate(photo.data, empty.photos.main);
+    const deferred=options.media==='defer'&&options.purpose!=='transfer';
+    // References remain canonical in project.payload. Display placeholders are never deletions.
+    if(!deferred){const queue=[...new Set(refs)];await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{while(queue.length){aborted(options.signal);await hydrate(queue.shift()!,empty.photos.main);}}));}
+    for(const role of PHOTO_ROLES)data.presentationData.photos[role]=deferred?empty.photos[role]:await hydrate(data.presentationData.photos[role],empty.photos[role]);
+    for(const photo of data.presentationData.importGallery)photo.data=deferred?empty.photos.main:await hydrate(photo.data,empty.photos.main);
     for (const ref of saved.sourceDocuments) if (!assets.some(asset => asset.id === ref && asset.project_id === id && ["pdf", "attachment"].includes(asset.kind))) throw new Error("Un document source est inaccessible. La fiche n’a pas été chargée partiellement.");
     if (options.purpose === "transfer") await authorizeTransfer(id, project.revision, options);
     if (beforeArbitration) {
       const afterArbitration = await arbitrationToken(id, options);
       if (beforeArbitration.fingerprint !== afterArbitration.fingerprint || beforeArbitration.revision !== project.revision || afterArbitration.revision !== project.revision) throw new FonciereConflictError();
     }
-    return { project, data: validateFonciereData(data), assets, sourceDocuments: [...saved.sourceDocuments], ...(beforeArbitration ? { arbitrationFingerprint: beforeArbitration.fingerprint } : {}) };
+    return { project, data: validateFonciereData(data), assets, ...(deferred?{media:{loadId:crypto.randomUUID(),status:refs.length?"pending" as const:"complete" as const,previews:{},errors:[]}}:{}), sourceDocuments: [...saved.sourceDocuments], ...(beforeArbitration ? { arbitrationFingerprint: beforeArbitration.fingerprint } : {}) };
+  }
+  async function hydrateMedia(loaded:LoadedFonciereProject, options:OperationOptions & {onPhoto?:(id:string,data:string)=>void}={}) : Promise<FonciereMediaState> {
+    const id=loaded.project.id,saved=payload(loaded.project.payload),refs=[...new Set([...Object.values(saved.data.presentationData.photos),...saved.data.presentationData.importGallery.map(p=>p.data)].filter(Boolean))];
+    const previews:Record<string,string>={},errors:string[]=[],queue=[...refs];
+    await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{while(queue.length){aborted(options.signal);const ref=queue.shift()!;try{const asset=loaded.assets.find(a=>a.id===ref&&a.project_id===id&&a.kind==='photo');if(!asset)throw Error('Missing photo');const value=await blobData(await previewPhoto(asset,options),options);aborted(options.signal);previews[ref]=value;options.onPhoto?.(ref,value);}catch(error){aborted(options.signal);errors.push(ref);}}}));
+    return {loadId:loaded.media?.loadId,status:errors.length?'failed':'complete',previews,errors};
   }
   async function uploadAsset(project: FonciereProjectRecord, file: Blob, kind: FonciereAssetRecord["kind"], name: string, options: OperationOptions, category: FonciereDocumentCategory = kind === "photo" ? "photos" : kind === "pdf" ? "agency" : "other"): Promise<FonciereAssetRecord> {
     if (kind === "attachment" && file.type === "image/webp") {
@@ -163,6 +193,9 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     })) };
   }
   return {
+    async listProjectSummaries(options:OperationOptions={}):Promise<FonciereProjectSummary[]> {
+      const rows:FonciereProjectSummary[]=[];for(let offset=0;;offset+=250){const result=await guarded(options.signal,()=>client.from('fonciere_projects').select(summarySelect).order('project_number',{ascending:true}).order('id',{ascending:true}).range(offset,offset+249));failure(result.error);const page=result.data||[];rows.push(...page.map(row=>summaryRow(row as unknown as Record<string,unknown>)));if(page.length<250)return rows;}
+    },
     async listProjects(options: OperationOptions = {}): Promise<FonciereProjectRecord[]> {
       const rows: FonciereProjectRecord[] = [], pageSize = 250;
       // RLS remains applied to each page; rank/search only after every eligible page is loaded.
@@ -174,13 +207,17 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
         if (page.length < pageSize) return rows;
       }
     },
-    loadProject, listAssets, downloadAsset, authorizeTransfer,
-    async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; creationKey?: string; creationReconciled?: boolean; sourceFiles?: File[]; sourceFileCategories?: FonciereDocumentCategory[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions & { arbitration?: boolean } = {}): Promise<LoadedFonciereProject> {
+    loadProject, hydrateMedia, listAssets, downloadAsset, authorizeTransfer,
+    readContacts: contacts,
+    async saveProject(input: { data: FonciereData; previous?: LoadedFonciereProject; creationKey?: string; creationReconciled?: boolean; sourceFiles?: File[]; sourceFileCategories?: FonciereDocumentCategory[]; onCreated?: (draft: LoadedFonciereProject) => void }, options: OperationOptions & { arbitration?: boolean; media?: "defer" } = {}): Promise<LoadedFonciereProject> {
       const data = validateFonciereData(input.data), persisted = structuredClone(data), empty = createProjectData();
       // Contact identity has a separate Contacts-protected projection in SQL.
       delete (persisted as Partial<FonciereData>).agentContactId;
       delete (persisted as Partial<FonciereData>).agencyContactId;
-      const before = input.previous, old = before ? payload(before.project.payload) : null, reuse = new Map<string, string>();
+      const before = input.previous;
+      const partialMedia = Boolean(before?.media && (!input.creationKey || input.creationReconciled));
+      if(partialMedia && before && (JSON.stringify(data.presentationData.photos)!==JSON.stringify(before.data.presentationData.photos)||JSON.stringify(data.presentationData.importGallery)!==JSON.stringify(before.data.presentationData.importGallery)||JSON.stringify(data.presentationData.photoGalleryRoles)!==JSON.stringify(before.data.presentationData.photoGalleryRoles)))throw new Error("Chargez toutes les photographies avant de modifier leurs affectations. Les références enregistrées sont conservées.");
+      const old = before ? payload(before.project.payload) : null, reuse = new Map<string, string>();
       if (old && before) {
         for (const role of PHOTO_ROLES) if (old.data.presentationData.photos[role]) reuse.set(before.data.presentationData.photos[role], old.data.presentationData.photos[role]);
         old.data.presentationData.importGallery.forEach((photo, index) => { if (before.data.presentationData.importGallery[index]) reuse.set(before.data.presentationData.importGallery[index].data, photo.data); });
@@ -207,18 +244,21 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       const target = project, uploaded = new Map<string, string>();
       async function persistPhoto(value: string, fallback: string, name: string, previousValue?: string, previousReference?: string) {
         // Slot identity preserves distinct originals even when previews have equal bytes.
-        if (previousReference && value === previousValue) return previousReference;
+        if (previousReference !== undefined && value === previousValue) return previousReference;
         if (value === fallback) return "";
         if (reuse.has(value)) return reuse.get(value)!;
         if (!uploaded.has(value)) uploaded.set(value, (await uploadAsset(target, photoDataToBlob(value), "photo", name, options)).id);
         return uploaded.get(value)!;
       }
+      if(partialMedia&&old){persisted.presentationData.photos=structuredClone(old.data.presentationData.photos);persisted.presentationData.importGallery=structuredClone(old.data.presentationData.importGallery);persisted.presentationData.photoGalleryRoles=structuredClone(old.data.presentationData.photoGalleryRoles);}
+      else {
       for (const role of PHOTO_ROLES) persisted.presentationData.photos[role] = await persistPhoto(data.presentationData.photos[role], empty.photos[role], `${role}.jpg`, before?.data.presentationData.photos[role], old?.data.presentationData.photos[role]);
       for (let index = 0; index < data.presentationData.importGallery.length; index++) {
         const item = data.presentationData.importGallery[index];
         const prior = before?.data.presentationData.importGallery[index];
         const priorRef = old?.data.presentationData.importGallery[index];
         persisted.presentationData.importGallery[index].data = await persistPhoto(item.data, "", `photo-${index + 1}.jpg`, prior?.data, priorRef?.data);
+      }
       }
       const sourceDocuments = [...(before?.sourceDocuments || [])];
       if (sourceDocuments.length + (input.sourceFiles?.length || 0) > FONCIERE_DOCUMENT_LIMIT) throw new Error("Trente documents sources maximum par projet.");
@@ -237,6 +277,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
         return reviewed;
       }
       options.onProgress?.({ stage: "save", completed: 1, total: 1, label: "Projet enregistré" });
+      if(options.media==='defer'||before?.media)return loadProject(target.id,{...options,media:'defer'});
       return { project: confirmed, data, assets: await listAssets(target.id, options), sourceDocuments };
     },
     async archiveProject(project: FonciereProjectRecord, archived: boolean, options: OperationOptions = {}): Promise<FonciereProjectRecord> {

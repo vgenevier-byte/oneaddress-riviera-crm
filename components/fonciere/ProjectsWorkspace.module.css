@@ -349,3 +349,4 @@
 .rentalPanel .fieldGrid { min-width:0; }
 .rentalPanel .rentalTable { min-width:960px; table-layout:auto; }
 .rentalPanel .rentalTable th,.rentalPanel .rentalTable td { word-break:normal; overflow-wrap:normal; letter-spacing:normal; text-transform:none; }
+.photoLoading { min-height:150px; display:grid; place-items:center; padding:16px; background:#f2f4f0; color:#63745e; font-size:12px; }

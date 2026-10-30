@@ -4,14 +4,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import SearchableBusinessContactPicker from "@/components/SearchableBusinessContactPicker";
 import { AddressField } from "@/components/address/AddressField";
 import { AddressMapLink } from "@/components/address/AddressMapLink";
-import { isCancelled, useScopedOperations } from "@/lib/access/operations";
-import { createFonciereRepository } from "@/lib/fonciere/repository";
+import { isCancelled } from "@/lib/access/operations";
 import { applyProjectContact, contactCompanyMatches, contactReplacementFields, isAgencyOption, projectContactLabel, type ContactRole, type ProjectContact } from "@/lib/fonciere/contacts";
 import { projectContactCreateIntent, type ProjectContactReturn } from "@/lib/fonciere/contactCreation";
 import type { ContactCreateIntent } from "@/lib/contacts/createIntent";
 import type { FonciereData } from "@/lib/fonciere/model";
 import type { Contact } from "@/lib/types";
 import { useFonciereLocale } from "@/lib/fonciere/locale";
+import {useProjectContactReads} from "./ProjectContactReads";
 import ProjectFieldEditor, { type ProjectFieldEditorHandle } from "./ProjectFieldEditor";
 import styles from "./ProjectContacts.module.css";
 
@@ -22,9 +22,10 @@ const asProjectContact = (row: Contact): ProjectContact => ({ id: row.id, entity
 const blankSearch = (query = ""): SearchState => ({ query, rows: [], loading: false, error: "", pending: false });
 
 export default function ProjectContacts({ data, onChange, canReadContacts, canWriteContacts, disabled = false, accessSignal, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
+  const queries=useProjectContactReads();
   const editors = useRef(new Map<string, ProjectFieldEditorHandle>());
   const coordinatePicker = useRef<HTMLSelectElement>(null);
-  const [lang] = useFonciereLocale(), begin = useScopedOperations("fonciere");
+  const [lang] = useFonciereLocale();
   const t = (fr: string, en: string) => lang === "fr" ? fr : en;
   const [agencySearch, setAgencySearch] = useState(() => blankSearch(data.agencyContactId ? "" : data.agencyName));
   const [agentSearch, setAgentSearch] = useState(() => blankSearch(data.agentContactId ? "" : data.agentName));
@@ -53,14 +54,14 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
     const ids = [data.agentContactId, data.agencyContactId].filter(Boolean);
     if (!canReadContacts || !ids.length || accessSignal?.aborted) return () => local.abort();
     void (async () => {
-      const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]), repository = createFonciereRepository(op.client, { accessToken: op.token });
-      const rows = await op.run(() => Promise.all(ids.map(id => repository.readContact(id, { signal })))); signal.throwIfAborted();
+      const signal = AbortSignal.any([local.signal, ...(accessSignal ? [accessSignal] : [])]);
+      const rows = await Promise.all(ids.map(id => queries.readContact(id, { signal }))); signal.throwIfAborted();
       setLinked(Object.fromEntries(rows.filter((row): row is ProjectContact => Boolean(row)).map(row => [row.id, row])));
       setLinkError(rows.some(row => !row) ? t("Un contact lié est indisponible. Les informations locales sont conservées.", "A linked contact is unavailable. Local information is retained.") : "");
     })().catch(error => { if (!local.signal.aborted && !isCancelled(error)) setLinkError(t("Impossible de charger les contacts liés. Le brouillon est conservé.", "Linked contacts could not be loaded. The draft is retained.")); });
     return () => local.abort();
     // The source values remain local; loading a fresh contact never overwrites them.
-  }, [data.agentContactId, data.agencyContactId, canReadContacts, begin, accessSignal, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data.agentContactId, data.agencyContactId, canReadContacts, queries, accessSignal, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const local = new AbortController();
@@ -68,13 +69,13 @@ export default function ProjectContacts({ data, onChange, canReadContacts, canWr
       const setter = role === "agency" ? setAgencySearch : setAgentSearch;
       if (!canReadContacts || query.trim().length < 1 || accessSignal?.aborted) return;
       return window.setTimeout(() => { setter(previous => ({ ...previous, loading: true, error: "" })); void (async () => {
-        const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]);
-        const rows = await op.run(() => createFonciereRepository(op.client, { accessToken: op.token }).searchContacts(query, { signal })); signal.throwIfAborted();
+        const signal = AbortSignal.any([local.signal, ...(accessSignal ? [accessSignal] : [])]);
+        const rows = await queries.searchContacts(query, { signal }); signal.throwIfAborted();
         setter(previous => ({ ...previous, loading: false, rows: rows.filter(row => role === "agency" ? isAgencyOption(row) : row.entityType !== "company") }));
       })().catch(error => { if (!local.signal.aborted && !isCancelled(error)) setter(previous => ({ ...previous, loading: false, rows: [], error: t("Recherche indisponible. Vos valeurs restent conservées.", "Search unavailable. Your values are retained.") })); }); }, 220);
     });
     return () => { local.abort(); tasks.forEach(timer => { if (timer !== undefined) window.clearTimeout(timer); }); };
-  }, [agencySearch.query, agentSearch.query, canReadContacts, accessSignal, begin, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [agencySearch.query, agentSearch.query, canReadContacts, accessSignal, queries, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const selectedAgent = canReadContacts ? linked[data.agentContactId] : undefined;
   const inconsistent = selectedAgent && data.agencyName && !contactCompanyMatches(selectedAgent, data.agencyName, data.agencyContactId);

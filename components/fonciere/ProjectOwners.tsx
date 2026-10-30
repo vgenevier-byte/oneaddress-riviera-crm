@@ -1,10 +1,10 @@
 "use client";
+import {useProjectContactReads} from "./ProjectContactReads";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import SearchableBusinessContactPicker from "@/components/SearchableBusinessContactPicker";
 import { SearchableSelect } from "@/components/search/SearchableSelect";
-import { isCancelled, useScopedOperations } from "@/lib/access/operations";
-import { createFonciereRepository } from "@/lib/fonciere/repository";
+import { isCancelled } from "@/lib/access/operations";
 import { projectContactLabel, type ProjectContact } from "@/lib/fonciere/contacts";
 import { ownerContactCreateIntent, type ProjectContactReturn } from "@/lib/fonciere/contactCreation";
 import { ownerImportLabel } from "@/lib/fonciere/ownerImport";
@@ -29,18 +29,18 @@ function CountryChoice({ id, label, value, onChange, lang, disabled }: { id: str
   return <label className={styles.field}><span>{label}</span><SearchableSelect id={id} aria-label={label} value={value} disabled={disabled} onChange={event => onChange(event.target.value)}><option value="">{lang === "fr" ? "Non renseigné" : "Not provided"}</option>{countries.map(country => <option key={country.code} value={country.code} data-search={country.code}>{country.name}</option>)}</SearchableSelect></label>;
 }
 function SourceContactSearch({ id, value, onChange, disabled, canReadContacts, accessSignal, linked, lang }: { id: string; value: string; onChange: (id: string) => void; disabled: boolean; canReadContacts: boolean; accessSignal?: AbortSignal; linked: Record<string, ProjectContact>; lang: "fr" | "en" }) {
-  const begin = useScopedOperations("fonciere"), t = (fr: string, en: string) => lang === "fr" ? fr : en;
+  const queries=useProjectContactReads(), t = (fr: string, en: string) => lang === "fr" ? fr : en;
   const [query, setQuery] = useState(""), [rows, setRows] = useState<ProjectContact[]>([]), [loading, setLoading] = useState(false), [error, setError] = useState("");
   useEffect(() => {
     const local = new AbortController();
     if (!canReadContacts || !query.trim() || accessSignal?.aborted) return () => local.abort();
     const timer = window.setTimeout(() => { setLoading(true); setError(""); void (async () => {
-      const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]);
-      const results = await op.run(() => createFonciereRepository(op.client, { accessToken: op.token }).searchContacts(query, { signal })); signal.throwIfAborted();
+      const signal = AbortSignal.any([local.signal, ...(accessSignal ? [accessSignal] : [])]);
+      const results = await queries.searchContacts(query, { signal }); signal.throwIfAborted();
       setRows(results); setLoading(false);
     })().catch(cause => { if (!local.signal.aborted && !isCancelled(cause)) { setLoading(false); setError(t("Recherche indisponible. Le lien source est conservé.", "Search unavailable. The source link is retained.")); } }); }, 220);
     return () => { local.abort(); window.clearTimeout(timer); };
-  }, [query, canReadContacts, accessSignal, begin, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [query, canReadContacts, accessSignal, queries, lang]); // eslint-disable-line react-hooks/exhaustive-deps
   return <div className={styles.sourcePicker} data-source-contact-picker={id}><SearchableBusinessContactPicker name={id} value={value} queryValue={query} selectedRecord={canReadContacts && linked[value] ? asPicker(linked[value]) : null} contacts={rows.map(asPicker)} onSelect={contact => { if (disabled || !canReadContacts || accessSignal?.aborted) return false; onChange(contact?.id || ""); setQuery(""); return true; }} onQueryChange={next => { setQuery(next); setRows([]); setLoading(false); setError(""); }} disabled={disabled || !canReadContacts} loading={loading} searchMode="all" resultLabel={contact => projectContactLabel(asProject(contact))} fallbackContactName={value ? t("Contact source lié — indisponible", "Linked source contact — unavailable") : ""} label={t("Agence / contact source CRM", "Agency / CRM source contact")} labels={{ placeholder: t("Prénom, nom, entreprise, ville…", "First name, last name, company, city…"), empty: t("Aucun contact correspondant", "No matching contacts"), loading: t("Recherche des contacts autorisés…", "Searching authorized contacts…"), change: t("Changer", "Change"), clear: t("Retirer le lien source", "Unlink source") }} />{error && <p className={styles.error} role="alert">{error}</p>}</div>;
 }
 function InformationFields({ value, onChange, lang, disabled, linked, canReadContacts, accessSignal, documents, prefix }: { value: OwnerInformation; onChange: (value: OwnerInformation) => void; lang: "fr" | "en"; disabled: boolean; linked: Record<string, ProjectContact>; canReadContacts: boolean; accessSignal?: AbortSignal; documents: Props["documents"]; prefix: string }) {
@@ -56,7 +56,8 @@ function InformationFields({ value, onChange, lang, disabled, linked, canReadCon
 }
 
 export default function ProjectOwners({ data, onChange, lang, canReadContacts, canWriteContacts, disabled = false, accessSignal, documents, onOpenContact, onPendingChange, onCreateContact, contactReturn, onContactReturnHandled }: Props) {
-  const context = data.ownerContext, begin = useScopedOperations("fonciere"), t = useCallback((fr: string, en: string) => lang === "fr" ? fr : en, [lang]);
+  const queries=useProjectContactReads();
+  const context = data.ownerContext, t = useCallback((fr: string, en: string) => lang === "fr" ? fr : en, [lang]);
   const [query, setQuery] = useState(""), [rows, setRows] = useState<ProjectContact[]>([]), [loading, setLoading] = useState(false), [error, setError] = useState("");
   const [linked, setLinked] = useState<Record<string, ProjectContact>>({}), [linkError, setLinkError] = useState("");
   const [role, setRole] = useState<LinkRole>("owner"), [representedOwner, setRepresentedOwner] = useState("");
@@ -88,24 +89,23 @@ export default function ProjectOwners({ data, onChange, lang, canReadContacts, c
     const local = new AbortController();
     if (!canReadContacts || !linkedIds || accessSignal?.aborted) return () => local.abort();
     void (async () => {
-      const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]);
-      const repository = createFonciereRepository(op.client, { accessToken: op.token });
-      const results = await op.run(() => Promise.all(linkedIds.split(",").map(id => repository.readContact(id, { signal })))); signal.throwIfAborted();
+      const signal = AbortSignal.any([local.signal, ...(accessSignal ? [accessSignal] : [])]);
+      const results = await Promise.all(linkedIds.split(",").map(id => queries.readContact(id, { signal }))); signal.throwIfAborted();
       setLinked(Object.fromEntries(results.filter((row): row is ProjectContact => Boolean(row)).map(row => [row.id, row])));
       setLinkError(results.some(row => !row) ? t("Un contact lié est indisponible. Les informations du projet sont conservées.", "A linked contact is unavailable. Project information is retained.") : "");
     })().catch(cause => { if (!local.signal.aborted && !isCancelled(cause)) setLinkError(t("Contacts liés indisponibles. Le brouillon est conservé.", "Linked contacts unavailable. The draft is retained.")); });
     return () => local.abort();
-  }, [linkedIds, canReadContacts, accessSignal, begin, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [linkedIds, canReadContacts, accessSignal, queries, lang]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const local = new AbortController();
     if (!canReadContacts || !query.trim() || accessSignal?.aborted) return () => local.abort();
     const timer = window.setTimeout(() => { setLoading(true); setError(""); void (async () => {
-      const op = await begin(), signal = AbortSignal.any([op.signal, local.signal, ...(accessSignal ? [accessSignal] : [])]);
-      const results = await op.run(() => createFonciereRepository(op.client, { accessToken: op.token }).searchContacts(query, { signal })); signal.throwIfAborted();
+      const signal = AbortSignal.any([local.signal, ...(accessSignal ? [accessSignal] : [])]);
+      const results = await queries.searchContacts(query, { signal }); signal.throwIfAborted();
       setRows(results); setLoading(false);
     })().catch(cause => { if (!local.signal.aborted && !isCancelled(cause)) { setLoading(false); setError(t("Recherche indisponible. Votre saisie est conservée.", "Search unavailable. Your entries are retained.")); } }); }, 220);
     return () => { local.abort(); window.clearTimeout(timer); };
-  }, [query, canReadContacts, accessSignal, begin, lang]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [query, canReadContacts, accessSignal, queries, lang]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function change(next: OwnerContext) { if (!disabled && !creating && !accessSignal?.aborted) onChange({ ...data, ownerContext: next }); }
   const addContact = useCallback((contact: ProjectContact, linkRole: LinkRole, ownerId = "", requiresOwnerSelection = false) => {
