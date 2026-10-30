@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "Create and reread civil visit date with legacy rich fields and unanswered diagnostics",
+    "Server rejects invalid dates/types and diagnostic answers without any write",
+    "Modification, clearing, past/future dates and every diagnostic answer preserve all historical values",
+    "Old-client omissions retain saved answers while explicit empty values can clear them",
+    "Actual two-file Storage save and reauthentication retain plans/other and queued Drive destinations"
+  ],
+  "project": "ed55754e-e5eb-4905-b648-04714ee0a478",
+  "drive": "Real Storage and queue; Google Drive worker intentionally not run"
+}

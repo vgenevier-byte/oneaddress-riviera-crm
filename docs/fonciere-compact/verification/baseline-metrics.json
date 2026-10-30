@@ -1,0 +1,38 @@
+{
+  "rich": {
+    "agency": {
+      "height": 1921,
+      "controls": 20
+    },
+    "property": {
+      "height": 3605,
+      "controls": 69
+    },
+    "description": {
+      "height": 4244,
+      "controls": 68
+    },
+    "additional": {
+      "height": 2479,
+      "controls": 35
+    }
+  },
+  "empty": {
+    "agency": {
+      "height": 1757,
+      "controls": 19
+    },
+    "property": {
+      "height": 2331,
+      "controls": 58
+    },
+    "description": {
+      "height": 3305,
+      "controls": 55
+    },
+    "additional": {
+      "height": 1861,
+      "controls": 25
+    }
+  }
+}

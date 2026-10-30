@@ -1,0 +1,73 @@
+{
+  "checks": [
+    "Measure rich and empty opened sections using the same fictional fixture",
+    "Opened, sorted, filtered records and disclosures perform no project or opinion writes",
+    "Compact supplementary values preserve old selections; forbidden new options absent, old values still editable",
+    "Constraint details open individually without rewriting global historical details",
+    "A single simplified edit preserves the entire rich legacy record and zero charges",
+    "Invalid visit/complement drafts survive disclosures and are revealed before focus on save",
+    "Diagnostics yes/no/clear never rewrites legacy detailed results",
+    "Fresh draft has no inferred visit/diagnostics, and type-specific cores exclude dwelling assumptions",
+    "Visit and simultaneous plan/document survive Contacts return, save, reauthentication and correct categories",
+    "Rows show reference/city/type/price/visit/decision with fuzzy search, filters, keyboard and mobile",
+    "Calendar and separate opinions remain reachable; mobile compact sections fit screen",
+    "Archived projects remain accessible through the archived row filter"
+  ],
+  "observations": {
+    "rich": {
+      "agency": {
+        "height": 1268,
+        "controls": 6
+      },
+      "property": {
+        "height": 876,
+        "controls": 9
+      },
+      "description": {
+        "height": 850,
+        "controls": 5
+      },
+      "additional": {
+        "height": 741,
+        "controls": 5
+      }
+    },
+    "empty": {
+      "agency": {
+        "height": 996,
+        "controls": 5
+      },
+      "property": {
+        "height": 608,
+        "controls": 9
+      },
+      "description": {
+        "height": 611,
+        "controls": 4
+      },
+      "additional": {
+        "height": 595,
+        "controls": 5
+      }
+    },
+    "visitDate": "2029-10-28",
+    "browserCreatedProject": "458b105f-2a28-42f2-abeb-dff3e52d9056",
+    "reduction": {
+      "empty": {
+        "beforeControls": 157,
+        "afterControls": 23,
+        "beforeHeight": 9254,
+        "afterHeight": 2810
+      },
+      "rich": {
+        "beforeControls": 192,
+        "afterControls": 25,
+        "beforeHeight": 12249,
+        "afterHeight": 3735
+      }
+    }
+  },
+  "errors": [],
+  "external": [],
+  "drive": "Actual local Storage/queue; Google Drive not invoked"
+}

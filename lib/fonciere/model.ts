@@ -1,10 +1,11 @@
+import { isCivilDate } from "./calendarDates";
 import { createProjectData, validateProjectData, type ProjectData } from "../izord/model";
 import { AGENCY_FIELD_MAP } from "./import-fields";
 import { number as financeNumber, finite } from "../izord/finance";
 import { normalizeAddressValue, type AddressValue } from "../address";
 import { propertyAddressDetails, selectPropertyAddress } from "./address";
 import { createOwnerContext, validateOwnerContext, type OwnerContext } from "./owners";
-import { createGuidedProperty, validateGuidedProperty, guidedReadableFields, deriveGuidedProperty, currentGuidedValue, setGuidedField, type GuidedProperty, type GuidedComposite, type GuidedKey } from "./guided";
+import { GUIDED_FIELD_DEFINITIONS, createGuidedProperty, validateGuidedProperty, guidedReadableFields, deriveGuidedProperty, currentGuidedValue, setGuidedField, type GuidedProperty, type GuidedComposite, type GuidedKey } from "./guided";
 
 /** Property records are independent from the versioned presentation dossiers. */
 export const FONCIERE_FIELDS = [
@@ -20,14 +21,14 @@ export type ImportProvenance = {
   warnings: string[]; fields: Record<string, { page: number | null; extract: string }>;
 };
 export type ContactSources = { agent?: { baseline: Partial<Record<"agentName" | "agentEmail" | "agentPhone" | "agencyName", string>> }; agency?: { baseline: Partial<Record<"agencyName" | "agencyAddress" | "agencyPhone" | "agencyEmail", string>> } };
-export type FonciereData = Record<FonciereField, string> & { presentationData: ProjectData; provenance: ImportProvenance[]; guided: GuidedProperty; contactSources: ContactSources; ownerContext: OwnerContext; propertyAddressDetails?: AddressValue; agencyAddressDetails?: AddressValue };
+export type FonciereData = Record<FonciereField, string> & { presentationData: ProjectData; provenance: ImportProvenance[]; guided: GuidedProperty; contactSources: ContactSources; ownerContext: OwnerContext; visitDate: string; constraintNotes: Record<string, string>; diagnosticsReceived: "" | "yes" | "no"; propertyAddressDetails?: AddressValue; agencyAddressDetails?: AddressValue };
 export const FONCIERE_SCHEMA = "FONCIERE_PROPERTY_V1";
 export const FONCIERE_DOCUMENT_LIMIT = 30;
 function numericHypothesis(value: string): string { const parsed = financeNumber(value); return finite(parsed) ? String(parsed) : ""; }
 
 export function createFonciereData(): FonciereData {
   const fields = Object.fromEntries(FONCIERE_FIELDS.map(key => [key, ""])) as Record<FonciereField, string>;
-  return { ...fields, presentationData: createProjectData(), provenance: [], guided: createGuidedProperty(), contactSources: {}, ownerContext: createOwnerContext() };
+  return { ...fields, presentationData: createProjectData(), provenance: [], guided: createGuidedProperty(), contactSources: {}, visitDate: "", constraintNotes: {}, diagnosticsReceived: "", ownerContext: createOwnerContext() };
 }
 
 export function validateFonciereData(input: unknown, requireName = true): FonciereData {
@@ -37,6 +38,15 @@ export function validateFonciereData(input: unknown, requireName = true): Foncie
     const value = raw[key] ?? "";
     if (typeof value !== "string" || value.length > (key === "name" ? 200 : ["agentContactId", "agencyContactId"].includes(key) ? 180 : 12000)) throw new Error(`Champ de projet invalide ou trop long : ${key}.`);
     result[key] = value;
+  }
+  if (raw.visitDate !== undefined && raw.visitDate !== "" && !isCivilDate(raw.visitDate)) throw new Error("Date de visite invalide.");
+  if (raw.diagnosticsReceived !== undefined && !["", "yes", "no"].includes(raw.diagnosticsReceived as string)) throw new Error("Réponse diagnostics invalide.");
+  result.visitDate = (raw.visitDate as string | undefined) ?? "";
+  result.diagnosticsReceived = (raw.diagnosticsReceived as FonciereData["diagnosticsReceived"] | undefined) ?? "";
+  if (raw.constraintNotes !== undefined) {
+    const notes = raw.constraintNotes;
+    if (!notes || typeof notes !== "object" || Array.isArray(notes) || Object.entries(notes).some(([key, value]) => !GUIDED_FIELD_DEFINITIONS.constraints.options?.some(option => option.value === key) || typeof value !== "string" || value.length > 12000)) throw new Error("Précision de contrainte invalide.");
+    result.constraintNotes = { ...notes } as Record<string, string>;
   }
   result.guided = validateGuidedProperty(raw.guided);
   result.ownerContext = validateOwnerContext(raw.ownerContext);
@@ -78,6 +88,7 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   const set = (key: string, value: string) => { result.state[key] = value.slice(0, 1000); };
   const text = (key: GuidedKey) => readable[key];
   const amount = (key: GuidedKey) => { const value = currentGuidedValue(data,key); return typeof value === "number" ? String(value) : key in deriveGuidedProperty(data).values ? "" : numericHypothesis(data[key as FonciereField] || ""); };
+  const constraintDetails = () => { const selected = currentGuidedValue(data, "constraints"); return Array.isArray(selected) ? selected.flatMap(code => typeof code === "string" && data.constraintNotes[code] ? [`${GUIDED_FIELD_DEFINITIONS.constraints.options?.find(option => option.value === code)?.label.fr || code} : ${data.constraintNotes[code]}`] : []).join("\n") : ""; };
   const compositeAmount = (key: GuidedKey) => { const value = currentGuidedValue(data,key); return value && !Array.isArray(value) && typeof value === "object" && typeof value.amount === "number" ? String(value.amount) : key in deriveGuidedProperty(data).values ? "" : numericHypothesis(data[key as FonciereField] || ""); };
   const strategy = currentGuidedValue(data, "personalStrategy");
   const legacyStrategy = !Object.hasOwn(deriveGuidedProperty(data).values, "personalStrategy");
@@ -95,7 +106,7 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   set("agencyFee", text("fees"));
   set("features", [text("rooms") && `${text("rooms")} pièces`, text("bedrooms") && `${text("bedrooms")} chambres`, ...(["condition","equipment","annexes","exterior","pool","view","floor","lots","uses","occupancy","servicing","buildability","parkingSpaces","parkingType","access"] as GuidedKey[]).filter(key => text(key)).map(key => `${key === "pool" ? "Piscine : " : ""}${text(key)}`), data.description].filter(Boolean).join(" · "));
   set("program", [text("agencyPotential") && `Potentiel annoncé par l’agence (à vérifier) : ${text("agencyPotential")}`, ...(["renovation","division","extension"] as GuidedKey[]).filter(key=>text(key)).map(key=>`${key === "renovation" ? "Rénovation" : key === "division" ? "Division" : "Agrandissement"} — étude, sans autorisation présumée : ${text(key)}`), text("resale") && `Objectifs personnels : ${text("resale")}`, text("rental") && `Objectifs locatifs : ${text("rental")}`].filter(Boolean).join("\n"));
-  set("propertyWarnings", (["pointsToVerify","diagnostics","charges","constraints"] as GuidedKey[]).filter(key=>text(key)).map(key=>text(key)).join("\n"));
+  set("propertyWarnings", (["pointsToVerify","diagnostics","charges","constraints"] as GuidedKey[]).filter(key=>text(key)).map(key=>text(key)).concat(constraintDetails()).filter(Boolean).join("\n"));
   set("environment", [data.location, text("locationPrecision"), text("pointsOfInterest")].filter(Boolean).join(" · "));
   set("source", [data.agencyName, data.agencyReference, data.provenance.map(item => item.filename).join(", ")].filter(Boolean).join(" · "));
   set("works", compositeAmount("worksHypothesis")); set("resale", saleActive ? compositeAmount("resaleHypothesis") : "");
@@ -109,7 +120,7 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   // Deliberate public-field allowlist: ownerContext and its internal evidence never
   // enter the presentation snapshot, persisted metadata, JSON or PowerPoint notes.
   const fullText = Object.fromEntries(FONCIERE_FIELDS.filter(key => !["agentContactId","agencyContactId"].includes(key)).map(key => [key, data[key]]));
-  result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedState: structuredClone(result.state), ...(data.propertyAddressDetails ? { propertyAddressDetails: structuredClone(data.propertyAddressDetails) } : {}), ...(data.agencyAddressDetails ? { agencyAddressDetails: structuredClone(data.agencyAddressDetails) } : {}) } as unknown as import("../izord/model").JsonValue };
+  result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, constraintNotes: structuredClone(data.constraintNotes), guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedState: structuredClone(result.state), ...(data.propertyAddressDetails ? { propertyAddressDetails: structuredClone(data.propertyAddressDetails) } : {}), ...(data.agencyAddressDetails ? { agencyAddressDetails: structuredClone(data.agencyAddressDetails) } : {}) } as unknown as import("../izord/model").JsonValue };
   if (source) result.importMeta.fonciereSource = { id: source.id, revision: source.revision, capturedAt: new Date().toISOString() };
   return validateProjectData(result);
 }
@@ -118,7 +129,7 @@ export function fromPresentationData(input: ProjectData, existing?: FonciereData
   const presentation = validateProjectData(input), result = createFonciereData(), state = presentation.state;
   // This dedicated internal block is never restored from presentation metadata.
   // A reviewed reconciliation can update public fields while retaining the project context.
-  if (existing) result.ownerContext = structuredClone(validateFonciereData(existing, false).ownerContext);
+  if (existing) { const internal = validateFonciereData(existing, false); result.ownerContext = structuredClone(internal.ownerContext); result.visitDate = internal.visitDate; result.diagnosticsReceived = internal.diagnosticsReceived; result.constraintNotes = structuredClone(internal.constraintNotes); }
   const agencyFields = presentation.importMeta?.agencyFields;
   let importedAddress = "";
   if (agencyFields && typeof agencyFields === "object" && !Array.isArray(agencyFields)) {
@@ -140,11 +151,13 @@ export function fromPresentationData(input: ProjectData, existing?: FonciereData
   if (fields && typeof fields === "object" && !Array.isArray(fields) && fields.fields && typeof fields.fields === "object" && !Array.isArray(fields.fields)) {
     hasSnapshot = true;
     for (const key of FONCIERE_FIELDS) if (!["agentContactId","agencyContactId"].includes(key) && typeof fields.fields[key] === "string") result[key] = fields.fields[key] as string;
+    if (fields.constraintNotes !== undefined) result.constraintNotes = validateFonciereData({ ...result, constraintNotes: fields.constraintNotes }, false).constraintNotes;
     if (fields.guided !== undefined) result.guided = validateGuidedProperty(fields.guided);
     if (Array.isArray(fields.provenance)) result.provenance = structuredClone(fields.provenance) as unknown as ImportProvenance[];
     if (fields.propertyAddressDetails) result.propertyAddressDetails = normalizeAddressValue(fields.propertyAddressDetails);
     if (fields.agencyAddressDetails) result.agencyAddressDetails = normalizeAddressValue(fields.agencyAddressDetails, result.agencyAddress);
   }
+  if (existing) result.constraintNotes = structuredClone(validateFonciereData(existing, false).constraintNotes);
   if (hasSnapshot && fields && typeof fields === "object" && !Array.isArray(fields) && fields.mappedState && typeof fields.mappedState === "object" && !Array.isArray(fields.mappedState) && Object.entries(fields.mappedState).every(([key,value]) => state[key] === value)) {
     result.presentationData = structuredClone(presentation);
     return validateFonciereData(result, false);

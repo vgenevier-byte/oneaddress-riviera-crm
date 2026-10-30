@@ -1,0 +1,7 @@
+{
+  "completeMigration": true,
+  "projectsOpinionsHistoryJobsPoliciesUnchanged": true,
+  "privateFunctionsNotCallable": true,
+  "allExistingPayloadsAccepted": true,
+  "rolledBack": true
+}
