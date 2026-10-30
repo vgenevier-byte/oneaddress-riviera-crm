@@ -1,0 +1,25 @@
+{
+  "baseCommit": "81591ddf449e308821ac95e7461f52976ab7c41b",
+  "observations": {
+    "number": {
+      "visibleAfterClear": false,
+      "focusedAfterClear": false
+    },
+    "contacts": {
+      "agentPhone": {
+        "visibleAfterClear": false,
+        "focusedAfterClear": false
+      },
+      "agentEmail": {
+        "visibleAfterClear": false,
+        "focusedAfterClear": false
+      }
+    },
+    "history": {
+      "input": "",
+      "summary": "Pièces6Modifier"
+    }
+  },
+  "errors": [],
+  "external": []
+}

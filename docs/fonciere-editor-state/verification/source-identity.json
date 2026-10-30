@@ -1,0 +1,12 @@
+{
+  "baseCommit": "81591ddf449e308821ac95e7461f52976ab7c41b",
+  "mode": "production",
+  "allSourceFilesVerified": 276,
+  "sourceIdentical": true,
+  "changedSources": {
+    "components/fonciere/CompactProjectFields.tsx": "6ce43b50bd72c1e5008b48cd6ea5765506e973536fb0d2a02d570ae5a8ada45b",
+    "components/fonciere/ProjectContacts.tsx": "e39e1f796f0d5adfdd70d2e61ce335a5c8b873201647cdec0591a18e3d05e43a",
+    "components/fonciere/ProjectFieldEditor.tsx": "46945c4f18f0009aa977eedfb50be7c15607e63558b124e427e224d2fc526802",
+    "components/fonciere/ProjectsWorkspace.tsx": "1b6ce79c9ea05b841d329b9da2c1068a40e0eb77a89e17e1f898bb4f1c4343a0"
+  }
+}

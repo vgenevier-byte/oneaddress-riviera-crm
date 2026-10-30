@@ -1,0 +1,34 @@
+{
+  "checks": [
+    "Explicit clear saves/reloads as null; current summary empty, original historical 6 retained",
+    "Phone/email can be cleared, saved and reread without restoring old values",
+    "In-app project switch resets supplementary and local-coordinate editors",
+    "Invalid numeric draft survives closures and save reveals it; provisional email survives closures",
+    "FR/EN and keyboard editing retain visibility, focus and mounted inputs",
+    "New draft resets opened editors and invalid raw numeric draft",
+    "Manual close of empty editors works without erasing data; explicit reopen remains possible",
+    "390px English mobile emulation: clear/retype numeric/email with focus and no overflow"
+  ],
+  "observations": {
+    "number": {
+      "visibleAfterClear": true,
+      "focusedAfterClear": true
+    },
+    "contacts": {
+      "agentPhone": {
+        "visibleAfterClear": true,
+        "focusedAfterClear": true
+      },
+      "agentEmail": {
+        "visibleAfterClear": true,
+        "focusedAfterClear": true
+      }
+    },
+    "history": {
+      "input": "",
+      "summary": "PiècesModifier"
+    }
+  },
+  "errors": [],
+  "external": []
+}
