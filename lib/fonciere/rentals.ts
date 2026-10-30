@@ -31,13 +31,13 @@ export function rentalIssues(s: RentalAlternative): string[] {
  }
  return [...new Set(issues)];
 }
-export function validateRentalPlan(raw: unknown): RentalPlan | null {
+export function validateRentalPlan(raw: unknown, allowIssues = false): RentalPlan | null {
  if(raw===undefined||raw===null)return null;
  keys(raw,['version','cost','referenceId','scenarios']);if(raw.version!==1)throw new Error('Version locative invalide.');keys(raw.cost,['acquisition','acquisitionFees','works','other','confirmed']);for(const k of ['acquisition','acquisitionFees','works','other'])amount(raw.cost[k]);if(typeof raw.cost.confirmed!=='boolean')throw new Error('Confirmation du coût invalide.');
  if(!Array.isArray(raw.scenarios)||raw.scenarios.length>20)throw new Error('Vingt scénarios maximum.');const ids=new Set<string>();
  for(const s of raw.scenarios){keys(s,['id','name','mode','periods','management','operatingCosts','receiptDelayMonths']);if(!idValid(s.id)||ids.has(s.id)||typeof s.name!=='string'||s.name.length>120||!['long_term','seasonal','mixed','annual'].includes(String(s.mode))||!Array.isArray(s.periods)||s.periods.length<1||s.periods.length>12)throw new Error('Scénario locatif invalide.');ids.add(s.id);amount(s.management);amount(s.operatingCosts);amount(s.receiptDelayMonths,1200,true);const periods=new Set<string>();
   for(const p of s.periods){keys(p,['id','unit','rate','rentedUnits','availability','occupancyPercent','start','end']);if(!idValid(p.id)||periods.has(p.id)||!['month','week','night','year'].includes(String(p.unit))||typeof p.start!=='string'||typeof p.end!=='string'||p.start!==''&&annualDay(p.start)===null||p.end!==''&&annualDay(p.end)===null)throw new Error('Période locative invalide.');periods.add(p.id);amount(p.rate);amount(p.rentedUnits,365,true);amount(p.availability,365,true);amount(p.occupancyPercent,100);}
-  const issues=rentalIssues(s as RentalAlternative);if(issues.length)throw new Error(issues.join(' '));
+  const issues=rentalIssues(s as RentalAlternative);if(issues.length&&!allowIssues)throw new Error(issues.join(' '));
  }
  if(raw.referenceId!==null&&(typeof raw.referenceId!=='string'||!ids.has(raw.referenceId)))throw new Error('Scénario de référence invalide.');return structuredClone(raw) as RentalPlan;
 }

@@ -1,4 +1,4 @@
-import { validateRentalPlan } from "../fonciere/rentals";
+import { presentationRentalPlan } from "./rental-model";
 import type JSZip from "jszip";
 import type { ImportMeta, ProjectData } from "./model";
 import { createFonciereData } from "../fonciere/model";
@@ -15,7 +15,7 @@ export function presentationCalendar(meta: ImportMeta | null | undefined, locale
   const works = values.worksHypothesis, sale = values.resaleHypothesis, rent = values.rentalHypothesis;
   const hasField = (value: unknown, keys: string[]) => !!value && typeof value === "object" && keys.some(key => Object.hasOwn(value, key));
   if (!Object.hasOwn(values, "personalStrategy") && !hasField(works, ["startDate", "durationMonths"]) && !hasField(sale, ["receiptDelayMonths"]) && !hasField(rent, ["receiptDelayMonths"])) return null;
-  const data = createFonciereData(); data.guided = guided; data.rentalPlan = validateRentalPlan(snapshot.rentalPlan);
+  const data = createFonciereData(); data.guided = guided; data.rentalPlan = presentationRentalPlan(meta,true);
   const warning = calculateProjectCalendar(data).inconsistentChronology ? PROJECT_CALENDAR_CHRONOLOGY_WARNING[locale] : "";
   return { title: locale === "fr" ? "Calendrier prévisionnel du projet" : "Estimated project schedule", rows: projectCalendarRows(data, locale), text: projectCalendarText(data, locale), rule: [warning, PROJECT_CALENDAR_RULES[locale]].filter(Boolean).join("\n") };
 }

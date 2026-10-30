@@ -1,3 +1,4 @@
+import { normalizePresentationRentals } from "./rental-model";
 /** Native IZORD_FICHE_V1 model. Imported data never carries application roles or approval. */
 import { BASE, finite, number } from "./finance";
 import { imageHeaderDimensions } from "./photos-validation";
@@ -95,7 +96,7 @@ export function validateProjectData(input: unknown): ProjectData {
   const roles = input.photoGalleryRoles ?? result.importMeta?.roles ?? {};
   if (!record(roles)) throw new Error("Affectations photographiques invalides.");
   for (const role of PHOTO_ROLES) { const index = roles[role]; if (index === undefined || index === -1) continue; if (!Number.isInteger(index) || (index as number) < 0 || !result.importGallery[index as number]) throw new Error(`Référence photographique invalide : ${role}.`); result.photoGalleryRoles[role] = index as number; }
-  return result;
+  return normalizePresentationRentals(result);
 }
 export function importProjectJson(text: string): ProjectData {
   if (new TextEncoder().encode(text).byteLength > LIMITS.jsonBytes) throw new Error("Fichier projet trop volumineux (180 Mo maximum).");

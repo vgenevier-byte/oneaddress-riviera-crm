@@ -1,4 +1,5 @@
-import { validateRentalPlan, rentalComparisonText, type RentalPlan } from "./rentals";
+import { presentationRentalPlan, rentalFinancialState, presentationPersonalNotes } from "../izord/rental-model";
+import { validateRentalPlan, type RentalPlan } from "./rentals";
 import { isCivilDate } from "./calendarDates";
 import { createProjectData, validateProjectData, type ProjectData } from "../izord/model";
 import { AGENCY_FIELD_MAP } from "./import-fields";
@@ -121,18 +122,23 @@ export function toPresentationData(input: FonciereData, source?: { id: string; r
   set("decisionNotes", [data.notes, ...(["worksHypothesis","resaleHypothesis","rentalHypothesis"] as GuidedKey[]).filter(key=>text(key) && (key !== "resaleHypothesis" || saleActive) && (key !== "rentalHypothesis" || rentalActive)).map(key=>`Hypothèse personnelle (${key === "worksHypothesis" ? "travaux" : key === "resaleHypothesis" ? "revente" : "location"}) : ${text(key)}`)].filter(Boolean).join("\n"));
   // Deliberate public-field allowlist: ownerContext and its internal evidence never
   // enter the presentation snapshot, persisted metadata, JSON or PowerPoint notes.
+  // A new presentation takes the current project plan, never a previous presentation’s override.
+  if (result.importMeta) delete result.importMeta.presentationRentalPlan;
   const fullText = Object.fromEntries(FONCIERE_FIELDS.filter(key => !["agentContactId","agencyContactId"].includes(key)).map(key => [key, data[key]]));
-  result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, constraintNotes: structuredClone(data.constraintNotes), rentalPlan: structuredClone(data.rentalPlan), guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedState: structuredClone(result.state), ...(data.propertyAddressDetails ? { propertyAddressDetails: structuredClone(data.propertyAddressDetails) } : {}), ...(data.agencyAddressDetails ? { agencyAddressDetails: structuredClone(data.agencyAddressDetails) } : {}) } as unknown as import("../izord/model").JsonValue };
+  result.importMeta = { ...(result.importMeta || {}), fonciereSnapshot: { fields: fullText, constraintNotes: structuredClone(data.constraintNotes), rentalPlan: structuredClone(data.rentalPlan), guided: structuredClone(data.guided), readableFields: readable, provenance: structuredClone(data.provenance), mappedStateVersion: 2, ...(data.propertyAddressDetails ? { propertyAddressDetails: structuredClone(data.propertyAddressDetails) } : {}), ...(data.agencyAddressDetails ? { agencyAddressDetails: structuredClone(data.agencyAddressDetails) } : {}) } as unknown as import("../izord/model").JsonValue };
   if (source) result.importMeta.fonciereSource = { id: source.id, revision: source.revision, capturedAt: new Date().toISOString() };
   if (data.rentalPlan) {
     // The structured comparison is authoritative for this new workflow. Clear
     // template rental fields instead of coercing nights/mixed periods into weeks.
     set("monthly", ""); set("weekly", ""); set("rentedMonths", ""); set("weeks", "");
     result.state.regime="other";result.state.notaryRate="";
+    set("decisionNotes",data.notes);
     const cost=data.rentalPlan.cost;
     result.state.acq=cost.acquisition===null?"":String(cost.acquisition);result.state.notaryQuote=cost.acquisitionFees===null?"":String(cost.acquisitionFees);result.state.works=cost.works===null?"":String(cost.works);result.state.otherCosts=cost.other===null?"":String(cost.other);
-    set("decisionNotes", [result.state.decisionNotes, rentalComparisonText(data.rentalPlan)].filter(Boolean).join("\n"));
+
   }
+  const snapshot = result.importMeta?.fonciereSnapshot;
+  if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) snapshot.mappedState = structuredClone(result.state);
   return validateProjectData(result);
 }
 
@@ -162,7 +168,7 @@ export function fromPresentationData(input: ProjectData, existing?: FonciereData
   if (fields && typeof fields === "object" && !Array.isArray(fields) && fields.fields && typeof fields.fields === "object" && !Array.isArray(fields.fields)) {
     hasSnapshot = true;
     for (const key of FONCIERE_FIELDS) if (!["agentContactId","agencyContactId"].includes(key) && typeof fields.fields[key] === "string") result[key] = fields.fields[key] as string;
-    if (!existing && fields.rentalPlan !== undefined) result.rentalPlan = validateRentalPlan(fields.rentalPlan);
+    if (!existing && fields.rentalPlan !== undefined) result.rentalPlan = presentationRentalPlan(presentation.importMeta);
     if (fields.constraintNotes !== undefined) result.constraintNotes = validateFonciereData({ ...result, constraintNotes: fields.constraintNotes }, false).constraintNotes;
     if (fields.guided !== undefined) result.guided = validateGuidedProperty(fields.guided);
     if (Array.isArray(fields.provenance)) result.provenance = structuredClone(fields.provenance) as unknown as ImportProvenance[];
@@ -170,14 +176,18 @@ export function fromPresentationData(input: ProjectData, existing?: FonciereData
     if (fields.agencyAddressDetails) result.agencyAddressDetails = normalizeAddressValue(fields.agencyAddressDetails, result.agencyAddress);
   }
   if (existing) result.constraintNotes = structuredClone(validateFonciereData(existing, false).constraintNotes);
-  if (hasSnapshot && fields && typeof fields === "object" && !Array.isArray(fields) && fields.mappedState && typeof fields.mappedState === "object" && !Array.isArray(fields.mappedState) && Object.entries(fields.mappedState).every(([key,value]) => state[key] === value)) {
+  const originalPlan = fields && typeof fields === "object" && !Array.isArray(fields) ? validateRentalPlan(fields.rentalPlan) : null;
+  const savedMapped = fields && typeof fields === "object" && !Array.isArray(fields) ? fields.mappedState : null;
+  const comparison = savedMapped && typeof savedMapped === "object" && !Array.isArray(savedMapped)
+    ? originalPlan ? {...rentalFinancialState(savedMapped as unknown as import("../izord/model").ProjectState, originalPlan),decisionNotes:presentationPersonalNotes({...presentation,state:savedMapped as unknown as import("../izord/model").ProjectState})} : savedMapped : null;
+  if (hasSnapshot && fields && typeof fields === "object" && !Array.isArray(fields) && fields.mappedState && typeof fields.mappedState === "object" && !Array.isArray(fields.mappedState) && Object.entries(comparison || fields.mappedState).every(([key,value]) => state[key] === value)) {
     result.presentationData = structuredClone(presentation);
     return validateFonciereData(result, false);
   }
   // An edited generator state updates only the corresponding source fields.
   // Preserve legacy raw strings and structured values for every untouched field.
   if (hasSnapshot && fields && typeof fields === "object" && !Array.isArray(fields) && fields.guided && fields.mappedState && typeof fields.mappedState === "object" && !Array.isArray(fields.mappedState)) {
-    const mapped = fields.mappedState;
+    const mapped = comparison || fields.mappedState;
     const changed = (key: string) => state[key] !== mapped[key];
     if (changed("project")) result.name = String(state.project || "");
     if (changed("ref")) result.agencyReference = String(state.ref || "");
@@ -185,7 +195,7 @@ export function fromPresentationData(input: ProjectData, existing?: FonciereData
     const adapted = (key: GuidedKey, value: import("./guided").GuidedValue | undefined) => { const next = setGuidedField(result,key,value); result.guided=next.guided; };
     if (changed("type")) { const probe=createFonciereData(); probe.propertyType=String(state.type || ""); const value=deriveGuidedProperty(probe).values.propertyType; adapted("propertyType",value || (state.type ? "other" : null)); if (state.type && !value) result.guided.details.propertyType=String(state.type); }
     for (const [target,key] of [["askingPrice","asking"],["area","area"],["land","land"]] as const) if (changed(key)) { const n=financeNumber(state[key]); adapted(target,finite(n)?n:null); if (state[key] && !finite(n)) result.guided.details[target]=String(state[key]); }
-    for (const [target,key] of [["worksHypothesis","works"],["resaleHypothesis","resale"]] as const) if (changed(key)) { result[target]=String(state[key] || ""); const n=financeNumber(state[key]); const old=currentGuidedValue(result,target); const composite=old && typeof old === "object" && !Array.isArray(old)?old:{}; adapted(target,{...composite,amount:finite(n)?n:null}); }
+    for (const [target,key] of [["worksHypothesis","works"],["resaleHypothesis","resale"]] as const) if (changed(key) && !(originalPlan && key === "works")) { result[target]=String(state[key] || ""); const n=financeNumber(state[key]); const old=currentGuidedValue(result,target); const composite=old && typeof old === "object" && !Array.isArray(old)?old:{}; adapted(target,{...composite,amount:finite(n)?n:null}); }
     if (changed("monthly") || changed("weekly")) {
       const old=currentGuidedValue(result,"rentalHypothesis"); const composite=old && typeof old === "object" && !Array.isArray(old)?old:{};
       const monthly=financeNumber(state.monthly),weekly=financeNumber(state.weekly);

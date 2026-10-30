@@ -330,8 +330,8 @@
 .rentalTable caption { text-align:left; margin-bottom:8px; font-weight:600; }
 .rentalTable th,.rentalTable td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; min-width:100px; }
 .rentalTable th:first-child { min-width:150px; }
-.workspace .compactCheck { display:flex; align-items:flex-start; gap:9px; margin-top:12px; font-size:12px; }
-.workspace .compactCheck input[type="checkbox"] { width:16px!important; height:16px!important; min-height:16px!important; flex:0 0 16px; padding:0!important; margin:2px 0!important; }
+.workspace .compactCheck,.rentalPanel .compactCheck { display:flex; align-items:flex-start; gap:9px; margin-top:12px; font-size:12px; }
+.workspace .compactCheck input[type="checkbox"],.rentalPanel .compactCheck input[type="checkbox"] { width:16px!important; height:16px!important; min-height:16px!important; flex:0 0 16px; padding:0!important; margin:2px 0!important; }
 /* Neutral four-way document toolbar; category and drop behaviour stay separate. */
 .workspace [data-document-upload-actions] { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
 .workspace [data-document-upload-actions] > button { display:flex; flex-wrap:wrap; justify-content:flex-start; align-items:center; width:100%; min-height:76px; padding:14px; background:#fff!important; border:1px solid var(--line)!important; border-radius:8px; color:var(--ink)!important; font:600 13px/1.4 Arial,Helvetica,sans-serif; }
@@ -342,3 +342,10 @@
 .workspace .collapsibleSection .sectionEditActions { padding:10px 12px 10px 0; flex-shrink:0; }
 .workspace .collapsibleSection .sectionEditActions button { background:white!important; color:var(--ink)!important; border:1px solid var(--line)!important; border-radius:7px; min-height:34px; padding:7px 11px; }
 @media(max-width:680px){.workspace .collapsibleSection .sectionHeading{flex-wrap:wrap;gap:0}.workspace .collapsibleSection .sectionEditActions{padding:0 14px 12px}}
+
+/* Reused by the presentation editor without importing the full project workspace. */
+.rentalPanel { --ink:#173b38; --muted:#71807a; --line:#e2e7e0; min-width:0; }
+.rentalPanel .numberControl input { border:0!important; flex:1; width:0; min-width:0; }
+.rentalPanel .fieldGrid { min-width:0; }
+.rentalPanel .rentalTable { min-width:960px; table-layout:auto; }
+.rentalPanel .rentalTable th,.rentalPanel .rentalTable td { word-break:normal; overflow-wrap:normal; letter-spacing:normal; text-transform:none; }

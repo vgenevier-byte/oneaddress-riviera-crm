@@ -1,7 +1,7 @@
 import type { FonciereData } from "./model";
 import type { FonciereDocumentCategory, LoadedFonciereProject } from "./repository";
 import type { FonciereDraftIdentity } from "./creationKey";
-export type FonciereLocalDraft = { data: FonciereData; sourceFiles: File[]; sourceFileCategories: FonciereDocumentCategory[]; loaded: LoadedFonciereProject | null; creationReconciled: boolean; recordComplete?: boolean; editingSection?: string | null; editBaseline?: { data: FonciereData; loaded: LoadedFonciereProject | null; sourceFiles: File[]; sourceFileCategories: FonciereDocumentCategory[] } | null; needsResume?: boolean; importSections?: string[]; updatedAt: string };
+export type FonciereLocalDraft = { rentalMergeConflict?: import("./mergeDraft").RentalMergeConflict | null; data: FonciereData; sourceFiles: File[]; sourceFileCategories: FonciereDocumentCategory[]; loaded: LoadedFonciereProject | null; creationReconciled: boolean; recordComplete?: boolean; editingSection?: string | null; editBaseline?: { data: FonciereData; loaded: LoadedFonciereProject | null; sourceFiles: File[]; sourceFileCategories: FonciereDocumentCategory[] } | null; needsResume?: boolean; importSections?: string[]; updatedAt: string };
 const databaseName = "oar-fonciere-drafts-v1", storeName = "drafts";
 function key(identity: FonciereDraftIdentity) { return `${identity.scope}:${identity.draftId}`; }
 async function database(): Promise<IDBDatabase> {

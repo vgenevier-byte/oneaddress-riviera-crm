@@ -14,6 +14,13 @@ export default function GuidedMonthDuration({ id, value, onChange, onInvalidDraf
   const [custom, setCustom] = useState(false);
   const [raw, setRaw] = useState("");
   const [invalid, setInvalid] = useState(false);
+  const [observed, setObserved] = useState(value);
+  if (observed !== value) {
+    setObserved(value);
+    // A valid local edit is already reflected by value. An accepted server
+    // replacement must update its display; an invalid raw draft stays local.
+    if (!invalid) setRaw(value === null ? "" : String(value));
+  }
   const customValue = value !== null && !USUAL_MONTHS.includes(value);
   const showCustom = custom || customValue;
   const t = (fr: string, en: string) => lang === "fr" ? fr : en;

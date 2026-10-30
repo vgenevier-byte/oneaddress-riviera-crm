@@ -1,0 +1,10 @@
+require('../i18n/register-typescript.cjs');
+const assert=require('node:assert/strict');
+const {createFonciereData,toPresentationData,fromPresentationData}=require('../../lib/fonciere/model');
+const {createRentalPlan,createRentalAlternative}=require('../../lib/fonciere/rentals');
+const {presentationRentals}=require('../../lib/izord/presentation-rentals');
+const {mergeProjectDraft}=require('../../lib/fonciere/mergeDraft');
+const d=createFonciereData();d.name='Fictional consistency';d.notes='Notes personnelles fictives';d.guided.values={personalStrategy:'rental',worksHypothesis:{amount:100000,startDate:'2028-01-31',durationMonths:4},rentalHypothesis:{amount:4000,period:'month',occupiedUnits:12,receiptDelayMonths:2}};d.rentalPlan=createRentalPlan();d.rentalPlan.cost={acquisition:800000,acquisitionFees:60000,works:120000,other:20000,confirmed:true};const a=createRentalAlternative(),b=createRentalAlternative();a.name='A';a.periods[0].rate=4000;a.periods[0].rentedUnits=12;b.name='B';d.rentalPlan.scenarios=[a,b];d.rentalPlan.referenceId=a.id;
+const p=toPresentationData(d);p.state.acq='900000';p.state.monthly='5000';assert.equal(presentationRentals(p.importMeta).cost,1000000);console.log('REPRODUCED state acquisition/monthly edits leave the exported plan at the original basis/rent');
+const round=fromPresentationData(toPresentationData(d));assert.notDeepEqual(round.guided.values,d.guided.values);assert.notEqual(round.notes,d.notes);console.log('REPRODUCED unedited structured round-trip changes guided history and notes');
+const local=structuredClone(d),remote=structuredClone(d);local.rentalPlan.scenarios=[a];remote.rentalPlan.referenceId=b.id;const m=mergeProjectDraft(d,local,remote);assert.equal(m.data.rentalPlan.referenceId,b.id);assert(!m.data.rentalPlan.scenarios.some(s=>s.id===b.id));assert.deepEqual(m.conflicts,[]);console.log('REPRODUCED orphan rental reference after concurrent merge with no conflict reported');

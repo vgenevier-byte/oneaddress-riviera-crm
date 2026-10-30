@@ -1,11 +1,10 @@
+import { presentationRentalPlan } from "./rental-model";
 import type JSZip from "jszip";
 import type { ImportMeta, ProjectData } from "./model";
-import { validateRentalPlan, commonRentalCost, rentalComparisonRows, rentalAssumptionRows, rentalComparisonText } from "../fonciere/rentals";
+import { commonRentalCost, rentalComparisonRows, rentalAssumptionRows, rentalComparisonText } from "../fonciere/rentals";
 import { appendCalendarSlide, type Calendar } from "./presentation-calendar";
 export function presentationRentals(meta: ImportMeta | null | undefined, lang: "fr" | "en" = "fr") {
- const snapshot=meta?.fonciereSnapshot;
- if(!snapshot||typeof snapshot!=="object"||Array.isArray(snapshot)||!snapshot.rentalPlan)return null;
- const plan=validateRentalPlan(snapshot.rentalPlan);if(!plan)return null;
+ const plan=presentationRentalPlan(meta,true);if(!plan)return null;
  return {plan,rows:rentalComparisonRows(plan,lang),assumptions:rentalAssumptionRows(plan,lang),text:rentalComparisonText(plan,lang),cost:commonRentalCost(plan)};
 }
 export async function appendRentalSlides(zip: JSZip,data:ProjectData) { const report=presentationRentals(data.importMeta);if(!report)return;
