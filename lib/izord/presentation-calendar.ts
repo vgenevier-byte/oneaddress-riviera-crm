@@ -1,3 +1,4 @@
+import { validateRentalPlan } from "../fonciere/rentals";
 import type JSZip from "jszip";
 import type { ImportMeta, ProjectData } from "./model";
 import { createFonciereData } from "../fonciere/model";
@@ -14,20 +15,20 @@ export function presentationCalendar(meta: ImportMeta | null | undefined, locale
   const works = values.worksHypothesis, sale = values.resaleHypothesis, rent = values.rentalHypothesis;
   const hasField = (value: unknown, keys: string[]) => !!value && typeof value === "object" && keys.some(key => Object.hasOwn(value, key));
   if (!Object.hasOwn(values, "personalStrategy") && !hasField(works, ["startDate", "durationMonths"]) && !hasField(sale, ["receiptDelayMonths"]) && !hasField(rent, ["receiptDelayMonths"])) return null;
-  const data = createFonciereData(); data.guided = guided;
+  const data = createFonciereData(); data.guided = guided; data.rentalPlan = validateRentalPlan(snapshot.rentalPlan);
   const warning = calculateProjectCalendar(data).inconsistentChronology ? PROJECT_CALENDAR_CHRONOLOGY_WARNING[locale] : "";
   return { title: locale === "fr" ? "Calendrier prévisionnel du projet" : "Estimated project schedule", rows: projectCalendarRows(data, locale), text: projectCalendarText(data, locale), rule: [warning, PROJECT_CALENDAR_RULES[locale]].filter(Boolean).join("\n") };
 }
 
-type Calendar = NonNullable<ReturnType<typeof presentationCalendar>>;
+export type Calendar = { title: string; rows: { key?: string; label: string; value: string }[]; text: string; rule: string; layout?: "rentals" };
 export type CalendarTextBox = { id: number; x: number; y: number; w: number; h: number; size: number; bold?: boolean; color: string; text: string };
 /** Shared geometry keeps the browser preview and the editable PPT slide aligned. */
 export function calendarTextBoxes(calendar: Calendar): CalendarTextBox[] {
   const boxes: CalendarTextBox[] = [{ id: 2, x: 44, y: 28, w: 872, h: 42, size: 27, bold: true, color: "153C43", text: calendar.title }];
-  const rowHeight = Math.min(38, 354 / Math.max(1, calendar.rows.length));
+  const rowHeight = Math.min(calendar.layout === "rentals" ? 100 : 38, 354 / Math.max(1, calendar.rows.length));
   calendar.rows.forEach((row, index) => {
-    boxes.push({ id: 10 + index * 2, x: 44, y: 88 + index * rowHeight, w: 350, h: rowHeight - 3, size: 12, bold: true, color: "36585D", text: row.label });
-    boxes.push({ id: 11 + index * 2, x: 410, y: 88 + index * rowHeight, w: 506, h: rowHeight - 3, size: 12, color: "17363B", text: row.value });
+    boxes.push({ id: 10 + index * 2, x: 44, y: 88 + index * rowHeight, w: calendar.layout === "rentals" ? 200 : 350, h: rowHeight - 3, size: 12, bold: true, color: "36585D", text: row.label });
+    boxes.push({ id: 11 + index * 2, x: calendar.layout === "rentals" ? 260 : 410, y: 88 + index * rowHeight, w: calendar.layout === "rentals" ? 656 : 506, h: rowHeight - 3, size: 12, color: "17363B", text: row.value });
   });
   boxes.push({ id: 100, x: 44, y: 454, w: 872, h: 66, size: 10, color: "50696D", text: calendar.rule });
   return boxes;
@@ -38,8 +39,8 @@ function textBox(document: XMLDocument, box: CalendarTextBox) {
   return xmlElement(document, `<p:sp xmlns:p="${P}" xmlns:a="${A}"><p:nvSpPr><p:cNvPr id="${box.id}" name="Calendar ${box.id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${emu(box.x)}" y="${emu(box.y)}"/><a:ext cx="${emu(box.w)}" cy="${emu(box.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" lIns="0" rIns="0" tIns="0" bIns="0" anchor="t"><a:noAutofit/></a:bodyPr><a:lstStyle/>${lines}</p:txBody></p:sp>`);
 }
 
-export async function appendCalendarSlide(zip: JSZip, data: ProjectData) {
-  const calendar = presentationCalendar(data.importMeta);
+export async function appendCalendarSlide(zip: JSZip, data: ProjectData, report?: Calendar) {
+  const calendar = report || presentationCalendar(data.importMeta);
   if (!calendar) return false;
   const pres = parseXml(await part(zip, "ppt/presentation.xml")), list = pres.getElementsByTagNameNS(P, "sldIdLst")[0];
   const index = list.children.length + 1, doc = parseXml(await part(zip, "ppt/slides/slide2.xml"));

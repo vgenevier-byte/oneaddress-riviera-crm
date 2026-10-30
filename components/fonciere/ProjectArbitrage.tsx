@@ -27,6 +27,7 @@ export default function ProjectArbitrage({ projectId, userId, loadedRevision, lo
   const begin = useScopedOperations("fonciere");
   const [state, setState] = useState<ArbitrationState | null>(null);
   const [draft, setDraft] = useState<Draft>({ choice: "pending", remark: "" });
+  const [editingOpinion,setEditingOpinion] = useState(false);
   const [busy, setBusy] = useState(false), [loading, setLoading] = useState(true);
   const [error, setError] = useState(""), [notice, setNotice] = useState("");
   const [reviewRequired, setReviewRequired] = useState(false);
@@ -93,7 +94,7 @@ export default function ProjectArbitrage({ projectId, userId, loadedRevision, lo
     try {
       const op = await begin();
       const next = await op.run(() => createArbitrageRepository(op.client).vote(projectId, state.fingerprint, draft.choice, draft.remark, op.signal));
-      sequence.current++; update(next, true); setNotice(t("Votre avis est enregistré.", "Your opinion is saved."));
+      sequence.current++; update(next, true);setEditingOpinion(false); setNotice(t("Votre avis est enregistré.", "Your opinion is saved."));
       // Bank preparation has its own permissions and failure boundary. It never rolls back a vote.
       if (next.status === "approved" && next.bank.canPrepare && ["none", "pending", "blocked"].includes(next.bank.state) && !next.bank.needsUpdate) {
         try {
@@ -153,13 +154,15 @@ export default function ProjectArbitrage({ projectId, userId, loadedRevision, lo
           {state.private ? <>
             <p className={styles.saved}>{opinion ? <>{t("Dernier avis enregistré", "Last saved opinion")} · <time dateTime={opinion.recordedAt}>{date(opinion.recordedAt)}</time></> : t("Aucun avis enregistré", "No saved opinion")}</p>
             {opinion?.stale && <p className={styles.warning}>{t("À reconfirmer — le dossier ou le décideur a changé.", "Reconfirmation needed — the file or decision maker has changed.")}</p>}
-            <fieldset disabled={!mine || blocked} className={styles.choices}>
+            {(!mine||!editingOpinion)&&<div className={styles.saved}><strong>{label(opinion?.choice||"pending")}</strong>{opinion?.remark&&<p style={{whiteSpace:"pre-wrap"}}>{opinion.remark}</p>}</div>}
+            {mine&&!editingOpinion&&<button type="button" disabled={blocked} onClick={()=>setEditingOpinion(true)}>{t("Modifier mon avis","Edit my opinion")}</button>}
+            <div hidden={!mine||!editingOpinion} inert={!mine||!editingOpinion}><fieldset disabled={!mine || blocked} className={styles.choices}>
               <legend>{t("Choix", "Choice")} · {names[slot]}</legend>
               {(Object.keys(ARBITRAGE_LABELS) as ArbitrationChoice[]).map(choice => <label key={choice} className={styles.choice}><input type="radio" name={`arbitrage-${projectId}-${slot}`} value={choice} checked={selected === choice} onChange={() => { setDraft(value => ({ ...value, choice })); setNotice(""); }}/><span>{label(choice)}</span></label>)}
             </fieldset>
             <label className={styles.remark} htmlFor={`arbitrage-remark-${slot}`}><span>{t("Remarque / justification", "Remark / justification")}{mine && needsRemark && ` · ${t("obligatoire", "required")}`}</span><textarea id={`arbitrage-remark-${slot}`} value={remark} readOnly={!mine} disabled={mine && blocked} required={mine && needsRemark} maxLength={10000} rows={4} aria-describedby={`arbitrage-private-${slot}`} onChange={event => { setDraft(value => ({ ...value, remark: event.target.value })); setNotice(""); }}/></label>
             <p id={`arbitrage-private-${slot}`} className={styles.muted}>{t("Remarque privée, réservée à Vincent et Ann Charlotte.", "Private remark, visible only to Vincent and Ann Charlotte.")}</p>
-            {mine && <><p className={dirty ? styles.unsaved : styles.muted} role="status">{dirty ? t("Modification en cours — avis non enregistré", "Editing — opinion not saved") : opinion?.stale ? t("L’ancien avis ne valide pas le dossier actuel.", "The previous opinion does not approve the current file.") : opinion ? t("Avis enregistré sur le dossier consulté.", "Opinion saved for the reviewed file.") : t("« À arbitrer » est la valeur initiale ; aucun avis n’a encore été donné.", "“Awaiting decision” is the initial value; no opinion has been given yet.")}</p><button type="button" className={styles.save} disabled={blocked || needsRemark && !draft.remark.trim()} onClick={() => void save()}><Save size={15}/>{t("Enregistrer mon avis", "Save my opinion")}</button></>}
+            {mine && <><p className={dirty ? styles.unsaved : styles.muted} role="status">{dirty ? t("Modification en cours — avis non enregistré", "Editing — opinion not saved") : opinion?.stale ? t("L’ancien avis ne valide pas le dossier actuel.", "The previous opinion does not approve the current file.") : opinion ? t("Avis enregistré sur le dossier consulté.", "Opinion saved for the reviewed file.") : t("« À arbitrer » est la valeur initiale ; aucun avis n’a encore été donné.", "“Awaiting decision” is the initial value; no opinion has been given yet.")}</p><button type="button" className={styles.save} disabled={blocked || needsRemark && !draft.remark.trim()} onClick={() => void save()}><Save size={15}/>{t("Enregistrer mon avis", "Save my opinion")}</button><button type="button" disabled={busy} onClick={()=>{setDraft({choice:own?.choice||"pending",remark:own?.remark||""});setEditingOpinion(false);}}>{t("Annuler","Cancel")}</button></>}</div>
           </> : <p className={styles.muted}>{state.pending.includes(slot) ? t("Avis attendu.", "Opinion awaited.") : t("Avis enregistré.", "Opinion saved.")} {t("Les remarques et l’historique détaillé sont réservés aux deux décideurs.", "Remarks and detailed history are restricted to the two decision makers.")}</p>}
         </section>;
       })}</div>

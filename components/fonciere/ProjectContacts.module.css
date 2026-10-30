@@ -2,3 +2,6 @@
 .fields details { font-size: 12px; border-bottom: 1px solid #e3e7eb; padding: 6px 0; min-width: 0; overflow-wrap: anywhere; }
 .fields summary { cursor: pointer; }
 .fields details[open] > summary { margin-bottom: 10px; }
+.panel .filter { display:flex; align-items:flex-start; gap:9px; margin-top:12px; }
+.panel .filter input[type="checkbox"] { width:16px!important; height:16px!important; min-width:16px!important; min-height:16px!important; flex:0 0 16px; padding:0!important; margin:2px 0 0!important; border-radius:3px; }
+.panel .filter span { flex:1; min-width:0; white-space:normal; word-break:normal; overflow-wrap:normal; line-height:1.5; }

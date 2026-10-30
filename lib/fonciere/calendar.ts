@@ -31,7 +31,8 @@ export function calculateProjectCalendar(data: FonciereData): ProjectCalendar {
   const durationMonths = months(works.durationMonths);
   const hasRent = strategy === "rental" || strategy === "rental_then_resale";
   const hasSale = strategy === "resale" || strategy === "rental_then_resale";
-  const rentalDelayMonths = hasRent ? months(rental.receiptDelayMonths) : null;
+  const reference = data.rentalPlan?.scenarios.find(s => s.id === data.rentalPlan?.referenceId);
+  const rentalDelayMonths = hasRent ? reference ? months(reference.receiptDelayMonths) : data.rentalPlan ? null : months(rental.receiptDelayMonths) : null;
   const saleDelayMonths = hasSale ? months(resale.receiptDelayMonths) : null;
   const worksEndDate = startDate !== null && durationMonths !== null ? addCalendarMonths(startDate, durationMonths) : null;
   const firstRentDate = worksEndDate !== null && rentalDelayMonths !== null ? addCalendarMonths(worksEndDate, rentalDelayMonths) : null;

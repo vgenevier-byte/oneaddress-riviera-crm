@@ -9,6 +9,7 @@ import { presentationMaps } from "./presentation-maps";
 import { renderedFont } from "./presentation-layout";
 import { notesText } from "./presentation-notes";
 import { appendPhotoSlide, updatePresentationMetadata } from "./presentation-gallery";
+import { appendRentalSlides } from "./presentation-rentals";
 import { appendCalendarSlide } from "./presentation-calendar";
 import { P, A, R, PKG, parseXml, xmlText, part, setShapeText, shapeById, normalizePath, replaceNote } from "./presentation-xml";
 
@@ -25,7 +26,7 @@ export async function generatePresentation(input: ProjectData, options: { signal
   const result = calculate(state), errors = [...errorsFor(state), ...rentalExportIssues(result)];
   if (errors.length) throw new Error(errors[0]);
   const zip = await JSZip.loadAsync(presentationTemplate, { base64: true, checkCRC32: true });
-  const maps = presentationMaps(state, result);
+  const maps = presentationMaps(state, result,data.importMeta);
   for (let index = 0; index < 2; index++) {
     options.signal?.throwIfAborted();
     const path = `ppt/slides/slide${index + 1}.xml`, document = parseXml(await part(zip, path));
@@ -64,6 +65,7 @@ export async function generatePresentation(input: ProjectData, options: { signal
   }
   await appendPhotoSlide(zip, data, options.signal);
   await appendCalendarSlide(zip, data);
+  await appendRentalSlides(zip, data);
   await updatePresentationMetadata(zip);
   options.signal?.throwIfAborted();
   // The dimensions are original; updatePresentationMetadata only fixes the

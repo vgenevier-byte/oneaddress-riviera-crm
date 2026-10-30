@@ -313,3 +313,32 @@
 .workspace .projectIdentity { justify-content: flex-start; align-items: baseline; text-align: left; }
 .workspace .compactChoices button { min-height: 28px; font-size: 12px; }
 .workspace .constraintRow button { min-height: 28px; }
+/* Consultation and contextual editing share the same section geometry. */
+.workspace .sectionHeading { display:flex; align-items:flex-start; gap:12px; }
+.workspace .sectionHeading h3 { flex:1; min-width:0; }
+.workspace .sectionEditActions { display:flex; flex-wrap:wrap; gap:6px; padding-top:3px; }
+.workspace .sectionEditActions button { min-height:32px; padding:6px 10px; border:1px solid var(--line); background:white; color:var(--ink); font-size:12px; }
+.readSection { display:grid; gap:14px; }
+.readValues { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 24px; margin:0; min-width:0; }
+.readValues > div { min-width:0; }
+.readValues dt { font-size:11px; color:var(--muted); line-height:1.5; }
+.readValues dd { margin:3px 0 0; font-size:14px; line-height:1.6; white-space:pre-wrap; overflow-wrap:anywhere; }
+.readValues dd .readValues { margin-top:8px; border-left:1px solid var(--line); padding-left:12px; }
+.rentalPanel { display:grid; gap:16px; margin:18px 0; }
+.comparisonScroll { overflow-x:auto; max-width:100%; }
+.rentalTable { width:100%; border-collapse:collapse; font-size:12px; }
+.rentalTable caption { text-align:left; margin-bottom:8px; font-weight:600; }
+.rentalTable th,.rentalTable td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; min-width:100px; }
+.rentalTable th:first-child { min-width:150px; }
+.workspace .compactCheck { display:flex; align-items:flex-start; gap:9px; margin-top:12px; font-size:12px; }
+.workspace .compactCheck input[type="checkbox"] { width:16px!important; height:16px!important; min-height:16px!important; flex:0 0 16px; padding:0!important; margin:2px 0!important; }
+/* Neutral four-way document toolbar; category and drop behaviour stay separate. */
+.workspace [data-document-upload-actions] { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.workspace [data-document-upload-actions] > button { display:flex; flex-wrap:wrap; justify-content:flex-start; align-items:center; width:100%; min-height:76px; padding:14px; background:#fff!important; border:1px solid var(--line)!important; border-radius:8px; color:var(--ink)!important; font:600 13px/1.4 Arial,Helvetica,sans-serif; }
+.workspace [data-document-upload-actions] > button small { color:var(--muted); font-size:11px; font-weight:400; }
+@media(max-width:680px){.readValues{grid-template-columns:minmax(0,1fr)}.workspace .sectionHeading{flex-wrap:wrap;gap:6px}.workspace .sectionHeading h3{flex-basis:100%}.workspace .sectionEditActions{padding-left:0}.workspace [data-document-upload-actions]{grid-template-columns:minmax(0,1fr)}}
+
+.workspace .collapsibleSection .sectionHeading { display:flex; align-items:center; gap:10px; }
+.workspace .collapsibleSection .sectionEditActions { padding:10px 12px 10px 0; flex-shrink:0; }
+.workspace .collapsibleSection .sectionEditActions button { background:white!important; color:var(--ink)!important; border:1px solid var(--line)!important; border-radius:7px; min-height:34px; padding:7px 11px; }
+@media(max-width:680px){.workspace .collapsibleSection .sectionHeading{flex-wrap:wrap;gap:0}.workspace .collapsibleSection .sectionEditActions{padding:0 14px 12px}}
