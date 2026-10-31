@@ -1,0 +1,101 @@
+{
+  "baselineCommit": "46255be93c9e760408d1891a5c8c4656c2ac5fe3",
+  "before": {
+    "reopenings": 6,
+    "methods": [
+      "menu",
+      "button"
+    ],
+    "photosPerReopening": 24,
+    "jpegBodyBytesPerReopening": [
+      5341664
+    ],
+    "conditionalRequestsPerReopening": [
+      0
+    ],
+    "statusesPerReopening": [
+      {
+        "200": 24
+      }
+    ],
+    "admissionChecksPerReopening": [
+      48
+    ],
+    "providerMetadataRequestsPerReopening": [
+      240
+    ],
+    "providerOriginalReadsPerReopening": [
+      0
+    ],
+    "providerOriginalBytesPerReopening": [
+      0
+    ],
+    "supabaseOriginalReadsPerReopening": [
+      0
+    ]
+  },
+  "after": {
+    "reopenings": 6,
+    "methods": [
+      "menu",
+      "button"
+    ],
+    "photosPerReopening": 24,
+    "jpegBodyBytesPerReopening": [
+      0
+    ],
+    "conditionalRequestsPerReopening": [
+      24
+    ],
+    "statusesPerReopening": [
+      {
+        "304": 24
+      }
+    ],
+    "admissionChecksPerReopening": [
+      48
+    ],
+    "providerMetadataRequestsPerReopening": [
+      240
+    ],
+    "providerOriginalReadsPerReopening": [
+      0
+    ],
+    "providerOriginalBytesPerReopening": [
+      0
+    ],
+    "supabaseOriginalReadsPerReopening": [
+      0
+    ]
+  },
+  "jpegBytesAvoidedPerReopening": 5341664,
+  "jpegPayloadReductionPercent": 100,
+  "setupStorageBytesPerCampaignOutsideMeasuredWindows": 82658553,
+  "conditions": "Same production sources except returnToList purge, same three fictional 24-photo records and accounts, real local Auth/RPC, local HTTP proxy and real preview handler, fictional Google metadata/pinned-original responses reconstructed read-only from fixture backups. No real Google calls, migration or business writes. Initial and reopen measurements separated. JPEG payload savings do not imply zero HTTP traffic or saved original reads.",
+  "sourceHashes": {
+    "before": "248f2316c00a913f0878c7ca829822377264acd6e8584db98783c4b0d9f9145a",
+    "after": "4fc2cdf5c087e98a347b845ccb023d3135d602c0ea2cbc832833da2c355e8131"
+  },
+  "lateResponseChecks": [
+    "Return during loading cancels obsolete reads; delayed responses cannot reopen the record"
+  ],
+  "security": [
+    "Live admission accepts current ETag as 304; obsolete version ETag receives a checked 200 replacement",
+    "A replaced Google head does not substitute bytes for the pinned immutable revision",
+    "Warm conditional preview refuses a moved or invalid provider identity",
+    "Real Storage rejects modification of a bound immutable original version",
+    "Actual account revocation denies 304 and cached repository previews, with zero displayed stale photos",
+    "Denied entries are removed; restored access requires fresh admitted bytes"
+  ],
+  "navigation": [
+    "fr/desktop: direct record to menu list without confirmation; late previews cannot reopen",
+    "fr: list search, decision filter and ordering preserved after opening from list and returning from menu",
+    "fr: one confirmation, cancel preserves URL and text, accepted return retains recoverable local draft",
+    "en/mobile: direct record to menu list without confirmation; late previews cannot reopen",
+    "en: list search, decision filter and ordering preserved after opening from list and returning from menu",
+    "en: one confirmation, cancel preserves URL and text, accepted return retains recoverable local draft",
+    "Task target opens its record; deliberate menu return removes task target and anchor and cannot reopen it"
+  ],
+  "unitTests": 22,
+  "browserErrors": 0
+}

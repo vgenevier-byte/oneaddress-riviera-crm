@@ -372,7 +372,8 @@ function ProjectsWorkspaceBody({ navigationIntentRef, userId, canWrite, canReadC
       controller.current?.abort();
       mediaController.current?.abort();
       epoch.current++;
-      clearFoncierePreviewCache();
+      // Keep bounded private previews/ETags within this authorization context.
+      // Reopening still requires live server admission before every reuse.
       draftLease.current?.release(); draftLease.current = null;
       setDraftReady(false); setData(null); setLoaded(null); setDirty(false);
       setSourceFiles([]); setSourceFileCategories([]); setReview(null);
