@@ -1,0 +1,2455 @@
+{
+  "mode": "registry-only-unverified",
+  "capturedAt": "2026-10-31T09:42:52.846295+00:00",
+  "states": {
+    "missing_copy": {
+      "files": 12,
+      "bytes": 4652050
+    },
+    "registry_candidate": {
+      "files": 229,
+      "bytes": 103221260
+    },
+    "pending": {
+      "files": 2,
+      "bytes": 1097798
+    }
+  },
+  "unresolvedCurrentReferences": [],
+  "unresolvedSnapshotReferences": [],
+  "authorizedDeletions": 0,
+  "freedSupabaseBytes": 0,
+  "sourceBytesRead": 0,
+  "rows": [
+    {
+      "assetId": "ae642e45-a3f6-44b7-976c-cc6b688a52e0",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 151718,
+      "version": "aa3f439c-19a9-47cd-9c92-e7191f6e8ac8",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "f6bbc866-c71f-4fce-a6a6-e486560ee35f",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 137950,
+      "version": "727b18ad-5f1a-4f7d-8cd4-8cc70b1471ae",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1l-joDcROaVk84z-5Cf3w7Cgv2Zv6du0Z",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "6861677d-df48-47ca-9de6-0eacd901a9b3",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 6434,
+      "version": "552d5a8a-b873-42d5-a30f-eaf02b80b489",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "27bcad8d-ba82-4643-b1f0-afaadcf40c8a",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 6302,
+      "version": "e87a52b5-978b-4cc6-ab76-0b6868c5ec12",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "1107f281-7d47-48b5-ac37-6763e7610d46",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 195253,
+      "version": "465cb1dc-f1c8-4e33-a5b4-58454d188f88",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1s8GxJQLZ2MpVHB2U-uh0Gr6V3DrUNupn",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "aef73ee6-a20a-41fd-bea2-e2c32a2ec4e6",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 376606,
+      "version": "ae24b190-5615-4d0d-85a7-cc0b046bc08d",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "6d9ee7c8-3d52-44ab-a2c0-df830e492bf7",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 173803,
+      "version": "4b8c705a-724a-4504-8554-1a195abe0f48",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1fwBY7OB6FVzcaZMAyfsye-FzHbEQO0u0",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "cc0f9594-ed96-4416-b0c7-6d35db4b7c76",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 2294,
+      "version": "057788e6-b7dd-40c3-8936-3b0811f20d4e",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "7d7202e4-538e-4348-a561-ba181e1b87d4",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 141746,
+      "version": "ebc4e604-322e-4d04-9530-ec1332f6a472",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1WfpDhXtm8TvB2Tc0m7X63ITwWok1L1Lo",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7c202ce9-38ec-498f-84e2-2bfbfc53d9a4",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 135268,
+      "version": "3a05a57a-f5ba-4395-ad93-6b7594eb2b29",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "7a6ba556-d346-47f3-b3d0-b70f0c54b438",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 151718,
+      "version": "dae8bf24-6be3-4cd9-a5ee-e22ba4233eee",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1LQA7xGSmDxBQHpZTJafO1yi9CNQ3tknU",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "2d1ea2b6-26ac-41b4-9fb8-7406e8710601",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 263674,
+      "version": "08f6341a-c123-447f-af75-e92391a53918",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1nH0zYvM21dRNx1uDx8UPuJeV1J_1A8xr",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "12d01564-8209-4dcf-877c-f192818c432b",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 6434,
+      "version": "d4d8c5de-cfc2-4b75-a95f-2db978f275da",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1s5CyxQPYCgvNLsqu3cqTh-0c26hBFQUw",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "bd13e7d6-a06d-414b-9205-97c600c6cb17",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 6302,
+      "version": "868aff1b-fd47-40b6-9a87-001656a93061",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Bb_bA1HhvgUFwcPY76525JlEfXr_3ZAv",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "577c8bde-7d35-4dbf-9f6f-c45fd6229957",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 376606,
+      "version": "6d1aaca6-0e2c-4821-a4f5-0246d8b0af2f",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1_qZ88apJYeEB1NDGluGMRKlLTOy0McE-",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "10b2f0c4-c77c-43a1-a00d-75951252f234",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 25318,
+      "version": "8c261d6c-ccdc-4d8b-b110-00d1fb938d99",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1dsVvDRIIZH_WVhiLMxWZF-xR1HYGEqKd",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f752be46-4ab1-45c3-b204-07e62a74c515",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 131605,
+      "version": "0a7aec6c-e8b6-40d3-bbea-163a097c88ae",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1BzHDvRJhHa4SlX1F51CtCfhRmZ-mEcgf",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "286d23c2-59f7-4f13-a130-3f48e59a31e8",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 179004,
+      "version": "6fc46fad-9c98-42e3-9173-e986b34f95d1",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1PIDWaf9GVVYGga4ypggsx_BQ0wO6Vk-h",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "96d453ad-62cd-42ab-a9f8-1ad91caad192",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 2294,
+      "version": "80f09444-f84c-46f6-8932-3ca03e4bae5b",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "10SI__nQHTpQtxkvk8XN5HhV1_kSKNezn",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "04287f43-485a-482f-a288-6ca9d0f8c290",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 30363,
+      "version": "0fde64e4-839b-4716-a566-dc19bd16aee4",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "171LFaty6TQTugPggehxxt1-W5Q1YAfjW",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "d9077809-02f2-4d23-a4f8-22a1ac7266bd",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 38848,
+      "version": "adbd8cd2-67cb-428d-ab00-bee551641d9f",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "13IDQeKELNLj_RBKdO5XqwcNUrbJqXOWb",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "517740f5-0840-4572-8243-ec6ec6077f26",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 135268,
+      "version": "e7a97847-472d-40ea-ba90-8302934f02ef",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1e4wv2GPHV4kL4mU89SLzWMXm4Oa0L34L",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ea6a0cda-f3d4-430b-9281-24ada806e321",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 45034,
+      "version": "b4eacfbc-f639-4d49-84a2-305f22147bec",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1SmOYFmYtYycvyt4XtVJdPzbUbQIMqYOy",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b2bf62af-8816-4b77-bd1f-622e77cb556a",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 117170,
+      "version": "bc929cf2-f366-4e89-b583-522dc5431018",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1-NiO8_dEqhJzZw4t83xRWQzhJuL59F7h",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7a6fa905-f7d1-4ebd-ad1a-6e28ec389a28",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 11250,
+      "version": "70fc1301-3269-425b-bf1c-095d974503b5",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1VW-0rfkw9OVPRKsNASiAvZhmVE9k0HXZ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "dcac9e19-0736-4cda-8cd4-73f812494831",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 191381,
+      "version": "543e0400-d56e-4969-b247-33fd9c838604",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1BF5Rc4FpjLety2kwUqvNhCvTwnjMQdWd",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "6169134b-56a4-4603-a439-165fd7356d9e",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 15156,
+      "version": "822824b3-1586-478a-bb48-eaa1210b473f",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1uZrQ3d8I-BwG48GlVk1UBw-chpM3AJEk",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "cf98ed75-6d86-4609-a722-d12e3a6283cc",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 553610,
+      "version": "f8d8a59d-5033-46ed-9f09-1e91d4788bbf",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1hzSUCanebM6WgQViGlKlkz2yS3bDTkLj",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "10342e3e-12e6-4f98-a52d-dd9bc495228e",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 10562,
+      "version": "ec701425-f866-4372-97a4-c88483e90604",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1FCfJ8yV2Ctiq9snHjFB9ca4tUofcNFQ_",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "112718ad-937a-48d4-8636-9bbfa090a2b7",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 6434,
+      "version": "7803e6cd-41fc-4e24-99d3-f8f2aa76cf87",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1cZbO8x8E0UWkev3EJGa6OmJZJN38BG-B",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "337060ad-55de-4f1a-a9f3-0cd0c7f00629",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 8009,
+      "version": "0d146710-f257-4fd8-b7fb-78c996b00c7a",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1c6jTwUILYXyA0yJURKoMuCuOVVBM0A8a",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7827333b-57e9-40d2-94ec-e7eddc33975d",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 462405,
+      "version": "c12008db-179a-4d3f-a191-530ddd29ab99",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1sEVbGFsLSS2f7uLXqpvG2yVNDBE3Xb8I",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "d55bf802-260d-4959-8bd1-9fde5b498f49",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 15419,
+      "version": "efbaf053-fb82-4e88-9528-2c11bf804620",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1H0C-X87q2aEOoCJzBlJ0qSgICllQ1psx",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "161cd830-22fb-47a6-908f-216b7d43f21b",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 318262,
+      "version": "5203af15-3491-4026-bd38-e10a2232f78a",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1Xcg-Npmi8YWAgipBPCdA-vLEG98iiVUU",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a3882cd8-3286-433a-90ab-467a949e5d55",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 596758,
+      "version": "2bb5ec24-61b1-4008-a982-29fabf6a30d4",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "12jj2toFkcn1gSU0Hmy77y3DqNSxvQVvl",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ebd74eab-95fa-4d3d-9960-6250f1969d4b",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 119924,
+      "version": "71bfbf73-ff5f-4ff8-b431-e1f02a1e4532",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1h4pZLpaCyBh5w9kx4FRr6SI7IQsaaotB",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f141367e-7379-4818-8419-7f1e6f101904",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 137242,
+      "version": "e55106e4-cbb9-433f-89d0-7b1e435bd881",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "14pMpNFCGRVIa6I-W5gZ5lSSaTH9cis9u",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a7fe04fb-fe8f-4bfe-aca5-6e08475f8a13",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 118031,
+      "version": "593ce678-7f40-4975-8926-788c95a5ff1e",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1G5yaEOD3B09G2sppnyvnqf7-k5Db41CX",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f2b44d42-74fa-4b5e-8ef5-ed3ffdb7d62c",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 289631,
+      "version": "4cffcf02-fe85-417f-a10d-406630bbfacf",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1xIxOFCLuWzBp5Y14irlmNd_w_w2EQqv1",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "440ed5fb-bd79-4b46-8b87-367d09bc15b4",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 142331,
+      "version": "c62e4f22-0e9e-4259-a722-d529eb106180",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1LhptxPIx5VmbIQJOylrqF1gzgqieOdQp",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "91fc18dc-8879-4a34-b4ca-a6b8f529aea6",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 497174,
+      "version": "97daa9b0-dc44-46b7-8457-4893568419b7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1k6qp0oEKIlz9zDmrIMPZGXdpLkYEYB3F",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "cadf0f0e-77a1-46e3-bf26-b8a1462fef0e",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 136218,
+      "version": "24c6052b-eda1-4f57-a7b9-ec60f624c471",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1G841uhHnPfE1S_YWpK7fCSnnAXQZs6QQ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8df209b4-bc08-4fd2-9b5c-82e2cbe2b02f",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 149071,
+      "version": "dc2b29de-d38e-4c2a-a12f-c18da334c083",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1X7GSuVzUs1gjnpIIt9KRyfOuNaHDKf9U",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "2b82004d-55b8-4bce-a2fb-6d8785afef3f",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 1687999,
+      "version": "f8f73c54-2cb8-433c-841d-5e5dd5e7a963",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "179_c1ANnjU5WqoC77xljXbp7z4w7UBRj",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "4fea9fd8-e7cb-474d-868d-62fb49085847",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 162953,
+      "version": "7e79c537-7f26-4e48-9b38-56fa8dc71855",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1BhHdzdf61nOnt23trlQcISKxETiERN3N",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "1229051e-b794-4012-925e-e38e6cd9c3c1",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 255646,
+      "version": "46f9d492-0138-4ce4-979c-c7d323bd1401",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1oR2VeQ4CXITv0bAhJKAALj6UebOVWkHB",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "9325f592-9596-494a-94ff-49f2e3c570fb",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 143807,
+      "version": "194151e4-ce63-40cb-ae6a-9660a78a5f89",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1t43kM35KaZELZoM5FY0oNMDR8J90kBPZ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "3edef775-e701-488d-aeed-13d220854eb9",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 119414,
+      "version": "57f81603-4c7d-47e3-8457-553fba8a96c5",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "10kojKy0BKdX6dN1GJDCqpQ_7o_eTMHUy",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "2f8bdea5-1e84-4925-95a6-619c343405ca",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 104338,
+      "version": "1a6000d4-a746-4e15-a80c-7b6fbfbbd9a0",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1-nOehUJCrlcNCQe1EDUGl89T4uZru9Ph",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ff2c78d5-41b5-48e8-85de-79c0c3a292b1",
+      "projectId": "45eef677-cf08-4556-883f-03c9524fe190",
+      "bytes": 1846436,
+      "version": "76163941-ef14-4883-a810-0f8d9d98c6c7",
+      "currentReferences": 1,
+      "snapshotReferences": 1,
+      "driveId": "1jAn9pmxfpzgI2Rez2JAfo1PnYR-h9Cx9",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "051130c7-e09b-48a3-bc90-efa920199766",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 149550,
+      "version": "1e81327d-ae7d-478c-911e-838e6cd48ae7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1ihINE93U35N7Gpc1PZGKxxaGIY0DJAWH",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "cbe5216b-aea2-4585-98c7-3b481d530053",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 139806,
+      "version": "a0186104-3770-4e61-87f6-10576eca4670",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "14oIiwlhEOIsxq7anA0fQcGw-1LIvwFpd",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "aab7afe5-d542-4673-a877-5ae373da6ab7",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 184525,
+      "version": "50c10cae-ae1c-46c5-9089-a53e5054003e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1tcgM6z60lvUPBaP0YzS05uNoQb0-ZvIb",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "efee0140-050e-4284-831c-428bf9b93280",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 6434,
+      "version": "471049a3-f18b-47f1-b8c4-6987e58d1d68",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1bItOWvqSo7Kpv_KAFF7txutlyk57KRDz",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a1d0af7d-2a1f-435c-95ea-7e32287b6feb",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 6302,
+      "version": "42831cda-3569-4167-a7b9-90b3404296b2",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1HGz0n4d5QXI0qX6cMZcagjMr4uQGEtDQ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "024e41d0-866f-42a7-8e9d-6d14f2db51c2",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 6302,
+      "version": "454e2c96-9ef5-4135-a7ca-d3fa695ffa52",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "18vDv9CHHreG1_fO9g9CJMbe_WlUQSrr2",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "818665db-b642-40c8-a0a7-a90db9c0115e",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 289458,
+      "version": "ccb8debf-93b9-4f37-b047-c3bced8b9bcb",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1HuHVYnyhWCAmnNz9h8W01um9TxwpaYZe",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "9435976d-9dce-4e63-9fe7-a39f552b95da",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 335086,
+      "version": "2a70ca99-9977-4ec9-92b0-9b006e2be25c",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1xeYMXwHhfQckx0lgMpz_oqkCYWGjw8Z2",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "d8aed0d2-59c9-4193-a200-5d27e860a83e",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 2294,
+      "version": "68022cf7-e931-4497-a7d0-06bc138fbdd9",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1v6WSJZLvFeqFjlCrd35n62mwRAsSKKYH",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ea637690-8b9a-4697-b900-5c364ba928b8",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 195428,
+      "version": "6046ce7e-5fce-4833-9b07-4991602b7db7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1LSfWiMyvi0Y6GTT6rAFVHdL1JZx8fFVJ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8a780ae0-0037-4f81-bb67-4bdcc11fe7c9",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 1358,
+      "version": "8fabfed2-dcd9-4f21-a236-43cfb3d5fb42",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1ynwQUbzo_WM8D7lsx7JlyGb2z5-qY-XL",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "600b3245-e1ca-4fdd-b083-91ab815ec8d6",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 203193,
+      "version": "5d5772af-5cb6-42a3-a5f8-a0bd79aa7d94",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1w0pBXFjXgVO7JMk8Rjmn2l_bGTY4B0aQ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "fc8c52b3-41bb-4c34-84a2-438ed9fc0650",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 731260,
+      "version": "6b2da110-4c78-42e9-9f75-497ccb2dfd49",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1U_R8MagZ-WqgDFnnEWAgywBReJ8uSFES",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "adfddcec-ade2-4e1c-88c6-130ba3348ef3",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 154718,
+      "version": "4508f102-b3c3-4822-8b35-6a6fa27c08aa",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1IXvNUZMz4eWUHPqnDHXmRo8gUNurJaN1",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8d21f4cd-a42a-4edb-a24b-e8655e3330b6",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 511007,
+      "version": "b7bca488-9f5c-4382-bc85-d432990309c8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1mIh6LghsQBie7h30ejw6kh5WpmTgKRZw",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "c0a86b1b-3407-420f-840f-ca2c687f5113",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 207373,
+      "version": "95ee5598-9da7-47e3-9053-310ea524e9c7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1NWr73VyBOhPzrGvg9Q0CmP75UZ-cvAvS",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "36f7c398-29bc-4878-85e8-f83cff7923f7",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 478260,
+      "version": "9ecf2698-d68c-4e50-959a-f9444e4cf4db",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1ccJdKoypAo8jQg_8bxLGb-zJZDNRaHJg",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b39367b9-94d8-4c8d-a87e-56bd070a12a6",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 4120141,
+      "version": "ac9ccbde-195a-4d77-ac79-f77774060ff8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1UODsX2wrqTUT9NYxJKK_EDSzq8vnIhMg",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "3108371d-0ff2-4ed6-94bb-ac55f8ffa8bf",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 147319,
+      "version": "08d48cc3-c4b1-4426-9b6d-22e36c635ef1",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1hi4AAPumfiPQgu4gG76leffMmLPHSf9v",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a7fabf04-c7d7-4df0-8923-740c8904880c",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 158122,
+      "version": "b132b457-b66d-4a16-a63b-ce21609b4cea",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Yfr10t6DB5zk59-VezZ_K3ru53mp-hrA",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "6ad96d0d-cced-4529-a797-7eb83264a193",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 234272,
+      "version": "b2c1bfaf-7e70-44e3-9461-358bfa3c1d0a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1OoxovM4Qh0VWe6CQ4hI2qBRasRN073Dt",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "58131e5c-1176-4831-b036-2d41134960f3",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 227238,
+      "version": "fd19e2df-cba6-4f94-9870-23524a99c1df",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1nFJbS8rtmvangVj3OtwYtiPK8AZuRbUA",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "10e67e2e-d1b6-4cbb-b7e3-a002c30179cb",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 166942,
+      "version": "cb20a5d9-2402-4c5f-be16-2bd9bf483f5a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1YZx-VHjJu0yBOCRIPmeXGTpA78uwIk-Q",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8cf0787c-9061-48c7-bd68-5914b44a35f4",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 172040,
+      "version": "90fa4bb2-98f5-4a6a-9383-b2f12a12b552",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1yfK3mPW7wsmdnKaPykpDW7OcdTVZJSQ6",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "83adb5de-da3c-41cf-bc68-69aba97d265f",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 129486,
+      "version": "88f4a234-9040-44db-adde-3f46aab40c46",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1RqDhp4CqlwX4nWI6GM2WPCq3SWHLFYTt",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f19d7078-7b51-4a41-8c01-0e9c8b5ec91e",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 104338,
+      "version": "b92ddf00-0de5-4767-a1ba-ea5b534800e8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1_WvFGMj7U1Lujekp26mH0gcBw8Vg-Ili",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "de07110f-7f7d-4de0-a535-385bc4f67633",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 143676,
+      "version": "de692e26-7b4c-4ae7-82f3-34fb95fa08bb",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "15T7fS8SGAsR3wo5HRM1-FnyQzxObzyHw",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "11505642-5c15-4ce9-bf8b-6cc1dc879bf1",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 149504,
+      "version": "72ad5212-003f-4ad3-a949-520ea5d0496a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1MV2St59o_A94vwxfq_fVOLEvaqvnPf0N",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "2915e0e4-d8f7-40e2-a378-59e696a052ed",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 2357028,
+      "version": "0caf5f64-88a4-4cec-9ac8-ae360bbd3253",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1uxRGoeAeTNBjO5-rVfHHzuuC_eVYUuOt",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "2e2d5453-4ed7-49a6-98f4-c6bc05674530",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 122613,
+      "version": "cba1e0fd-c037-48d3-84e5-9c585bf54cf2",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1iIb0-V7AdfViHZ2vF1FKltz43QwxXKT1",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "3ab49466-6956-4f99-b146-62e678e2970e",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 15156,
+      "version": "450417d5-0fa5-4228-8d5b-889febf1a556",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1cp3Msdbs29ZcrrxGx8K90P5dfLzXW11D",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "754fee7f-0ed3-4843-9c3f-5496c39594a5",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 114206,
+      "version": "ac103b5c-829d-4a08-9590-ed8980949510",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1WElO2YCFzFqsgEf8TkpcY6XSCD7unjzs",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "67e1f2d1-a8e9-4862-b5ef-be1a9d9ee205",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 2294,
+      "version": "ca43feb7-f272-47a3-91cf-98c41eb13cd7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1-YCIn74f-tL04GncQg1RI4KCi6AVm4xD",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "6d8ddac4-1145-48c4-9131-9e445150c202",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 136509,
+      "version": "ba2eada7-19fa-47c5-86ed-4af3c66f836f",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1gulnneXNla9R2V0xNhWO8eLNlBs73iJB",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "e1677fb8-20e0-483b-9892-70f9d248bcd7",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 111495,
+      "version": "339fb8f7-9ad5-4020-8ab3-9a3f07bb82ed",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1NR39URiGp_te4ft0mU8uyGq8yASXgQ7t",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8e2a1eb4-07ab-4438-a0eb-02966abb51dd",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 134894,
+      "version": "c0a3f4c4-ac7c-41f3-86b7-6799eccbf7d8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "10x4gJZVugV2vzCjW5CBt3QmgEmNPOR-s",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "af462745-89c7-4521-9333-fc8bf6eedcf6",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 146475,
+      "version": "c8baea22-c443-4798-9d59-52e17c919e54",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1o5fNMVaCdLPrwChflK9nBNibUdZaaOaI",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "73b84efc-6949-4d9c-bbf0-2614beed2016",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 242573,
+      "version": "7e681312-9635-4268-ba7b-970f8b053e33",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1QdeLy6zdrT9433hjCx20xCxH-WRyftpx",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "685b57dc-8acb-4b84-86ad-0c853415a079",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 196366,
+      "version": "8f8df246-ac59-4821-8c65-a81c3e5ef7c3",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1IpfhpgTszhnZvPBvts7pzA1GSrC27o_V",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "1ac9febe-5e37-4b5c-8642-9bd3ee12f128",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 3509082,
+      "version": "83ba75c8-98fe-42a0-bd28-f55c642d833b",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "19AjCqEOICeX1ZmxBDQt_NJXaZdv44Tps",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "c4ae5b3e-dbf9-4c0c-a6d0-e337d4aa6197",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 1358,
+      "version": "8e01eb66-764e-42e6-baf5-64a82a89a5c4",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1EJi95eSF0JjOdfc2Y7BNE4BuWNA9d2rZ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "55bfdaa0-39f2-4fd4-8e9a-6c42d614565c",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 6434,
+      "version": "a75a9bdf-9900-4454-805b-848ea4cf00e1",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1JBl2l582hPDcD1lkkf5yNdjZH6GU6DiA",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "dcb167aa-7324-43c2-9c35-803db2b8c566",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 6302,
+      "version": "e7d5b6e4-c362-4a96-b5d6-425a4ecda184",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1WUxmfvkMkdvU7qlmnlLFIP7rZSrmSFfl",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "119b648e-3c76-4dcb-a9c5-406b30759f0b",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 233321,
+      "version": "e7c60355-7b82-4554-9820-a5e8a3706e8e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1hGoP2GbhPF8aO8BT2i3eU9-lwE_Mbc_o",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8b8546ce-2325-45c1-9477-ee1e247d3711",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 251256,
+      "version": "99a486ef-f524-420c-b747-14e2dab68e29",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1IQHXbrYYL3QHmIbcWfJ9r7uhhBQfnran",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "fa5c38d7-2d95-4aeb-8ed3-bd8baa51926b",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 2294,
+      "version": "efbf85ba-caf3-47bb-9182-fd8b9f141f1d",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1VBJ17kaL61ZSpnLiCyA1FnWgBBQ0g5V3",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "4f22658a-5d2a-48aa-b608-fe1628bf8041",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 1358,
+      "version": "c3019308-fbc6-469a-b8fd-8dfc48598ad0",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Bym2D_SGmqithZOkbTwrzKP9CrmTtREU",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "bba91d89-741c-46bc-aa7d-6c3f30903b57",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 238583,
+      "version": "462f7c68-c729-45ea-bd1a-f3df92216fd4",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "0e6345d0-c532-49b0-906a-828cfd93fdf7",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 116345,
+      "version": "7ef695d0-72b5-4b66-bd9b-1bc07d92b3fa",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Y_f8dqhR5hB7M4dS_536QhwjjqCsodQU",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b7b58e2e-a932-45b9-80b8-3124abc9929a",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 637540,
+      "version": "50e164e1-c280-4f8d-9e95-0622f6947e0f",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "3db15127-23f0-4057-ad14-3ca9ba5f7cbd",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 167669,
+      "version": "8c20416a-33d6-4e7a-b37d-eedafd5466ef",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1-Lno8kYt_PVjhjH_T76Z53Y-Di3BWvHL",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7afbc133-8380-48e6-9c8f-031c8c3f44fc",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 185904,
+      "version": "8dba38d9-ca2d-4bbe-9610-18237bf4498b",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "51e5832c-0f78-4744-b57c-c326fea95c5b",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 2043178,
+      "version": "8719a013-ec5b-4b01-ab53-5a414785e365",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "b8a87e5d-2bc1-4c17-9466-922c00d92190",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 158339,
+      "version": "ab3752c9-82fe-4604-b877-c07da07c3b7e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1QUCdQ5ngu7I1_uCsxTuyo2kKpcDyF5dB",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8b3e1644-0964-4dc0-9480-ce48c2078df3",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 486448,
+      "version": "298926aa-cbf2-4cd4-8256-05fd15618a47",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "022e2e90-dfaf-4506-91fe-f4b45a0f418a",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 381775,
+      "version": "38981569-2e60-4840-9a29-beb09c04572a",
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "missing_copy"
+    },
+    {
+      "assetId": "f08e492b-46d9-4004-b5c5-bf1724d459de",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 290806,
+      "version": "9c6a02d8-eb6f-4341-a39f-591ba2322a92",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1jPwWkInUYRYWtrE9P-4nonRKm3LgGYQA",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "79829abf-f681-4705-8153-d1239ccf88a9",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 238583,
+      "version": "d385c2f4-f9d3-431d-a0ca-47a564846fdd",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1XbfnPCjMiVutDa8tSq6qwyNC1u17hSCh",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "04795760-1496-40ea-8957-9eba181efbc8",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 637540,
+      "version": "742ec7e3-654a-40d3-a791-6b62e8be4244",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1p2NFoI9SFRVDsc3dOX8JF-OE_OWGDXZd",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7fa82083-9e1e-4846-a06b-14fb0c2778f6",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 185904,
+      "version": "c3a132bc-0a36-4a30-8694-283082deefa7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Fz4q81Ku0lqTGEvYtorKPIhTuF3bU3E3",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a095f63b-fac5-4a8d-b445-1e146546a5a1",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 287955,
+      "version": "b2637906-381f-4d85-b70c-2b1d257110ad",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "11aM2rbxI_NFjiQPOWSGKcbfVH241kmj4",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "5a330dc6-0489-4e16-b36e-211e1b47cb7e",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 2043178,
+      "version": "89a711c0-16b2-4bab-81fe-9bd31d8a64db",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1K66bDPhoiCK0ulu1aNB5Pm102anBNln8",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ec56fb5a-ad24-4556-bbf9-1793d7fb2a43",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 314830,
+      "version": "6650c466-0e7c-48ed-84a3-ef0165f67c93",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1bznrvaYC5oji-AlY5k3xFiyYeWzW5EHy",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "51f01e70-289c-4377-89fd-812db23c9afd",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 486448,
+      "version": "376461be-7c99-4e28-9cba-166a9b9a2c45",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1VIsRptwOKTjh61E8F6vhWA_OClo4zha1",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f7fa1f44-ddcd-44f0-955d-79248b0f7939",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 381775,
+      "version": "d8b5c129-12be-48d3-96dc-8bb325462b20",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1LoBQvpJ7-rv8ViBROqOAjeyKYo7YxxsW",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "0ff42f97-8ca5-4035-a85b-a76e06cd5baa",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 1199973,
+      "version": "78fd76bc-ad8f-4294-9f65-86603e89406b",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1MFBbRuOvZlPvuJX9QLg1ZugmG7itSKYl",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "62c25db1-c812-467e-8b1c-810f93351ca7",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 544188,
+      "version": "f765005a-1134-43cb-a232-def4687b8e8b",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Myo5u_dV1SSDIOYHND_sj5JKXpbSdHlL",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "791c2187-eb35-4e38-ae56-52e65484113a",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 1275526,
+      "version": "7fdee73f-7ddd-4d7f-a0b2-316107c8714a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1YPJ0Xfw1Lz9M4wN_crGNfjXgaHfsjdql",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "35369472-a919-42e6-8195-90164af74b5f",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 19987632,
+      "version": "eb8b91a6-e043-4e0a-bdcc-239d890db6ba",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1TWAGRnSV3AC3d0FaO858JNf8W6moGI_t",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "da8de2df-adc0-4e7a-9ac9-1cc34a65432d",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 71296,
+      "version": "0034aae8-807b-4bd0-b882-a8f384135b89",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1bzJQw3G4w7KI9WJzTRJJNj8TrR2kN0_q",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "aa297a65-8bcb-4061-ad39-f20cd6b87dce",
+      "projectId": "b1925434-3ecf-4f08-8f65-26b7adf140bf",
+      "bytes": 122632,
+      "version": "b49d85fe-c0aa-43e5-817d-82ca80bb02aa",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1oaeBVWAfZyfOpvH5c4BLSleiFgup43Zw",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "c3ad827a-3f67-4cf3-af3a-1d8a7102bfcf",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 66953,
+      "version": "59dae355-ef8f-4ffa-89a7-770a4f99eb25",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1fBd1f2ZqEKoT5-RDEa9wLQCSmGZArbB2",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f69fd0bc-5eb3-414a-aa43-53893dcaea7d",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 25318,
+      "version": "37b308bb-55de-4aac-8d8b-6e2252a420ea",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1NRGX_7dczgjqz5o_Iofxb700_fuBK4ku",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "c2e8194a-e92d-4130-9bcc-511d05cd2599",
+      "projectId": "19c736d4-8434-469c-a49a-e976085865a4",
+      "bytes": 14860328,
+      "version": "9dfd5acd-0720-46c6-9b1e-073c5af32502",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1HpiJKj4l34tkx_U-n65g9stT5g4Rn3tb",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "6ef6331a-fb94-436f-b422-8e3f964129f1",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 215305,
+      "version": "1664790d-9c37-4eaf-886b-37d31b2a21d8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1vxGrDYuipcqE4eHv-gNM91YvMDrXvrdt",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "38441392-92bd-4063-ba79-18bd047fd42d",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 30363,
+      "version": "c9a9f417-a08d-410d-8dd8-d3f78d2795d8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1dao11KS7LIAv_jF9b_dDRFQxY-SWJ6oY",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "32cfdda7-e6b5-4914-8873-77c2591a9fe6",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 25318,
+      "version": "5c34b03f-5b81-41da-b4ed-2d48f05e2163",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "16IPSMhZiA8J_DFa09w-vFWc-OqRu5Hvl",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "bd081d75-50d3-41e1-a135-b93a4686ae67",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 38848,
+      "version": "4168690d-bdf6-4191-9e73-4658781c8b66",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1tVfjKD5_ojdTdlzK7NrhiqvenY8akYyZ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "d1f845d0-71f8-4748-8707-e1b9956985ca",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 45034,
+      "version": "7259821e-ad71-471b-b7c9-27f794e709cc",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1I1iQxfYA0R3K4Ogfbn4Cfy4HDJHTMJvi",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "0871bc30-3535-4abf-a376-d25d8a304eee",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 224309,
+      "version": "a25036e9-5f82-4459-8814-a2c77d552381",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "171dCLrooFJYCNRGlqWaIHN1FCb8LJw9u",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "bcc194f1-9e4b-4f71-a4f4-84bda8e6690c",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 195600,
+      "version": "621ec487-c194-4404-97aa-67a1cae6e2ac",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1N-9KcAfv-AKFacRp9WssLYWBEsiqRuXx",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ef7efcd9-6d5a-4d29-9c08-38e65b867c29",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 11250,
+      "version": "eadc8da4-0532-45cf-84dc-d170b6020a5a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1LETQDtlSySiUVfqRYi8udhCqY3qhLu4u",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "fdb208a0-db25-4032-8afa-1dcdae4d3e66",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 15156,
+      "version": "f3298bf3-ed70-433a-a321-3ed3024ea211",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1uUwVdx2JRWKRrj1Od0KyIQT832zZmm0k",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "0f5b43bc-ec5e-46cd-8587-523e77df1b4b",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 318844,
+      "version": "512846c8-8028-45c1-8b58-75eb8c473447",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "17EhkDkKj3yxMmTaFn_sTRDjiA7aP80_q",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8e330254-abd1-460f-806b-e9634f50fb2f",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 10562,
+      "version": "2adc6294-6582-49f8-9f24-cd3698a6dbd5",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Yj6EyL907gs7mKva0enNk58jXfQrMHVv",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "47eedfd3-214f-47de-9469-76ff2da53847",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 30363,
+      "version": "0d1aa346-cbac-4f58-8a38-d6385f76cfaf",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1ybBq_6_xB-xNB8jvElbn6dF92DKbgjMv",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "969a3051-0f7b-4610-9e2b-e9dfdbe54423",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 8009,
+      "version": "dacb6a4a-89fa-4a63-899c-56a45fd1ffb9",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1eQ16_vnWF461vzpPFP7zTrEHUYThhy5o",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "c97d7594-08f0-4011-bc32-67a649b2bf09",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 15419,
+      "version": "c9f01f59-c08c-4e43-b635-1623f9653625",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1EtPD0_x0BPLEqG59NcVHn8XICmHFRLcz",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b1760b00-78d7-465a-8ed5-640bae1abfde",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 38848,
+      "version": "2b049f81-7e6d-4524-a698-4633248d79c8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1GNYouoRs_6WeOYKoIlW8vDFoJPnVLYEJ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "2a17651f-f0e9-48e6-b5b1-6d975d79d15b",
+      "projectId": "63244e42-61b5-437c-b000-b57c1e1b8437",
+      "bytes": 262636,
+      "version": "7aa75aae-0bf5-4ae4-ac34-22a3d7b06383",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1UewcFL-btmySjjevnvVeqeaOqwTs314H",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7346266c-10c6-4d09-971d-ee9e26b41866",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 5745,
+      "version": "7f316669-deca-4d5f-bf33-db12cdea660c",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1WJxM9wY62cu5eqIDfx4CncagJTvStTj5",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "c8ae493c-970d-4c39-94a5-ef3da87369fb",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 45034,
+      "version": "1b778bda-1460-4014-bbb9-5c34005c7326",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1L5iCabKH0Gym18fdwjUOsm3rUFJ_r0ZO",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b0b3e8bf-0fea-4b6e-b763-f91a92e16610",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 158150,
+      "version": "f0c0e09e-4c9a-46d5-b055-39643291ddf3",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "18FO7WYq-FeJL-MkIHvwkbAp3RlHSJl9l",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "64bae771-99dc-4840-a8c4-02ba6a0e21aa",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 11250,
+      "version": "e118aae1-ea3a-4d51-974c-1d098c9388d9",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1t7mPiEndDDUqU9NqPkWeFdSUQB3kCMVo",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b246ec66-c5a8-46da-a169-6d9d8fc4322f",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 10562,
+      "version": "991794ff-6a20-4e7e-bad1-69bb7ba5f81e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1TsLcpa6t7-fqzbnMZ2TqCOwD2GX_5zxL",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "92383e88-9fab-40b2-bb27-b6be3f34c481",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 3805979,
+      "version": "45e1b882-ff80-4613-a314-40cdd68c208f",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1h54VLfEJEniIFLcfCnFLpYSwituWT6PB",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "566cbc36-addf-4cc1-82e8-6e67d5b1a7f7",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 8009,
+      "version": "7b413a43-98e4-40b9-88ce-8fdb8660b8fd",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1G-ihioMAIxsXjqxIRGPJsAX8ZlMiRw57",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "3db181b6-6fbe-4b76-876c-905d854fd810",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 15419,
+      "version": "9cfec90f-eba1-4a6c-902d-aaedf360c602",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1obbjE_kWuJZyx7DeZ5ErZeJEDOxq0VuU",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "1e9b11e1-8037-47d7-b40a-fe6fdb73141c",
+      "projectId": "a8443c03-4555-4713-a086-8d6fcb6ec3d9",
+      "bytes": 854316,
+      "version": "7381719e-5f3e-491e-9e47-ca1d24a15959",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1w_t-01sM0T7TrI1rhC3DKPfaaUIhjGtb",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a03a7103-9ca4-4e1c-b117-eeb5623c0bc0",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 284349,
+      "version": "f7ab9063-2cba-4f11-9ec3-74375e52a7c1",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1qNYfbEMpaS5spsv0YNaeTzThvtmLQbSr",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b3c3adda-5323-4244-940e-8739173cec76",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 45034,
+      "version": "d8aeee55-f3f6-4793-8434-c10494d7c57f",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1B3nRAm_q47u7JyJFDEqsVSMwyyRwaHO6",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "db17fdfd-b0c0-4dde-8eb1-5f5be2136c2c",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 164222,
+      "version": "9309268b-7996-49c9-968c-cb3f0023f160",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1hSyIhcGinx1s6ZgLnXTLYHmRJGPq9Dlj",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ba36e5fe-75da-4296-84f7-054a23fb2cc4",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 156300,
+      "version": "9d405a17-8fef-4801-be27-24911a982cc6",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1tRxdp1H2tM9Oqt8YC8cQH37RmuztD4Vr",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "3297d277-2606-416e-b09d-87ad96c3cfbc",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 164749,
+      "version": "20dcbaa0-4b8f-43bc-b70a-8a9304717248",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1dXi_QueYHNqTSDsn7Vc9RlgBxuwqkeCf",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "198f0106-31cd-4774-a753-a2e9793222cc",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 208061,
+      "version": "2f58e8ca-b101-46fa-a35e-a717a43730d2",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1WtRIWK_MFXaeR5wARfWgMi9f6sRJD5cR",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "444e653c-2f1d-40da-aa23-5eba1207a29e",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 211413,
+      "version": "1d565503-a017-4275-a220-45e5aa7c18bd",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1b7hftn-JSioWxUq5McOte13SKer-n95L",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "60ab3cd6-9c91-46b0-9665-410d41cd6bbd",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 223665,
+      "version": "625f2e9d-eea8-4b2e-b493-b6b6e0b7e44d",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1_tbRzRJu6ABwaxTXaZnyuqljD4rjiKpU",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "4489f369-7934-45c6-8072-26bb5651d180",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 182880,
+      "version": "4f03760b-9e4d-4b41-b320-42ea8867ac3c",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1o0pDiDrviAfFyBgSMrT_R67S1W2bp8IS",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "0b6913a5-64bc-49d0-bf02-b1ac3de3adac",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 224273,
+      "version": "fbae9f05-905e-4cd5-8215-dc745fea1e68",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1sexJZxQyrpLNMzoXotP3jhq0SZ565bZj",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7e441aff-3a0d-4c45-8f98-9cb0466e908e",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 131082,
+      "version": "6fe7effc-7122-43a4-9fd9-ba8037bae31d",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1QkzGsAe_dlIFD8NZR52DlJGDkY5haZLV",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "eb0be16f-219a-42d5-bbce-e5df56840598",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 6434,
+      "version": "ce5a56d5-78d3-4d26-a6ca-bbc9f435bbc6",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "12Px3_2Y-u-dv7_0vY_x9fdEunDiB3bra",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "5cba48a7-b4ef-4fda-84da-fb25c42d34e5",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 138109,
+      "version": "a66d4a49-d859-44e8-9b6b-d986d6b5b278",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "11zfHOPcj1Mgll4agVAoJrBZLltvCCyLd",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a5177cb2-1234-4eff-851a-32f44d958658",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 113879,
+      "version": "637db05e-6a5e-4494-aaae-a59b3e7092c7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1xmTf486IW3EVKqlj3lTgS1n_kxDZ4q6o",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "4e518b4a-0078-400c-974e-5f14202fdece",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 6302,
+      "version": "20cf1292-4ea3-46dd-b6d1-9665f5d0b9ad",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Inh3ViuO70H2t4jWDvD3kOKD7QWHZKf-",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "1e0e9b72-0de6-4912-be68-b69f3bea9aa0",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 129608,
+      "version": "0dc5c133-403c-4dbf-b39d-e1632177327f",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1FWrxBAs9SAii5-PSX1h5JpMFy3NpRvQO",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "efac3b1e-606a-4eb4-899a-4879280c8b91",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 99557,
+      "version": "f5eac34c-7885-4e0d-8dfb-63be0da908b9",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1WULs4cm6m0_pm_aU6f0mGDLxvpoVctMy",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "8c0cae36-7a97-44d5-a305-50b6b417f766",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 125810,
+      "version": "152fa933-69dc-4ec7-80b6-e03d7f0df924",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1s2zexo5Xm2ZGTrKQXEynMrX5ylmhZFPI",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "1f314294-064f-4ae7-b187-ccd56a96038d",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 252675,
+      "version": "cfff25d2-87cb-40c6-b041-58653c52991d",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Rwio9WPEN5WnPCZvxSlzWhFjDFoA59Mb",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7b5d8966-328e-4a09-9813-7ee1a48b7c1f",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 392136,
+      "version": "81070890-cc8b-4a53-8b94-c4663ad56938",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1oWDjmKTOQkCB5HlOdysS24cA3-GF1gpS",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "90fa8a83-b840-4cce-aa88-5e7347b81b72",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 197963,
+      "version": "355a1e66-e0df-4a92-bdbb-ed946a3f13b6",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1HWQtRLG9vr0rBrK7GOUAZ7SMn-FZoy1b",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "682cd75c-e0c0-4387-a79a-4c6be7ca654c",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 139436,
+      "version": "5a5ce4ef-0d4b-4995-a2a6-03942f85ea17",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1onkFpaBbAFxcgIeH1A1TQEIyzyAzXsuu",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "84da5e11-41a6-413c-b976-87f7e6f85345",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 2294,
+      "version": "842ac11a-c065-4567-8fbf-18e4ee20fe0c",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1niG8uXox43CH3mKElEW-uwm4ruE-w4UO",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ecacf3df-de29-418a-ab3d-e32ab8960369",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 109186,
+      "version": "5a2a64e2-e5c2-4524-871e-63949be12d99",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "10IZwHMknETwjuk_dIrGwuNcSO_3WZoOf",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "78ca03f3-e1c4-4f45-ae4b-d66a43bd7f28",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 247084,
+      "version": "3afc5bf7-0b0f-446e-87b0-32b7cf27e80e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1VjnQjyBCpLWQWQ16rtE0DUvsDCqES834",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "cff97031-1c31-46a3-be05-315b48bd6444",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 1358,
+      "version": "6b387eea-8cea-4197-8f7d-6f89910b2463",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "138GG5doGNMOZV07OAjjK-76l_KzO_ixs",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b32b105f-7aec-4a2d-8886-959f2bc67d1e",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 167871,
+      "version": "b4238e8b-9edf-48c9-aa3f-5195e1b0b461",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1IDmQ6F7CEr3pL9yx61QAkpsHqexvC8j6",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "286f4da6-f73e-4b0a-bd7e-0e436b8c415f",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 167589,
+      "version": "0d53179c-d65a-498c-8a83-68e677dd0b9e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1qMTdmdQEWSmPevGXyzA8iH8u5dUJnPFk",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "87821581-3c22-4be5-b89f-2f5f446be536",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 122386,
+      "version": "8137e757-c612-4c94-bbb9-b874c940bfd6",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1bc7JyG2C0shyhAMx_bbdE9QYiHHOSTBt",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "e7a39a83-50cc-43c1-a7b2-3701fffa8446",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 132038,
+      "version": "d19ff6cb-a178-4081-abde-697760a8a3f1",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1K6Q4VOiv_TYfOvByPajuwU796Rhx89vT",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "dfd16d99-798a-4680-9bd6-db556f20c70c",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 275742,
+      "version": "aa3e8038-b303-4f76-8318-cc56e32841f7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1pMZBIgkSXdf61WNz64wJPWJHSPXvP2rY",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "61f3c3c4-ba03-4cc6-86c6-fc8df03f1e5e",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 129335,
+      "version": "fef1a764-8713-4559-853d-a52726b2f7cb",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1zFLd8r0TzMBd0No57aJ65voIF3NWBwjD",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "155a388d-4f9d-4e48-9b7d-0afaf7393bfd",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 102927,
+      "version": "6eaf4477-a78e-47fa-9a39-dae420774017",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "16xIFgYQu9NO_qFrrLVtsJuqkqduQN2Cn",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "0dd61776-8814-4f71-bfea-6672d1d95159",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 480208,
+      "version": "bf8b21fa-2e04-47c0-a4d4-58c8eb89ccc7",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1I-OgtoATQV3e_qUIRZreIAaGmwUM-oCl",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "40059e82-40bd-438e-b434-22e81c9864bd",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 137784,
+      "version": "32f8b9af-db50-4c4e-b2c8-d2233efb6f8b",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "12qxGZDWFPm1bZMCoLnBHALg8geT6WsnD",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f2aba063-761b-4848-93fd-cac31b6ba7ff",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 120692,
+      "version": "39d9f3e1-952a-4c64-bc38-9ee5e83e6995",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1BM2_Qz_ufhfb9SvmtonetHr1IncM0qQC",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "0d9c2944-a309-4332-870b-a68a282a8d67",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 362959,
+      "version": "2bbe1715-f2f3-45c9-a8e9-bdb4b09127d5",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "15XrH_Y_Hu24spH-dKzAZjsukH-4GVtG9",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "58c84129-09b1-4c18-90a8-3057b2210022",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 123425,
+      "version": "da48d4b4-1d37-46cb-90a4-a9ca1c37d591",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1CM0oWFEMugSDnZLMNq2WOd9md9PUFt_h",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "e6e8a6a4-e90b-4754-9a3f-5eb8ab8f84af",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 106714,
+      "version": "f81af831-fdf7-442b-b284-16423b79a3fc",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1TBeu6Bcsr3zU0IkKiYoMgqFjh6x-eual",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "bb6656c8-5ce6-42a9-a6a4-8ac813b13b9f",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 102359,
+      "version": "405d5c7f-2c73-4367-b033-d9c4d02b1cc6",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1sQNK4-k43ygj4lv2GCflaKSburS2fbiY",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "44ee22f0-b6fd-440b-90be-361bf63cdd14",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 101046,
+      "version": "81bd4a34-d8d5-4296-9699-fdc4790bd32b",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1wSQvFbMJKBPouMdlzsgsKEPWDNkifGN3",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f0faa5eb-3b2f-4ae4-a917-d9d3150ffd24",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 402269,
+      "version": "999b3265-70db-4b59-ae96-f891ff9e65ed",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "13f_cCC-3mYdE0rqCGsHFbiYPW19DYVaW",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7ac502c2-bd3a-42bc-a7fe-ff6ff94054b7",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 104791,
+      "version": "85a93504-6a4f-4abf-b8bc-ff8a0c444447",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1-klK4Fcs_Mfnl_1g0srj6AP0PwvYOei1",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "1f9fe9ce-b348-4092-92ff-61e4a38727b5",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 98697,
+      "version": "e58fb49b-4ee0-4624-b573-042aa3515a83",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1ifWTegaZuyYOmhlFtcfnswhkFLa1L55A",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7346ba03-69d1-4886-b3a5-59ce8207fbd1",
+      "projectId": "da916e8a-6258-419e-bf6d-007a8ccbd36b",
+      "bytes": 1906134,
+      "version": "b2870949-a67c-40cb-a34c-227f8531a1f0",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1c4g7sp6PvoshSysAhATG6DQICMJoB7Iv",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "194b4d2c-0982-4253-a3ef-4b6edbb9e7b0",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 74433,
+      "version": "7dcb8a14-9371-4fcf-9167-8bcb10248184",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1tlPSpDwmwlfxMmGbo1V1s1SYHoZWGGL0",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "398eb46c-4179-4995-9dda-ba2c99786682",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 94674,
+      "version": "9e2fb575-586d-4e3c-93c1-4db3a81926c5",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1511S662zaLVtiFS03_7EWwUfE-b88T0E",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "fe3591f3-a0ac-430b-8287-21b07c0430c5",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 25318,
+      "version": "321b36cf-47b6-4be1-a764-298857948820",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1l3dYgbh3LTGKhM6LhhTkFSxIgjOdvhfR",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b0ff76fe-b384-4453-b515-5e32aee8b0d4",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 67215,
+      "version": "c7913dd6-b5ee-4d40-976c-b1a7a13262ba",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1JAho0Pu6E0vSMAZdUbVzv3L25lppSg79",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f2de0597-c2d0-4c64-b58c-b91680bf2063",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 151298,
+      "version": "f1e3e7a5-0d31-4e97-94d3-bacc02e6e615",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "116pvPlS6R3AL9fpzAf3ur55iSOVaGZSN",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "63f6fd75-b947-465d-9d8e-3871b350ca99",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 114818,
+      "version": "17d52044-e7c1-4962-81ef-582cd3552c99",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1xvFn8KpnTQsX1PgTkcrhWSZE5v5InmqR",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "d1ac2d26-8bd0-4c5f-9439-58180e2a3f16",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 155512,
+      "version": "dd4e059c-fa5c-4bb3-a312-9acd3b8ab012",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "175bPEcfXxza42jUyOr50_LaG3Il7nxpq",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "3e72e370-7f6f-48cc-9e46-cd0177febedd",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 258329,
+      "version": "53b06dd2-46b2-4753-9075-7500b52e2d48",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1IuUHu1tRRlK93zrxsNbpyFO62gVOr79I",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "7b15116c-c729-4fbf-a1fd-37cab76990bb",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 150041,
+      "version": "620447fd-5465-4e80-af6d-10901a213974",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1PfsKl_4XwoTHNKsMFxdQbSM4v4DW5_IG",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "013a4387-8969-48ac-b0f3-dbb60f5b57f2",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 115581,
+      "version": "2656189e-13d7-4da1-a16b-c30910ee307a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1lkcKo_EnXJmzKjT3a17f-o1m_5KplBFZ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "48c72792-a335-45c4-98e9-8ef958bdfd69",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 305561,
+      "version": "d18adff0-a200-4d7f-8dcc-a2460fc957dc",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1zBL8Y4QcDiA_NaCFHr6yCXK5Dltw8D4M",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "399b78da-5850-4f1b-af1a-ae6563b4bdc7",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 130793,
+      "version": "cb1b7859-a8cb-45ac-8c91-f5239b7fb919",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1q-Wy9xwMvOHWiAX__QR23DOY00VoCDT-",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a875cfcc-f635-43d5-b35d-d61e3a1959e8",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 104338,
+      "version": "61760e69-dddb-44a4-8d40-3dc7c77956da",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1KhbaU2NdV9qm9EVapVYx3o3kLBRWixHJ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "e1218834-e5bc-482d-a923-d2a454455445",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 282759,
+      "version": "5cb0e992-6032-4338-a927-06dba64ba0fd",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1JiCfIYPspNqWZ33mDwgbXBNuDTufvkFV",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "4cea61e6-5da5-4130-b8d3-c3f3e44711b8",
+      "projectId": "44e00933-a0bd-4d52-b728-8e3c6ffdde9c",
+      "bytes": 5781620,
+      "version": "a69cabf8-54a6-4386-bc27-17506e80cd6d",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1dZbVrLv9rh9hmQB_sFimuh_H18tDrXt_",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b7672ccd-4a98-4fb4-ae6c-35dbec073a58",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 192485,
+      "version": "43bd48a5-f131-4e22-aa72-e18772abf1a1",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1SXHwZRiYzk9G0B-NHejQFAIXksf9ZQZa",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a164d8d6-62d3-4a58-8f7d-b4190502844a",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 223024,
+      "version": "a68b094b-6beb-472a-97f8-ee73e0d7e4fa",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1izrSVz8qbZfB2iMTNi8mMnKFerayEEEF",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "d606d010-22f6-49e4-a3f8-33d8fbebf196",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 215258,
+      "version": "5f3d1c64-61ad-4b00-8aa7-87d1e8c39072",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1dhkNvAjs0HE7fEkSwoiFP6YuMmal8DWe",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "495aa9a0-0bf4-4206-bf5a-492d82e719c7",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 11250,
+      "version": "8b417696-0a7e-4ad8-ba5f-811268a07731",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1L0lGB0Y7h8yovcpgIamFQYR6oSrEOk7D",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "b33bb662-f7f5-44ca-bbae-12352f5ea35a",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 15156,
+      "version": "45a580ea-715c-4502-9f6e-b4f2e0133b2e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Q7-QStWEAWSUMe1_fEjKvUtJxqXVF7Yt",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a5bd8c7f-33f2-4830-856f-bf2e72a73992",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 10562,
+      "version": "170db961-de72-40ed-9665-d68a618b34e4",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1j2GXBCSKVgVEC5lonK5J1-8cutVnFuoh",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ecaea097-ffb0-410e-86f6-92efcad277e3",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 8009,
+      "version": "14ae0f91-e90e-4a96-b1d6-a5ec49eea9fd",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1lcrwf0n0qvKBc30fKk9XoS9JWigj8TsX",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "adb3910e-3df2-48fe-bd50-45b38ba57253",
+      "projectId": "3fc98d04-16b4-4c30-89e9-b711dc66d367",
+      "bytes": 776838,
+      "version": "f7618968-81b1-46ea-aa08-fff864e1cc9a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1dtrcPekkl8uEI7C1LvDF5dOQKIz9FurL",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "13a2508f-f72e-4fd4-a882-fc087decafb7",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 255648,
+      "version": "ad499c1d-79ba-4194-961c-5398c2137228",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1foPbc8LJkpwrS9ZyJb0UduqyCOOknl9J",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a3b34346-544a-43ad-936d-e17b36a6efe7",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 18221,
+      "version": "94e8584c-c72d-4c03-ab39-561213518866",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "12EbdlcdZh2S_gV-guAv-egaqX19QOjug",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "06e998cc-0d08-4c5f-b581-df74305377ef",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 254224,
+      "version": "411f12ca-0418-4427-94ca-2e2b2a29da83",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "13H6xEbIbChW8JN0pWk9QHK9Ikl2ira51",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "cf03deb1-a9ed-4fa6-aaab-94bebc3929b9",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 6302,
+      "version": "70dc47f4-cce7-4b9d-9bc1-6826209b39eb",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1yD6F5R1CPN0oSlp0TK7CUgAYnScrNDNV",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "d1ae6443-b822-4273-a15f-4ebe7cbc4bb5",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 473311,
+      "version": "fb4fa8fd-8db1-42e8-b31c-0fc2311b6a48",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Q0WiJ30C0Llp1c_9ifVgbx0_vx_Jwp92",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f0893b68-3968-4b5d-b319-500abd378bb3",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 56712,
+      "version": "307583b5-ba53-4560-a4a1-e677ce2cd524",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1oONvdKMCObxb3DNFiTY82b8KJ_5jcDt-",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "a680ae02-9cb4-44ce-a294-bb0b14762551",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 329342,
+      "version": "c335d3a9-27ed-4be7-a712-71f566092843",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Zn1jZah92sksJBJvVx1dLOVMRdUNFnvz",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "adbfac74-73d4-4bdc-8401-ecdb467084f4",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 2294,
+      "version": "413bc1c4-b90f-44f1-8808-988073593e0b",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1srAW8TQXQyySVq-mRT1fXLLxDrOfHUXg",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "6dd30116-fed9-4d75-b19a-71b9fb768edd",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 443602,
+      "version": "077b46c1-67b3-40b4-af13-4babce124e9f",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1-H7VtvlXrSq51eCpw6rvxJwOfggHfDVa",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "dd9e7871-168c-41dc-a60c-a0a32b4c60cf",
+      "projectId": "c0e6a8af-8002-4b9c-8605-1ff27753b117",
+      "bytes": 3447283,
+      "version": "b48480b1-a956-4570-8528-8c437c6ffd4a",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Iubdgjdo1oSN6T2C11GiKZN-3KKnTxV6",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "48f90d53-a8db-4a3d-9512-6ac4e74a533e",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 25318,
+      "version": "48b91b31-5bc7-4cbc-b1bc-a08283b83b90",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1uyL9mCutjunTrKodsYiI9oup1BzrjarS",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "91961acd-14a6-42f6-8515-c50a0f356a7c",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 221529,
+      "version": "03df3151-aef7-43da-acc6-7ceb8219b1e8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1M8erGzFJmujxh0k2vcDdtj4XJVuhLcWn",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "9e2ebb06-9707-4fd5-ae4b-74c28216311e",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 293531,
+      "version": "2f4ecfe9-30b7-4ec8-9c62-b93ae5c03553",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1fi-PkOzjNT8apqnFGTIEhBgn761T_Br6",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ec2917da-3475-4571-b7b6-4702ff05880e",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 253188,
+      "version": "9409ba8d-3e7c-4ad8-aca6-66b08d0818ca",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1Keo-YFNJA7rAhFkJcl6U_uh4_yR_6BRO",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "4d0e7fe1-a181-463d-b40d-50aaa41edd52",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 45034,
+      "version": "cce5261c-417a-4e96-b163-73ed4b656ec6",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1-EopFoJJhwz-eemwi8QZtow4_N-AvQjK",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "4184bc3f-3447-4f29-8d0d-6964614116bc",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 157753,
+      "version": "f9238dbd-3d16-4adc-b5f7-a3a9b0c1c583",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1rg9qjtxvj4y1EKzyDHiWOnnwq8MTfvBg",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "1dc75e39-9901-44e1-9e8a-96f1d41756ff",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 221260,
+      "version": "4b04bc90-5cf7-49a6-8e8c-b64026b88327",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1SkEx7IEPNlEVAuNoE54udmCAkqa1ZvLK",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f2a94696-3789-4fea-80da-0143e42ea4d6",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 188259,
+      "version": "eb4376fc-aa67-4a92-9188-12304abf6bff",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1e8Rgt2e5-oBbkKNCoEv7npWjaiCNk0yG",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "6d1f0b4f-fb8e-401b-b2d9-5e4722c0c41f",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 11250,
+      "version": "368e3e41-6680-4d55-9358-a4ab1256fd57",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1jmTRLL-XzZsbVybQTG6vhAdFI2DhlJ6a",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "170661de-ed8d-43ae-a3c9-c1d170ba3ddb",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 15156,
+      "version": "57d200e1-c4b7-4c44-a817-d0c7a4a593ec",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1ms7yRddcQCXLcLdVLp4fXS7RovT-yeh2",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "ef6a89d6-fa70-4867-bc60-cfc168bc9a2a",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 10562,
+      "version": "013f83e7-a3ed-4bda-8535-49e7ca713da3",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "13LeW47uWLHjd6_NiJS9ngqu8m_CPlzbO",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "f14303a9-d2be-4a6c-be3d-e382b21ec52b",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 8009,
+      "version": "3a9fb15c-f669-43d2-aa95-96d74c4fbe1e",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1egeqSCoBq9atWHvaN4JpAFEPblb5EArJ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "9b76b576-955d-4d0b-858a-0edb393c88bf",
+      "projectId": "a46f2124-bf8e-4a19-b679-6b59849d412f",
+      "bytes": 726614,
+      "version": "69b701ee-72d6-4664-96ac-37f74ca124f2",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "16BY_8HXaEhXx21eC_OUkYE2hvSi3rJ7L",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "0ef4f9e4-ff3d-4fc6-9134-877c5ff6e8d4",
+      "projectId": "34e15f1a-0015-4d63-ae9b-b29112594830",
+      "bytes": 321318,
+      "version": "44730cd6-feae-454e-b663-8dd39ccec0b8",
+      "currentReferences": 1,
+      "snapshotReferences": 0,
+      "driveId": "1i5iJn4pKT52u_ygrRiZCyYnFq4e__XgZ",
+      "status": "registry_candidate"
+    },
+    {
+      "assetId": "2d118d0e-0e50-4632-83da-7191e1ae9c5b",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 544188,
+      "version": null,
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "pending"
+    },
+    {
+      "assetId": "7a1f294a-8efc-4479-bb15-48b7cfcb38e2",
+      "projectId": "b5096b18-76eb-47a5-b78b-0096b2cf4c4b",
+      "bytes": 553610,
+      "version": null,
+      "currentReferences": 0,
+      "snapshotReferences": 0,
+      "driveId": null,
+      "status": "pending"
+    }
+  ]
+}
