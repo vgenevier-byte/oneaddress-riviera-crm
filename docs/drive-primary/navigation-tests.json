@@ -1,0 +1,16 @@
+{
+  "checks": [
+    "fr/desktop: direct record to menu list without confirmation; late previews cannot reopen",
+    "fr: list search, decision filter and ordering preserved after opening from list and returning from menu",
+    "fr: one confirmation, cancel preserves URL and text, accepted return retains recoverable local draft",
+    "en/mobile: direct record to menu list without confirmation; late previews cannot reopen",
+    "en: list search, decision filter and ordering preserved after opening from list and returning from menu",
+    "en: one confirmation, cancel preserves URL and text, accepted return retains recoverable local draft",
+    "Pending file and text survive cancellation, accepted list return, local draft recovery and Contacts cancellation return",
+    "Menu explains temporary block during real save/upload; write finishes normally before list return",
+    "Read-only account returns to its authorized list without confirmation",
+    "Unsaved arbitration choice and remark have one confirmation and survive cancellation",
+    "Task target opens its record; deliberate menu return removes task target and anchor and cannot reopen it"
+  ],
+  "errors": []
+}

@@ -1,0 +1,353 @@
+{
+  "label": "after",
+  "conditions": "Three 24-photo fictional records; identical local build, browser, Auth, database and JPEGs. Before: real local Storage; after: simulated Google API with real CRM admission and pinned immutable bytes. No production latency or real-Drive performance inference.",
+  "authorizedProjects": 12,
+  "rows": [
+    {
+      "count": 24,
+      "repetition": 1,
+      "kind": "list",
+      "usableMs": 820.1335409999997,
+      "requests": 14,
+      "bytes": 22412,
+      "endpoints": {
+        "/rest/v1/app_memberships": 2,
+        "/rest/v1/rpc/crm_access_snapshot": 8,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/rpc/fonciere_arbitrage_list": 2
+      },
+      "previewCache": {},
+      "provider": {
+        "googleRequests": 0,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "58c1064b-1de5-4e42-8d39-f38adde64930",
+      "name": "Benchmark fictif 24 photos R1",
+      "count": 24,
+      "repetition": 1,
+      "originalBytes": 27552851,
+      "kind": "click",
+      "usableMs": 211.29225000000042,
+      "firstPhotoMs": 286.240417,
+      "galleryMs": 562.3106250000001,
+      "requests": 55,
+      "bytes": 5400734,
+      "endpoints": {
+        "/rest/v1/rpc/crm_access_snapshot": 20,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/photo-preview": 24,
+        "/api/fonciere/drive": 1
+      },
+      "previewCache": {
+        "miss": 24
+      },
+      "provider": {
+        "googleRequests": 504,
+        "supabaseBytes": 0,
+        "driveBytes": 27552851,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "58c1064b-1de5-4e42-8d39-f38adde64930",
+      "name": "Benchmark fictif 24 photos R1",
+      "count": 24,
+      "repetition": 1,
+      "originalBytes": 27552851,
+      "kind": "reopen",
+      "usableMs": 228.0371670000004,
+      "firstPhotoMs": 238.24954200000047,
+      "galleryMs": 346.5807080000004,
+      "requests": 55,
+      "bytes": 5400710,
+      "endpoints": {
+        "/rest/v1/rpc/crm_access_snapshot": 20,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/drive": 1,
+        "/api/fonciere/photo-preview": 24
+      },
+      "previewCache": {
+        "hit": 24
+      },
+      "provider": {
+        "googleRequests": 240,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "58c1064b-1de5-4e42-8d39-f38adde64930",
+      "name": "Benchmark fictif 24 photos R1",
+      "count": 24,
+      "repetition": 1,
+      "originalBytes": 27552851,
+      "kind": "direct",
+      "usableMs": 824.5096670000003,
+      "firstPhotoMs": 849.0596669999995,
+      "galleryMs": 849.6841669999994,
+      "requests": 59,
+      "bytes": 5403415,
+      "endpoints": {
+        "/rest/v1/app_memberships": 2,
+        "/rest/v1/rpc/crm_access_snapshot": 22,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/photo-preview": 24,
+        "/api/fonciere/drive": 1
+      },
+      "previewCache": {
+        "hit": 24
+      },
+      "provider": {
+        "googleRequests": 240,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "count": 24,
+      "repetition": 2,
+      "kind": "list",
+      "usableMs": 826.6232500000006,
+      "requests": 14,
+      "bytes": 22412,
+      "endpoints": {
+        "/rest/v1/app_memberships": 2,
+        "/rest/v1/rpc/crm_access_snapshot": 8,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/rpc/fonciere_arbitrage_list": 2
+      },
+      "previewCache": {},
+      "provider": {
+        "googleRequests": 0,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "63d8cfa3-608c-4924-b0d2-985302a4f824",
+      "name": "Benchmark fictif 24 photos R2",
+      "count": 24,
+      "repetition": 2,
+      "originalBytes": 27552851,
+      "kind": "click",
+      "usableMs": 198.44466700000157,
+      "firstPhotoMs": 265.7445000000007,
+      "galleryMs": 511.0368330000001,
+      "requests": 55,
+      "bytes": 5400736,
+      "endpoints": {
+        "/rest/v1/rpc/crm_access_snapshot": 20,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/photo-preview": 24,
+        "/api/fonciere/drive": 1
+      },
+      "previewCache": {
+        "miss": 24
+      },
+      "provider": {
+        "googleRequests": 504,
+        "supabaseBytes": 0,
+        "driveBytes": 27552851,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "63d8cfa3-608c-4924-b0d2-985302a4f824",
+      "name": "Benchmark fictif 24 photos R2",
+      "count": 24,
+      "repetition": 2,
+      "originalBytes": 27552851,
+      "kind": "reopen",
+      "usableMs": 102.65970800000105,
+      "firstPhotoMs": 142.74075000000084,
+      "galleryMs": 326.2340000000004,
+      "requests": 55,
+      "bytes": 5400711,
+      "endpoints": {
+        "/rest/v1/rpc/crm_access_snapshot": 20,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/photo-preview": 24,
+        "/api/fonciere/drive": 1
+      },
+      "previewCache": {
+        "hit": 24
+      },
+      "provider": {
+        "googleRequests": 240,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "63d8cfa3-608c-4924-b0d2-985302a4f824",
+      "name": "Benchmark fictif 24 photos R2",
+      "count": 24,
+      "repetition": 2,
+      "originalBytes": 27552851,
+      "kind": "direct",
+      "usableMs": 834.2929999999997,
+      "firstPhotoMs": 923.1492080000007,
+      "galleryMs": 925.338208000001,
+      "requests": 59,
+      "bytes": 5403416,
+      "endpoints": {
+        "/rest/v1/app_memberships": 2,
+        "/rest/v1/rpc/crm_access_snapshot": 22,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/photo-preview": 24,
+        "/api/fonciere/drive": 1
+      },
+      "previewCache": {
+        "hit": 24
+      },
+      "provider": {
+        "googleRequests": 240,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "count": 24,
+      "repetition": 3,
+      "kind": "list",
+      "usableMs": 817.054250000001,
+      "requests": 14,
+      "bytes": 22412,
+      "endpoints": {
+        "/rest/v1/app_memberships": 2,
+        "/rest/v1/rpc/crm_access_snapshot": 8,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/rpc/fonciere_arbitrage_list": 2
+      },
+      "previewCache": {},
+      "provider": {
+        "googleRequests": 0,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "c240502f-9242-4859-bb45-dedf9d88eae4",
+      "name": "Benchmark fictif 24 photos R3",
+      "count": 24,
+      "repetition": 3,
+      "originalBytes": 27552851,
+      "kind": "click",
+      "usableMs": 193.16349999999875,
+      "firstPhotoMs": 256.17220799999996,
+      "galleryMs": 492.6591660000013,
+      "requests": 55,
+      "bytes": 5400737,
+      "endpoints": {
+        "/rest/v1/rpc/crm_access_snapshot": 20,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/photo-preview": 24,
+        "/api/fonciere/drive": 1
+      },
+      "previewCache": {
+        "miss": 24
+      },
+      "provider": {
+        "googleRequests": 504,
+        "supabaseBytes": 0,
+        "driveBytes": 27552851,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "c240502f-9242-4859-bb45-dedf9d88eae4",
+      "name": "Benchmark fictif 24 photos R3",
+      "count": 24,
+      "repetition": 3,
+      "originalBytes": 27552851,
+      "kind": "reopen",
+      "usableMs": 240.91912500000035,
+      "firstPhotoMs": 250.90733300000284,
+      "galleryMs": 348.1325410000027,
+      "requests": 55,
+      "bytes": 5400713,
+      "endpoints": {
+        "/rest/v1/rpc/crm_access_snapshot": 20,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/drive": 1,
+        "/api/fonciere/photo-preview": 24
+      },
+      "previewCache": {
+        "hit": 24
+      },
+      "provider": {
+        "googleRequests": 240,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    },
+    {
+      "id": "c240502f-9242-4859-bb45-dedf9d88eae4",
+      "name": "Benchmark fictif 24 photos R3",
+      "count": 24,
+      "repetition": 3,
+      "originalBytes": 27552851,
+      "kind": "direct",
+      "usableMs": 834.2246249999989,
+      "firstPhotoMs": 868.3733749999992,
+      "galleryMs": 868.9749999999985,
+      "requests": 59,
+      "bytes": 5403418,
+      "endpoints": {
+        "/rest/v1/app_memberships": 2,
+        "/rest/v1/rpc/crm_access_snapshot": 22,
+        "/rest/v1/rpc/fonciere_arbitrage_read": 4,
+        "/rest/v1/fonciere_projects": 2,
+        "/rest/v1/fonciere_assets": 2,
+        "/rest/v1/fonciere_project_contacts": 2,
+        "/api/fonciere/photo-preview": 24,
+        "/api/fonciere/drive": 1
+      },
+      "previewCache": {
+        "hit": 24
+      },
+      "provider": {
+        "googleRequests": 240,
+        "supabaseBytes": 0,
+        "driveBytes": 0,
+        "storageReads": 0
+      }
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "An editable saved presentation can add its own document after source export permission is absent",
+    "A different inaccessible source cannot be substituted",
+    "Pending transfer rebase keeps the same asset and durable operation identity",
+    "An explicitly withdrawn transfer cannot upload again"
+  ],
+  "realLocalAuthAndDatabase": true,
+  "googleRequests": 0
+}

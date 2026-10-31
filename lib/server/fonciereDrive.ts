@@ -228,6 +228,7 @@ export function safeDriveError(error: unknown) {
   return error instanceof FonciereDriveError ? error.code : error instanceof DriveRouteError ? "drive_configuration_unavailable" : "drive_temporary_failure";
 }
 export const DRIVE_ERROR_MESSAGES: Record<string, string> = {
+  drive_primary_not_verified: "L’original est conservé. Un administrateur doit vérifier sa copie Drive avant la bascule.",
   drive_rate_limited: "Google Drive limite temporairement le débit. La copie reprendra automatiquement avec temporisation.",
   drive_folder_creation_unconfirmed: "La création du dossier n’est pas encore confirmée. La copie reprendra automatiquement avec la même identité de dossier.",
   drive_not_configured: "La destination Google Drive doit être configurée par l’administrateur.",
@@ -241,6 +242,7 @@ export const DRIVE_ERROR_MESSAGES: Record<string, string> = {
   drive_temporary_failure: "La copie reprendra automatiquement après un incident temporaire."
 };
 export const DRIVE_ERROR_MESSAGES_EN: Record<string, string> = {
+  drive_primary_not_verified: "The original is retained. An administrator must verify its Drive copy before switching storage.",
   drive_rate_limited: "Google Drive is temporarily limiting requests. Copying will retry automatically after a delay.",
   drive_folder_creation_unconfirmed: "Folder creation is not yet confirmed. Copying will retry automatically with the same folder identity.",
   drive_not_configured: "An administrator must configure the Google Drive destination.",

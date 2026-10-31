@@ -1,0 +1,19 @@
+{
+  "simulatedGoogle": true,
+  "realLocalAuthDatabaseStorage": true,
+  "tests": [
+    "direct plan, document and photo have no Storage object",
+    "near-limit 25 MB upload, interrupted final response and replay preserve identity",
+    "quota errors preserve the durable transfer and never fall back to Storage",
+    "same name in two slots never merges files",
+    "foreign project and forged identities denied; no session capability exposed",
+    "legacy original finalization cannot forge Drive verification",
+    "Drive re-read uses pinned version and refuses moved resources or revoked rights",
+    "dependent presentation writes photos and retained PowerPoint directly to Drive and reopens historical bytes",
+    "text edit during deferred photos preserves references and gallery roles",
+    "Storage INSERT blocked for stale Project clients after activation"
+  ],
+  "createdDriveFiles": 10,
+  "storageObjectsBefore": 75,
+  "storageObjectsAfter": 75
+}

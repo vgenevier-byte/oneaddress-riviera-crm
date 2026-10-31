@@ -52,8 +52,8 @@ begin
  primary_mode:=app_private.crm_drive_mode();
  select status into folder_state from app_private.fonciere_drive_jobs where project_id=p_project and job_type='folder';
  select coalesce(jsonb_agg(jsonb_build_object('asset_id',a.id,'original_name',a.original_name,'category',a.drive_category,
- 'state',case when f.status='verified' and f.read_provider='drive' then 'synced' else coalesce(q.status,'pending') end,
- 'error',case when f.status='verified' and f.read_provider='drive' then null else q.error end) order by a.created_at,a.id),'[]') into file_rows
+ 'state',case when f.status='verified' and f.read_provider='drive' then 'synced' when primary_mode and a.storage_provider='supabase' then 'retry' else coalesce(q.status,'pending') end,
+ 'error',case when f.status='verified' and f.read_provider='drive' then null when primary_mode and a.storage_provider='supabase' then 'drive_primary_not_verified' else q.error end) order by a.created_at,a.id),'[]') into file_rows
  from public.fonciere_assets a left join app_private.crm_drive_files f on f.asset_id=a.id and f.domain='fonciere'
  left join app_private.fonciere_drive_jobs q on q.asset_id=a.id and q.storage_object_version=a.storage_object_version
  where a.id in(select app_private.fonciere_saved_assets(p_project));
@@ -92,6 +92,7 @@ begin
   return (select to_jsonb(x) from app_private.crm_drive_files x where operation_id=a.id);
  end if;
  if p_action='folders' then return jsonb_build_object('config',(select to_jsonb(c) from app_private.fonciere_drive_config c),'folders',(select jsonb_agg(to_jsonb(x)-'lease_token') from app_private.fonciere_drive_folders x where project_id=(p_data->>'source_project')::uuid));end if;
+ perform pg_advisory_xact_lock(hashtextextended(p_data->>'operation_id',54));
  select * into f from app_private.crm_drive_files where operation_id=(p_data->>'operation_id')::uuid for update;
  if not found then raise exception 'transfer_unknown';end if;
  if not f.legacy then
@@ -120,7 +121,11 @@ begin
   if f.domain='fonciere' then
    if not f.legacy then update public.fonciere_assets set lifecycle='finalized',storage_object_version=f.sha256,finalized_at=clock_timestamp() where id=f.asset_id;end if;
    update public.fonciere_assets set storage_provider='drive' where id=f.asset_id;
-  else update public.izord_assets set lifecycle='finalized',storage_object_version=f.sha256,finalized_at=clock_timestamp(),finalized_by=f.created_by,storage_provider='drive' where id=f.asset_id;end if;
+  else
+   update public.izord_assets set lifecycle='finalized',storage_object_version=f.sha256,finalized_at=clock_timestamp(),finalized_by=f.created_by,storage_provider='drive' where id=f.asset_id and lifecycle='pending';
+   if found then insert into public.izord_access_events(actor_id,action,subject_id) values(f.created_by,'finalize_document',f.asset_id);
+   elsif not exists(select 1 from public.izord_assets where id=f.asset_id and lifecycle='finalized') then raise exception 'asset_withdrawn' using errcode='42501';end if;
+  end if;
  elsif p_action='rollback' and f.legacy then
   update app_private.crm_drive_files set read_provider='supabase' where operation_id=f.operation_id returning * into f;
   update public.fonciere_assets set storage_provider='supabase' where id=f.asset_id;

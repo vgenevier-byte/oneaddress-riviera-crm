@@ -1,0 +1,95 @@
+{
+  "conditions": "Three 24-photo fictional records; identical local build, browser, Auth, database and JPEGs. Before: real local Storage; after: simulated Google API with real CRM admission and pinned immutable bytes. No production latency or real-Drive performance inference.",
+  "authorizedProjects": 12,
+  "simulatedGoogle": true,
+  "realProductionPerformance": false,
+  "rows": [
+    {
+      "kind": "click",
+      "before": {
+        "usableMs": 216,
+        "firstPhotoMs": 274,
+        "galleryMs": 545,
+        "requests": 55,
+        "bytes": 5400833,
+        "server": {
+          "googleRequests": 0,
+          "supabaseBytes": 27552851,
+          "driveBytes": 0,
+          "storageReads": 24
+        }
+      },
+      "after": {
+        "usableMs": 198,
+        "firstPhotoMs": 266,
+        "galleryMs": 511,
+        "requests": 55,
+        "bytes": 5400736,
+        "server": {
+          "googleRequests": 504,
+          "supabaseBytes": 0,
+          "driveBytes": 27552851,
+          "storageReads": 0
+        }
+      }
+    },
+    {
+      "kind": "direct",
+      "before": {
+        "usableMs": 836,
+        "firstPhotoMs": 872,
+        "galleryMs": 872,
+        "requests": 59,
+        "bytes": 5403513,
+        "server": {
+          "googleRequests": 0,
+          "supabaseBytes": 0,
+          "driveBytes": 0,
+          "storageReads": 0
+        }
+      },
+      "after": {
+        "usableMs": 834,
+        "firstPhotoMs": 868,
+        "galleryMs": 869,
+        "requests": 59,
+        "bytes": 5403416,
+        "server": {
+          "googleRequests": 240,
+          "supabaseBytes": 0,
+          "driveBytes": 0,
+          "storageReads": 0
+        }
+      }
+    },
+    {
+      "kind": "reopen",
+      "before": {
+        "usableMs": 247,
+        "firstPhotoMs": 258,
+        "galleryMs": 316,
+        "requests": 55,
+        "bytes": 5400809,
+        "server": {
+          "googleRequests": 0,
+          "supabaseBytes": 0,
+          "driveBytes": 0,
+          "storageReads": 0
+        }
+      },
+      "after": {
+        "usableMs": 228,
+        "firstPhotoMs": 238,
+        "galleryMs": 347,
+        "requests": 55,
+        "bytes": 5400711,
+        "server": {
+          "googleRequests": 240,
+          "supabaseBytes": 0,
+          "driveBytes": 0,
+          "storageReads": 0
+        }
+      }
+    }
+  ]
+}

@@ -1,6 +1,10 @@
-# Préparation de la bascule Drive — 31 octobre 2026
+# Migration du stockage principal Drive — 31 octobre 2026
 
-**Mission non terminée. Aucune bascule activée, aucun original supprimé, aucun déploiement effectué.** Les nouveaux fichiers suivent encore les parcours Supabase existants. Ce dossier contient l'inventaire en lecture seule et un outil préparatoire de vérification, pas la livraison de l'architecture demandée.
+**Déploiement et bascule en cours.** Le code complet des dépôts et lectures Drive est validé. L'activation reste désactivée jusqu'à publication du code compatible ; les reçus de transfert et le bilan final remplaceront cet état après vérification. Aucun original Supabase supprimé.
+
+Les mesures finales comparables sont dans `performance-summary.json`, avec les résultats détaillés avant/après. Les 125 tests métier, 42 tests audit/worker, 10 scénarios transport, 4 scénarios de droits/historique et 11 scénarios de navigation sont réussis. L'essai réel Google est distinct des simulations locales : voir `real-google-test.json`. L'ancien rapport préparatoire est conservé dans `preparation.md`.
+
+## Rapport préparatoire historique (ne décrit pas l'état final)
 
 ## Source et isolation
 
