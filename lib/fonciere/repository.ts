@@ -122,7 +122,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     // immutable asset binding under live CRM admission instead of trusting that projection.
     const current=await guarded(options.signal,()=>client.rpc('crm_drive_read',{p_domain:'fonciere',p_asset:asset.id,p_operation:'download'}));failure(current.error);
     if(!current.data||current.data.object_path!==asset.object_path||current.data.expected_size!==asset.expected_size||current.data.expected_mime!==asset.expected_mime)throw Error('Référence documentaire modifiée.');
-    if(current.data.drive)return downloadPrimaryAsset(client,'fonciere',asset.id,options,configuration.previewBaseUrl,configuration.accessToken);
+    if(current.data.storage_provider==='drive'){const blob=await downloadPrimaryAsset(client,'fonciere',asset.id,options,configuration.previewBaseUrl,configuration.accessToken);if(blob.size!==asset.expected_size||blob.type!==asset.expected_mime)throw Error('Original reçu incomplet.');return blob;}
     const admission = await guarded(options.signal, () => client.rpc("fonciere_asset_access", { p_asset: asset.id, p_operation: "download" })); failure(admission.error);
     if (!admission.data || admission.data.object_path !== asset.object_path) throw new Error("Identité documentaire non confirmée.");
     const result = await guarded(options.signal, () => store.download(asset.object_path)); failure(result.error);
@@ -170,14 +170,14 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{while(queue.length){aborted(options.signal);const ref=queue.shift()!;try{const asset=loaded.assets.find(a=>a.id===ref&&a.project_id===id&&a.kind==='photo');if(!asset)throw Error('Missing photo');const value=await blobData(await previewPhoto(asset,options),options);aborted(options.signal);previews[ref]=value;options.onPhoto?.(ref,value);}catch(error){aborted(options.signal);errors.push(ref);}}}));
     return {loadId:loaded.media?.loadId,status:errors.length?'failed':'complete',previews,errors};
   }
-  async function uploadAsset(project: FonciereProjectRecord, file: Blob, kind: FonciereAssetRecord["kind"], name: string, options: OperationOptions, category: FonciereDocumentCategory = kind === "photo" ? "photos" : kind === "pdf" ? "agency" : "other", slot = name): Promise<FonciereAssetRecord> {
+  async function uploadAsset(project: FonciereProjectRecord, file: Blob, kind: FonciereAssetRecord["kind"], name: string, options: OperationOptions, category: FonciereDocumentCategory = kind === "photo" ? "photos" : kind === "pdf" ? "agency" : "other", slot = name,attempt?:string): Promise<FonciereAssetRecord> {
     if (kind === "attachment" && file.type === "image/webp") {
       const header = new TextDecoder().decode(await guarded(options.signal, () => file.slice(0, 12).arrayBuffer()));
       if (file.size <= 0 || file.size > LIMITS.fileBytes || header.slice(0, 4) !== "RIFF" || header.slice(8, 12) !== "WEBP") throw new Error("Le contenu du fichier WebP est invalide.");
     } else await guarded(options.signal, () => validateUploadBlob(file, kind === "attachment" ? "photo" : kind));
     const safeName = name.replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 180) || "document";
     if(await drivePrimaryEnabled(client)){
-      const id=await uploadPrimaryAsset(client,{domain:'fonciere',project:project.id,source:project.id,revision:project.revision,kind,file,name:safeName,category,slot,baseUrl:configuration.previewBaseUrl,accessToken:configuration.accessToken},options);
+      const id=await uploadPrimaryAsset(client,{domain:'fonciere',project:project.id,source:project.id,revision:project.revision,kind,file,name:safeName,category,slot,attempt,baseUrl:configuration.previewBaseUrl,accessToken:configuration.accessToken},options);
       const asset=(await listAssets(project.id,options)).find(a=>a.id===id);if(!asset)throw Error('Conservation Drive non confirmée.');return asset;
     }
     const registered = await guarded(options.signal, () => client.rpc("fonciere_register_asset", { p_project: project.id, p_revision: project.revision, p_kind: kind, p_size: file.size, p_mime: file.type, p_name: safeName, p_category: category })); failure(registered.error);
@@ -251,13 +251,13 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
         if (!before) input.onCreated?.(await loadProject(project.id, options));
       }
       if (!project) throw new Error("Identité du projet non confirmée. Votre brouillon est conservé.");
-      const target = project, uploaded = new Map<string, string>();
+      const target = project, uploaded = new Map<string, string>(),transferAttempt=input.creationKey||`${project.id}:${project.revision}`;
       async function persistPhoto(value: string, fallback: string, name: string, previousValue?: string, previousReference?: string) {
         // Slot identity preserves distinct originals even when previews have equal bytes.
         if (previousReference !== undefined && value === previousValue) return previousReference;
         if (value === fallback) return "";
         if (reuse.has(value)) return reuse.get(value)!;
-        if (!uploaded.has(value)) uploaded.set(value, (await uploadAsset(target, photoDataToBlob(value), "photo", name, options)).id);
+        if (!uploaded.has(value)) uploaded.set(value, (await uploadAsset(target, photoDataToBlob(value), "photo", name, options,undefined,name,transferAttempt)).id);
         return uploaded.get(value)!;
       }
       if(partialMedia&&old){persisted.presentationData.photos=structuredClone(old.data.presentationData.photos);persisted.presentationData.importGallery=structuredClone(old.data.presentationData.importGallery);persisted.presentationData.photoGalleryRoles=structuredClone(old.data.presentationData.photoGalleryRoles);}
@@ -272,7 +272,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       }
       const sourceDocuments = [...(before?.sourceDocuments || [])];
       if (sourceDocuments.length + (input.sourceFiles?.length || 0) > FONCIERE_DOCUMENT_LIMIT) throw new Error("Trente documents sources maximum par projet.");
-      for (const [index, file] of (input.sourceFiles || []).entries()) sourceDocuments.push((await uploadAsset(target, file, file.type === "application/pdf" ? "pdf" : "attachment", file.name, options, input.sourceFileCategories?.[index] ?? (file.type.startsWith("image/") ? "photos" : file.type === "application/pdf" ? "agency" : "other"),`source:${sourceDocuments.length}:${index}`)).id);
+      for (const [index, file] of (input.sourceFiles || []).entries()) {const asset=await uploadAsset(target, file, file.type === "application/pdf" ? "pdf" : "attachment", file.name, options, input.sourceFileCategories?.[index] ?? (file.type.startsWith("image/") ? "photos" : file.type === "application/pdf" ? "agency" : "other"),`source:${index}`,transferAttempt);if(!sourceDocuments.includes(asset.id))sourceDocuments.push(asset.id);}
       const value: StoredFoncierePayload = { schema: FONCIERE_SCHEMA, data: persisted, sourceDocuments, ...(old?.creationRequestHash || requestHash ? { creationRequestHash: old?.creationRequestHash || requestHash } : {}), ...(project.payload.creationIntentHash ? { creationIntentHash: project.payload.creationIntentHash } : {}) };
       if (new TextEncoder().encode(JSON.stringify(value)).length > 950000) throw new Error("Métadonnées du projet trop volumineuses. Votre saisie est conservée.");
       options.onProgress?.({ stage: "save", completed: 0, total: 1, label: "Enregistrement du projet" });

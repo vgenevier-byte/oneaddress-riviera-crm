@@ -3,7 +3,7 @@ import type {OperationOptions} from './izord/repository';
 const CHUNK=1024*1024;
 export async function drivePrimaryEnabled(client:SupabaseClient){const r=await client.rpc('crm_drive_mode');if(r.error)throw Error('Configuration du stockage non confirmée. Votre brouillon est conservé.');return r.data===true;}
 async function digest(bytes:BufferSource){return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).map(b=>b.toString(16).padStart(2,'0')).join('');}
-export async function uploadPrimaryAsset(client:SupabaseClient,input:{domain:'fonciere'|'izord';project:string;source:string;revision:number;kind:string;file:Blob;name:string;category:string;slot:string;baseUrl?:string;accessToken?:string},options:OperationOptions){
+export async function uploadPrimaryAsset(client:SupabaseClient,input:{domain:'fonciere'|'izord';project:string;source:string;revision:number;kind:string;file:Blob;name:string;category:string;slot:string;baseUrl?:string;accessToken?:string;attempt?:string},options:OperationOptions){
  const session=input.accessToken?null:(await client.auth.getSession()).data.session,token=input.accessToken||session?.access_token;if(!token)throw Error('Connexion requise.');
  // JWT subject is only a deterministic draft namespace here, never authorization.
  // The server verifies the full JWT and current resource rights independently.
@@ -11,7 +11,7 @@ export async function uploadPrimaryAsset(client:SupabaseClient,input:{domain:'fo
 
  const sha256=await digest(await input.file.arrayBuffer());
  // Identity survives draft reloads. Homonymous files in distinct slots differ.
- const seed=await digest(new TextEncoder().encode(JSON.stringify([actor,input.domain,input.project,input.revision,input.kind,input.slot,input.name,input.category,sha256])));
+ const seed=await digest(new TextEncoder().encode(JSON.stringify([actor,input.domain,input.project,input.attempt||input.revision,input.kind,input.slot,input.name,input.category,sha256])));
  const operation=`${seed.slice(0,8)}-${seed.slice(8,12)}-4${seed.slice(13,16)}-a${seed.slice(17,20)}-${seed.slice(20,32)}`;
  const url=(input.baseUrl||'')+'/api/drive-primary/upload',authorization='Bearer '+token;
  async function checked(response:Response){if(response.status===429)throw Error('Google Drive limite temporairement les transferts. Vos fichiers restent en attente ; reprenez plus tard.');if(response.status===507)throw Error('La capacité Google Drive est atteinte. Vos fichiers restent en attente ; contactez l’administrateur.');if(!response.ok)throw Error('Transfert Drive non confirmé. Votre brouillon et vos fichiers sont conservés ; réessayez pour reprendre.');const result=await response.json();if(!result||!Number.isSafeInteger(result.received)||result.received<0||result.received>input.file.size||typeof result.complete!=='boolean'||!/^[a-f0-9-]{36}$/.test(result.assetId))throw Error('Confirmation de transfert invalide.');return result as {assetId:string;received:number;complete:boolean};}

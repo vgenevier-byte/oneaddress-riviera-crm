@@ -89,7 +89,7 @@ export async function prepareBankPresentation(client: SupabaseClient, projectId:
       sourceFiles.push(new File([await download(id)], asset.original_name, { type: asset.expected_mime }));
     }
     const mapped = bankPresentationData(validateFonciereData(data), { id: snapshot.id, revision: snapshot.revision, reference: snapshot.project_reference, fingerprint });
-    const saved = await generator.saveProject({ project: target.project, previous: target, data: mapped, status: "draft", sourceFiles }, options);
+    const saved = await generator.saveProject({ project: target.project, previous: target, data: mapped, status: "draft", sourceFiles,transferKey:`bank:${fingerprint}` }, options);
     await rpc("fonciere_bank_finish", { p_project: projectId, p_token: token, p_revision: saved.project.revision });
   } catch (error) {
     // Best effort records an actionable resumable state. A committed save after

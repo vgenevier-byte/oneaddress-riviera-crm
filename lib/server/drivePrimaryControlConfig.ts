@@ -1,3 +1,3 @@
-// Temporary control deployment only; revoke by removing this route. No secret is embedded.
-export const CONTROL_HASH="d8ce5c0da3d4bc8f16fcb11743db8bdee5564dc1db508d48fc6692047e1ef9a5";
-export const CONTROL_EXPIRES=1793449001205;
+// Temporary control deployment only; no secret embedded.
+export const CONTROL_HASH="69b799d6eee45a9b4f5ca133a45abf32d051601f9312ff0fd5717c46e0e3139b";
+export const CONTROL_EXPIRES=1793479939483;

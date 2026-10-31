@@ -148,7 +148,7 @@ export default function IzordGenerator({role,canExport=true,canReadProjects=fals
       if(!current(operation.id))return null;
       // Retain the created identity if a later upload fails; retry never creates a duplicate project.
       if(!loaded)setLoaded({project,data:snapshot,assets:[],sourceDocuments:[],photoHydration:"complete",historicalRevision:null});
-      const value=await repository.saveProject({project,data:snapshot,previous:loaded??undefined,status:workflow,sourceFiles,replaceSourceDocuments},{signal:operation.signal,onProgress:p=>{if(current(operation.id))setNotice(p.stage==="save"?"Enregistrement en cours…":`Transfert ${p.label} · ${Math.round(100*p.completed/Math.max(p.total,1))} %`);}});
+      const value=await repository.saveProject({project,data:snapshot,previous:loaded??undefined,status:workflow,sourceFiles,replaceSourceDocuments,transferKey:draftId},{signal:operation.signal,onProgress:p=>{if(current(operation.id))setNotice(p.stage==="save"?"Enregistrement en cours…":`Transfert ${p.label} · ${Math.round(100*p.completed/Math.max(p.total,1))} %`);}});
       if(!current(operation.id))return null;
       setLoaded(value);setData(value.data);setDirty(false);setSourceFiles([]);setReplaceSourceDocuments(false);setConflict(false);setRemote(null);setNotice("Enregistré · révision "+value.project.revision);
       const [list,history]=await Promise.all([repository.listProjects({signal:operation.signal}),repository.listVersions(project.id,{signal:operation.signal})]);

@@ -1,4 +1,4 @@
-import {readPrimaryOriginal,validatePrimaryRead,type DriveAdmission} from './drivePrimary';
+import {readPrimaryOriginal,validatePrimaryRead,primaryAdmission,type DriveAdmission} from './drivePrimary';
 import type {FonciereDriveFetch} from './fonciereDrive';
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
@@ -28,7 +28,7 @@ export function createFoncierePhotoPreviewHandler(dependencies: { fetchDrive?:Fo
         if (error) throw new PreviewError(error.code === "42501" ? 403 : 503);
         const row = data as PhotoAdmission;
         if (!row || row.id !== id || !UUID.test(row.project_id) || row.object_path !== `${row.project_id}/${id}` || row.kind !== "photo" || !Number.isInteger(row.expected_size) || row.expected_size < 1 || row.expected_size > 25 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(row.expected_mime) || !row.storage_object_version || row.permission_revision == null) throw new PreviewError(403);
-        return row;
+        return await primaryAdmission(row,'fonciere') as PhotoAdmission;
       }
       const metadata = await authorize();
       if(metadata.drive)await validatePrimaryRead(metadata,dependencies.fetchDrive);

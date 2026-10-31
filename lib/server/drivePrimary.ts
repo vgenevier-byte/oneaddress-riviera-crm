@@ -3,7 +3,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {createClient} from '@supabase/supabase-js';
 import sharp from 'sharp';
 import {createGoogleDriveFetch,requireServerEnv} from '../../app/api/drive/_utils';
-import {validateProjetsRoot,reserveDriveId,processFonciereDriveJobs,type FonciereDriveFetch} from './fonciereDrive';
+import {validateProjetsRoot,reserveDriveId,processFonciereDriveJobs,FonciereDriveError,type FonciereDriveFetch} from './fonciereDrive';
 import {createFonciereDriveStore,createFonciereDriveUserClient} from './fonciereDriveSupabase';
 import {validateUploadBlob} from '../izord/repository';
 
@@ -29,9 +29,15 @@ async function assertGoogle(response:Response){
  throw new PrimaryError();
 }
 export type DriveFile={operation_id:string;domain:'fonciere'|'izord';asset_id:string;project_id:string;source_project:string;created_by:string;expected_size:number;expected_mime:string;original_name:string;category:string;sha256:string;md5:string|null;source_version:string|null;file_id:string|null;folder_id:string|null;drive_id:string|null;revision_id:string|null;session_uri:string|null;received:number;status:'pending'|'verified';legacy:boolean};
-export type DriveAdmission={id:string;project_id:string;object_path:string;expected_size:number;expected_mime:string;drive?:{file_id:string;revision_id:string;drive_id:string;folder_id:string;source_project:string;sha256:string;md5:string;category:string;legacy:boolean;source_version:string}};
+export type DriveAdmission={storage_provider?:'supabase'|'drive';id:string;project_id:string;object_path:string;expected_size:number;expected_mime:string;drive?:{file_id:string;revision_id:string;drive_id:string;folder_id:string;source_project:string;sha256:string;md5:string;category:string;legacy:boolean;source_version:string}};
 export function primaryService(){const origin=requireServerEnv('NEXT_PUBLIC_SUPABASE_URL');const local=['http://127.0.0.1:56031','http://127.0.0.1:57031'].includes(origin)&&process.env.PREPAID_HOURS_TEST_ACK==='PREPAID_HOURS_LOCAL_ONLY';return createClient(origin,requireServerEnv(local?'LOCAL_AUTH_INVITE_KEY':'CRM_INVITE_AUTH_KEY'),{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(input,init)=>fetch(input,{...init,cache:'no-store'})}});}
 export async function primaryCall<T=DriveFile>(action:string,data:Record<string,unknown>={}):Promise<T>{const r=await primaryService().rpc('crm_drive_worker',{p_action:action,p_data:data}).abortSignal(AbortSignal.timeout(15000));if(r.error)throw new PrimaryError(r.error.code==='42501'?403:r.error.code==='40001'?409:503);return r.data as T;}
+/** Google identities remain behind the service boundary; user RPCs return admission only. */
+export async function primaryAdmission(row:DriveAdmission,domain:'fonciere'|'izord'):Promise<DriveAdmission>{
+ if(row.storage_provider!=='drive')return {...row,drive:undefined};
+ const drive=await primaryCall<NonNullable<DriveAdmission['drive']>>('read_binding',{domain,asset_id:row.id});
+ if(!drive?.file_id||!drive.revision_id)throw new PrimaryError(403);return {...row,drive};
+}
 export async function driveMetadata(fetchDrive:FonciereDriveFetch,id:string){const r=await fetchDrive(`${API}/${encodeURIComponent(id)}?supportsAllDrives=true&fields=${fields}`,{cache:'no-store',signal:AbortSignal.timeout(15000)});if(r.status===404)return null;await assertGoogle(r);return r.json();}
 function sessionUrl(uri:string){const u=new URL(uri);if(u.protocol!=='https:'||u.hostname!=='www.googleapis.com'||!u.pathname.startsWith('/upload/drive/'))throw new PrimaryError();return uri;}
 function identity(f:DriveFile){return {managedBy:'oar-fonciere',projectId:f.project_id,assetId:f.asset_id,storageVersion:f.legacy?f.source_version!:f.sha256};}
@@ -103,7 +109,13 @@ export function createPrimaryUploadHandler(deps:{fetchDrive?:FonciereDriveFetch}
   lease=randomUUID();f=await primaryCall('claim',{operation_id:operation,actor,lease});
   const fetchDrive=deps.fetchDrive||primaryGoogleFetch();
   const state=async(data:Record<string,unknown>)=>{f=await primaryCall('state',{operation_id:operation,actor,lease,...data});};
-  if(f.status==='verified')return Response.json({assetId:f.asset_id,received:f.expected_size,complete:true},{headers});
+  if(f.status==='verified'){
+   assertIdentity(await driveMetadata(fetchDrive,f.file_id!),f);
+   const checked=await fetchDrive(`${API}/${encodeURIComponent(f.file_id!)}/revisions/${encodeURIComponent(f.revision_id!)}?fields=id,keepForever,md5Checksum,size,mimeType`,{cache:'no-store',signal:AbortSignal.timeout(15000)});await assertGoogle(checked);const proof=await checked.json();
+   if(proof.id!==f.revision_id||proof.keepForever!==true||proof.md5Checksum!==f.md5||Number(proof.size)!==f.expected_size||proof.mimeType!==f.expected_mime)throw new PrimaryError(409);
+   await resolvePrimaryDestination(f,fetchDrive,false);await primaryCall('state',{operation_id:operation,actor,lease});
+   return Response.json({assetId:f.asset_id,received:f.expected_size,complete:true},{headers});
+  }
   const dest=await resolvePrimaryDestination(f,fetchDrive);
   if(f.folder_id&&f.folder_id!==dest.folder_id)throw new PrimaryError(409);
   await state({...dest,file_id:f.file_id||await reserveDriveId(fetchDrive)});
@@ -124,12 +136,12 @@ export function createPrimaryUploadHandler(deps:{fetchDrive?:FonciereDriveFetch}
   }
   if(meta){const proof=await verifyPrimaryFile(f,fetchDrive);f=await primaryCall('complete',{operation_id:operation,actor,lease,...proof});}
   return Response.json({assetId:f.asset_id,received:f.received,complete:f.status==='verified'},{headers});
- }catch(error){return Response.json({error:'Transfert Drive non confirmé. Conservez les fichiers et le brouillon, puis réessayez.'},{status:error instanceof PrimaryError?error.status:503,headers});}
+ }catch(error){return Response.json({error:'Transfert Drive non confirmé. Conservez les fichiers et le brouillon, puis réessayez.'},{status:error instanceof PrimaryError?error.status:error instanceof FonciereDriveError&&error.code==='drive_rate_limited'?429:503,headers});}
  finally{if(f&&lease)await primaryCall('release',{operation_id:f.operation_id,actor,lease}).catch(()=>{});}
 };}
 export function createPrimaryDownloadHandler(deps:{fetchDrive?:FonciereDriveFetch}={}){return async(request:Request)=>{try{const user=createFonciereDriveUserClient(request.headers.get('authorization')),u=new URL(request.url),domain=u.searchParams.get('domain'),asset=u.searchParams.get('asset');if(!['fonciere','izord'].includes(domain||'')||!asset)throw new PrimaryError(400);
- const authorize=async()=>{const r=await user.rpc('crm_drive_read',{p_domain:domain,p_asset:asset,p_operation:'download'});if(r.error||!r.data)throw new PrimaryError(403);return r.data as DriveAdmission;};
+ const authorize=async()=>{const r=await user.rpc('crm_drive_read',{p_domain:domain,p_asset:asset,p_operation:'download'});if(r.error||!r.data)throw new PrimaryError(403);return primaryAdmission(r.data as DriveAdmission,domain as 'fonciere'|'izord');};
  const a=await authorize();let blob:Blob;if(a.drive)blob=await readPrimaryOriginal(a,deps.fetchDrive);else{const r=await primaryService().storage.from(domain==='fonciere'?'fonciere-documents':'izord-documents').download(a.object_path);if(r.error||!r.data)throw new PrimaryError();blob=r.data;}
  if(JSON.stringify(await authorize())!==JSON.stringify(a))throw new PrimaryError(403);
  const bytes=new Uint8Array(await blob.arrayBuffer());let offset=0;return new Response(new ReadableStream({pull(controller){if(offset===bytes.length){controller.close();return;}const end=Math.min(offset+262144,bytes.length);controller.enqueue(bytes.slice(offset,end));offset=end;}}),{headers:{...headers,'content-type':a.expected_mime,'content-disposition':'attachment; filename="document"'}});
- }catch(error){return Response.json({error:'Document inaccessible.'},{status:error instanceof PrimaryError?error.status:503,headers});}};}
+ }catch(error){return Response.json({error:'Document inaccessible.'},{status:error instanceof PrimaryError?error.status:error instanceof FonciereDriveError&&error.code==='drive_rate_limited'?429:503,headers});}};}
