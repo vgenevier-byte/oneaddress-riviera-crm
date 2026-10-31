@@ -13,7 +13,7 @@ create table app_private.crm_drive_files(
  session_uri text,received bigint not null default 0,lease uuid,lease_until timestamptz,
  status text not null default 'pending' check(status in ('pending','verified')),
  read_provider text not null default 'supabase' check(read_provider in ('supabase','drive')),
- legacy boolean not null default false,verified_at timestamptz,created_at timestamptz not null default clock_timestamp()
+ legacy boolean not null default false,attempts integer not null default 0,last_error text,verified_at timestamptz,created_at timestamptz not null default clock_timestamp()
 );
 alter table app_private.crm_drive_primary_config enable row level security;
 alter table app_private.crm_drive_files enable row level security;
@@ -100,7 +100,7 @@ begin
  if p_action='migration_list' then
   return (select coalesce(jsonb_agg(to_jsonb(a)||jsonb_build_object('copy_id',j.drive_file_id,'reserved_id',j.reserved_file_id,'binding',to_jsonb(f))),'[]') from public.fonciere_assets a
    left join app_private.fonciere_drive_jobs j on j.asset_id=a.id and j.storage_object_version=a.storage_object_version
-   left join app_private.crm_drive_files f on f.asset_id=a.id where a.lifecycle='finalized' and a.storage_provider='supabase');
+   left join app_private.crm_drive_files f on f.asset_id=a.id where a.lifecycle='finalized' and a.storage_provider='supabase' and coalesce(f.attempts,0)<3);
  end if;
  if p_action='migration_reserve' then
   select * into a from public.fonciere_assets where id=(p_data->>'asset_id')::uuid for update;
@@ -121,12 +121,13 @@ begin
  end if;
  if p_action='claim' then
   if f.lease is not null and f.lease_until>clock_timestamp() then raise exception 'transfer_busy' using errcode='40001';end if;
-  update app_private.crm_drive_files set lease=(p_data->>'lease')::uuid,lease_until=clock_timestamp()+interval '2 minutes' where operation_id=f.operation_id returning * into f;
+  update app_private.crm_drive_files set attempts=attempts+case when legacy then 1 else 0 end,lease=(p_data->>'lease')::uuid,lease_until=clock_timestamp()+interval '2 minutes' where operation_id=f.operation_id returning * into f;
  elsif f.lease is distinct from (p_data->>'lease')::uuid or f.lease_until<clock_timestamp() then raise exception 'lease_lost' using errcode='40001';
  elsif p_action='state' then
   update app_private.crm_drive_files set file_id=coalesce(file_id,p_data->>'file_id'),drive_id=coalesce(drive_id,p_data->>'drive_id'),folder_id=coalesce(folder_id,p_data->>'folder_id'),
    session_uri=case when p_data ? 'session_uri' then p_data->>'session_uri' else session_uri end,
    received=coalesce((p_data->>'received')::bigint,received) where operation_id=f.operation_id returning * into f;
+ elsif p_action='fail' then update app_private.crm_drive_files set last_error='verification_not_confirmed' where operation_id=f.operation_id returning * into f;
  elsif p_action='release' then update app_private.crm_drive_files set lease=null,lease_until=null where operation_id=f.operation_id returning * into f;
  elsif p_action='complete' then
   if f.legacy then
@@ -160,11 +161,12 @@ begin
   select to_jsonb(a) into result from public.fonciere_assets a where id=p_asset;
  elsif p_domain='izord' and p_operation='download' then
   select object_path into path from public.izord_assets where id=p_asset and lifecycle='finalized';
-  if path is null or not app_private.can_asset(path) or not app_private.module_allowed('izord',false,'export') then raise exception 'forbidden' using errcode='42501';end if;
+  if path is null or not app_private.can_asset(path) or (exists(select 1 from public.izord_assets where id=p_asset and kind='presentation') and not app_private.module_allowed('izord',false,'export')) then raise exception 'forbidden' using errcode='42501';end if;
   select to_jsonb(a) into result from public.izord_assets a where id=p_asset;
  else raise exception 'invalid_read' using errcode='22023';end if;
  if p_operation not in ('download','photo_preview') then raise exception 'invalid_read';end if;
  select * into f from app_private.crm_drive_files where domain=p_domain and asset_id=p_asset and status='verified' and read_provider='drive';
+ if result->>'storage_provider'='drive' and not found then raise exception 'drive_binding_unverified' using errcode='42501';end if;
  return result||jsonb_build_object('permission_revision',(select revision from public.crm_access_profiles where user_id=auth.uid() and active),
  'drive',case when found then jsonb_build_object('file_id',f.file_id,'revision_id',f.revision_id,'drive_id',f.drive_id,'folder_id',f.folder_id,'source_project',f.source_project,'sha256',f.sha256,'md5',f.md5,'category',f.category,'legacy',f.legacy,'source_version',f.source_version) else null end);
 end $$;
@@ -184,4 +186,6 @@ end $$;
 -- Block stale clients from persisting new Project objects after activation.
 create policy fonciere_drive_primary_no_storage on storage.objects as restrictive for insert to authenticated
 with check(bucket_id<>'fonciere-documents' or not app_private.crm_drive_mode());
+create policy fonciere_drive_source_reads on storage.objects as restrictive for select to authenticated
+using(bucket_id<>'fonciere-documents' or not exists(select 1 from public.fonciere_assets a where a.object_path=name and a.storage_provider='drive'));
 commit;
