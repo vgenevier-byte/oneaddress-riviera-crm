@@ -18,7 +18,7 @@ export default function UnifiedNavigation({ access, active, accountId, navigatio
  if (destination.active !== active || destination.accountId !== accountId || destination.navigationRevision !== navigationRevision) {
   setDestination({ active, accountId, navigationRevision });
   setOpenedGroup(groupForModule(active));
-  if (destination.accountId !== accountId) setMore(false);
+  if (destination.accountId !== accountId || active === "fonciere" && destination.navigationRevision !== navigationRevision) setMore(false);
  }
  const moreButton = useRef<HTMLButtonElement>(null);
  const morePanel = useRef<HTMLElement>(null);
