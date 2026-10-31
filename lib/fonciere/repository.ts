@@ -122,7 +122,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     // immutable asset binding under live CRM admission instead of trusting that projection.
     const current=await guarded(options.signal,()=>client.rpc('crm_drive_read',{p_domain:'fonciere',p_asset:asset.id,p_operation:'download'}));failure(current.error);
     if(!current.data||current.data.object_path!==asset.object_path||current.data.expected_size!==asset.expected_size||current.data.expected_mime!==asset.expected_mime)throw Error('Référence documentaire modifiée.');
-    if(current.data.drive)return downloadPrimaryAsset(client,'fonciere',asset.id,options,configuration.previewBaseUrl);
+    if(current.data.drive)return downloadPrimaryAsset(client,'fonciere',asset.id,options,configuration.previewBaseUrl,configuration.accessToken);
     const admission = await guarded(options.signal, () => client.rpc("fonciere_asset_access", { p_asset: asset.id, p_operation: "download" })); failure(admission.error);
     if (!admission.data || admission.data.object_path !== asset.object_path) throw new Error("Identité documentaire non confirmée.");
     const result = await guarded(options.signal, () => store.download(asset.object_path)); failure(result.error);
@@ -177,7 +177,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     } else await guarded(options.signal, () => validateUploadBlob(file, kind === "attachment" ? "photo" : kind));
     const safeName = name.replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 180) || "document";
     if(await drivePrimaryEnabled(client)){
-      const id=await uploadPrimaryAsset(client,{domain:'fonciere',project:project.id,source:project.id,revision:project.revision,kind,file,name:safeName,category,slot,baseUrl:configuration.previewBaseUrl},options);
+      const id=await uploadPrimaryAsset(client,{domain:'fonciere',project:project.id,source:project.id,revision:project.revision,kind,file,name:safeName,category,slot,baseUrl:configuration.previewBaseUrl,accessToken:configuration.accessToken},options);
       const asset=(await listAssets(project.id,options)).find(a=>a.id===id);if(!asset)throw Error('Conservation Drive non confirmée.');return asset;
     }
     const registered = await guarded(options.signal, () => client.rpc("fonciere_register_asset", { p_project: project.id, p_revision: project.revision, p_kind: kind, p_size: file.size, p_mime: file.type, p_name: safeName, p_category: category })); failure(registered.error);

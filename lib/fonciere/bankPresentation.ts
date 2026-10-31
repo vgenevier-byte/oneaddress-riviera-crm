@@ -36,7 +36,7 @@ export function bankPresentationData(data: FonciereData, source: { id: string; r
 
 /** Persistent reservation + ordinary source/target ACLs. Retrying always finds
  * the principal presentation; an edited target is never overwritten here. */
-export async function prepareBankPresentation(client: SupabaseClient, projectId: string, options: OperationOptions = {}): Promise<void> {
+export async function prepareBankPresentation(client: SupabaseClient, projectId: string, options: OperationOptions & {accessToken?:string} = {}): Promise<void> {
   async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
     options.signal?.throwIfAborted();
     let request = client.rpc(name, args);
@@ -52,7 +52,7 @@ export async function prepareBankPresentation(client: SupabaseClient, projectId:
   const { snapshot, assets, token, fingerprint, presentationId } = reservation;
   if (!snapshot || !assets || !token || !fingerprint || !presentationId) throw new Error("La préparation est en cours. Vérifiez son état avant de reprendre.");
   try {
-    const generator = createGeneratorRepository(client);
+    const generator = createGeneratorRepository(client,{accessToken:options.accessToken});
     const target = await generator.loadProject(presentationId, options);
     if (target.project.revision !== reservation.revision) {
       // A response may have been lost after a successful ordinary save. The
@@ -65,7 +65,7 @@ export async function prepareBankPresentation(client: SupabaseClient, projectId:
     const declared = references.map(id => ({ id, bytes: assets.find(asset => asset.id === id)?.expected_size || 0 }));
     assertImageByteBudget(declared);
     assertEncodedImageBudget(declared.map(asset => encodedJpegLength(asset.bytes)));
-    const source = createFonciereRepository(client), downloaded = new Map<string, Blob>();
+    const source = createFonciereRepository(client,{accessToken:options.accessToken}), downloaded = new Map<string, Blob>();
     async function download(id: string) {
       options.signal?.throwIfAborted();
       const asset = assets!.find(item => item.id === id && item.project_id === projectId && item.lifecycle === "finalized");

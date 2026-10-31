@@ -1,4 +1,5 @@
 import {readPrimaryOriginal,validatePrimaryRead,type DriveAdmission} from './drivePrimary';
+import type {FonciereDriveFetch} from './fonciereDrive';
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import sharp from "sharp";
@@ -12,7 +13,7 @@ const clientOptions = { auth: { persistSession: false, autoRefreshToken: false, 
 
 /** The browser receives only a bounded derivative, never a Storage URL or original.
  * Live resource/session admission is repeated after rendering, including revocation. */
-export function createFoncierePhotoPreviewHandler(dependencies: { readOriginal?: (origin: string, path: string) => Promise<Blob> } = {}) {
+export function createFoncierePhotoPreviewHandler(dependencies: { fetchDrive?:FonciereDriveFetch; readOriginal?: (origin: string, path: string) => Promise<Blob> } = {}) {
   // Private bounded process memory, never a public/CDN cache. Every hit is admitted twice.
   const cache=new Map<string,{bytes:Buffer;at:number}>(),pending=new Map<string,Promise<Buffer>>();let cacheBytes=0;
   return async function GET(request: Request) {
@@ -30,19 +31,19 @@ export function createFoncierePhotoPreviewHandler(dependencies: { readOriginal?:
         return row;
       }
       const metadata = await authorize();
-      if(metadata.drive)await validatePrimaryRead(metadata);
+      if(metadata.drive)await validatePrimaryRead(metadata,dependencies.fetchDrive);
       const key=createHash('sha256').update(JSON.stringify([origin,metadata.id,metadata.storage_object_version,metadata.expected_size,metadata.expected_mime,metadata.drive?.revision_id,metadata.drive?.sha256,'preview-1024-q70-v1'])).digest('hex');
       const etag='"'+key+'"',notModified=request.headers.get('if-none-match')===etag;
       let bytes:Buffer|undefined,cacheState='not-modified';
       if(!notModified){
         const entry=cache.get(key);if(entry&&Date.now()-entry.at<600_000){bytes=entry.bytes;cacheState='hit';}
         else {cacheState='miss';if(entry){cacheBytes-=entry.bytes.length;cache.delete(key);}let work=pending.get(key);
-          if(!work){work=(async()=>{const original=await (metadata.drive?readPrimaryOriginal(metadata):(dependencies.readOriginal||readOriginal)(origin,metadata.object_path));if(original.size!==metadata.expected_size||original.type!==metadata.expected_mime)throw new PreviewError(503);const rendered=await sharp(Buffer.from(await original.arrayBuffer()),{limitInputPixels:40_000_000,animated:false}).rotate().resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:70}).toBuffer();cache.set(key,{bytes:rendered,at:Date.now()});cacheBytes+=rendered.length;while(cacheBytes>32_000_000||cache.size>96){const oldest=cache.keys().next().value!;cacheBytes-=cache.get(oldest)!.bytes.length;cache.delete(oldest);}return rendered;})().finally(()=>pending.delete(key));pending.set(key,work);}
+          if(!work){work=(async()=>{const original=await (metadata.drive?readPrimaryOriginal(metadata,dependencies.fetchDrive):(dependencies.readOriginal||readOriginal)(origin,metadata.object_path));if(original.size!==metadata.expected_size||original.type!==metadata.expected_mime)throw new PreviewError(503);const rendered=await sharp(Buffer.from(await original.arrayBuffer()),{limitInputPixels:40_000_000,animated:false}).rotate().resize({width:1024,height:1024,fit:'inside',withoutEnlargement:true}).flatten({background:'#ffffff'}).jpeg({quality:70}).toBuffer();cache.set(key,{bytes:rendered,at:Date.now()});cacheBytes+=rendered.length;while(cacheBytes>32_000_000||cache.size>96){const oldest=cache.keys().next().value!;cacheBytes-=cache.get(oldest)!.bytes.length;cache.delete(oldest);}return rendered;})().finally(()=>pending.delete(key));pending.set(key,work);}
           bytes=await work;
         }
       }
       const confirmed = await authorize();
-      if(confirmed.drive)await validatePrimaryRead(confirmed);
+      if(confirmed.drive)await validatePrimaryRead(confirmed,dependencies.fetchDrive);
       if (JSON.stringify(confirmed) !== JSON.stringify(metadata)) throw new PreviewError(403);
       request.signal.throwIfAborted();
       return new Response(notModified?null:new Uint8Array(bytes!), {status:notModified?304:200, headers: { "content-type": "image/jpeg", "cache-control": "private, no-store", "content-disposition": "inline; filename=photo-preview.jpg", "x-content-type-options": "nosniff", "referrer-policy": "no-referrer",etag,"x-preview-cache":cacheState } });
@@ -52,7 +53,7 @@ export function createFoncierePhotoPreviewHandler(dependencies: { readOriginal?:
   };
 }
 async function readOriginal(origin: string, path: string): Promise<Blob> {
-  const local = origin === "http://127.0.0.1:56031" && process.env.PREPAID_HOURS_TEST_ACK === "PREPAID_HOURS_LOCAL_ONLY";
+  const local = ["http://127.0.0.1:56031","http://127.0.0.1:57031"].includes(origin) && process.env.PREPAID_HOURS_TEST_ACK === "PREPAID_HOURS_LOCAL_ONLY";
   const server = createClient(origin, required(local ? "LOCAL_AUTH_INVITE_KEY" : "CRM_INVITE_AUTH_KEY"), clientOptions);
   const { data, error } = await server.storage.from("fonciere-documents").download(path);
   if (error || !data) throw new PreviewError(503);

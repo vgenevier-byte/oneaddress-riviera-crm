@@ -10,7 +10,7 @@ const headers = { "cache-control": "private, no-store", vary: "Authorization", "
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers });
 function message(code: string | null | undefined, request?: Request) { const messages = /^en\b/i.test(request?.headers.get("accept-language") || "") ? DRIVE_ERROR_MESSAGES_EN : DRIVE_ERROR_MESSAGES; return code ? messages[code] || messages.drive_temporary_failure : undefined; }
 function state(value: string) { return value === "processing" ? "copying" : value === "synced" ? "synced" : value === "retry" ? "retry" : "pending"; }
-type Status = { configured: boolean; state: string; can_retry: boolean; can_open: boolean; folder_id?: string; project_error: string | null; files: Array<{ asset_id: string; original_name: string; category: string; state: string; error?: string }>; counts: Record<string, number> };
+type Status = { primary?:boolean; configured: boolean; state: string; can_retry: boolean; can_open: boolean; folder_id?: string; project_error: string | null; files: Array<{ asset_id: string; original_name: string; category: string; state: string; error?: string }>; counts: Record<string, number> };
 type Dependencies = { userClient?: typeof createFonciereDriveUserClient; store?: () => FonciereDriveStore; fetchDrive?: FonciereDriveFetch; sharedDriveId?: () => string };
 function errorResponse(error: unknown, request: Request) {
   const code = safeDriveError(error);
@@ -38,7 +38,7 @@ export function createFonciereDriveStatusHandler(deps: Dependencies = {}) {
       if (result.error) return json({ error: "Projet inaccessible." }, result.error.code === "42501" ? 403 : 503);
       const row = result.data as Status;
       if (!row || !Array.isArray(row.files)) return json({ error: "Suivi temporairement indisponible." }, 503);
-      return json({ configured: row.configured, projectId, status: state(row.state), canRetry: row.can_retry, canOpen: row.can_open && Boolean(row.folder_id), error: row.configured ? message(row.project_error, request) : message("drive_not_configured", request), counts: row.counts, files: row.files.map(file => ({ assetId: file.asset_id, name: file.original_name, category: file.category, status: state(file.state), error: message(file.error, request) })) });
+      return json({ primary:row.primary===true,configured: row.configured, projectId, status: state(row.state), canRetry: row.can_retry, canOpen: row.can_open && Boolean(row.folder_id), error: row.configured ? message(row.project_error, request) : message("drive_not_configured", request), counts: row.counts, files: row.files.map(file => ({ assetId: file.asset_id, name: file.original_name, category: file.category, status: state(file.state), error: message(file.error, request) })) });
     } catch (error) { return errorResponse(error, request); }
   };
 }

@@ -11,12 +11,28 @@ export const DRIVE_CHUNK_BYTES=1024*1024;
 const API='https://www.googleapis.com/drive/v3/files';
 const fields='id,driveId,parents,trashed,mimeType,size,md5Checksum,headRevisionId,version,appProperties';
 const headers={'cache-control':'private, no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff'};
+let googleClient:{identity:string;fetch:FonciereDriveFetch}|undefined;
+export function primaryGoogleFetch(){
+ const identity=[process.env.GCP_SERVICE_ACCOUNT_EMAIL,process.env.GCP_WORKLOAD_IDENTITY_POOL_ID,process.env.GOOGLE_DRIVE_SHARED_DRIVE_ID].join(':');
+ if(!googleClient||googleClient.identity!==identity)googleClient={identity,fetch:createGoogleDriveFetch()};
+ return googleClient.fetch;
+}
 export class PrimaryError extends Error {constructor(public status=503){super('Transfert Drive non confirmé. Vos fichiers et votre brouillon sont conservés.');}}
+async function assertGoogle(response:Response){
+ if(response.ok||response.status===308)return;
+ if(response.status===429)throw new PrimaryError(429);
+ if(response.status===403){const body=await response.clone().json().catch(()=>null),reasons=(body?.error?.errors||[]).map((e:{reason?:string})=>e.reason);
+  if(reasons.some((r:string)=>['rateLimitExceeded','userRateLimitExceeded','dailyLimitExceeded','downloadQuotaExceeded'].includes(r)))throw new PrimaryError(429);
+  if(reasons.some((r:string)=>['storageQuotaExceeded','teamDriveFileLimitExceeded'].includes(r)))throw new PrimaryError(507);
+  throw new PrimaryError(403);
+ }
+ throw new PrimaryError();
+}
 export type DriveFile={operation_id:string;domain:'fonciere'|'izord';asset_id:string;project_id:string;source_project:string;created_by:string;expected_size:number;expected_mime:string;original_name:string;category:string;sha256:string;md5:string|null;source_version:string|null;file_id:string|null;folder_id:string|null;drive_id:string|null;revision_id:string|null;session_uri:string|null;received:number;status:'pending'|'verified';legacy:boolean};
 export type DriveAdmission={id:string;project_id:string;object_path:string;expected_size:number;expected_mime:string;drive?:{file_id:string;revision_id:string;drive_id:string;folder_id:string;source_project:string;sha256:string;md5:string;category:string;legacy:boolean;source_version:string}};
 export function primaryService(){const origin=requireServerEnv('NEXT_PUBLIC_SUPABASE_URL');const local=['http://127.0.0.1:56031','http://127.0.0.1:57031'].includes(origin)&&process.env.PREPAID_HOURS_TEST_ACK==='PREPAID_HOURS_LOCAL_ONLY';return createClient(origin,requireServerEnv(local?'LOCAL_AUTH_INVITE_KEY':'CRM_INVITE_AUTH_KEY'),{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(input,init)=>fetch(input,{...init,cache:'no-store'})}});}
 export async function primaryCall<T=DriveFile>(action:string,data:Record<string,unknown>={}):Promise<T>{const r=await primaryService().rpc('crm_drive_worker',{p_action:action,p_data:data}).abortSignal(AbortSignal.timeout(15000));if(r.error)throw new PrimaryError(r.error.code==='42501'?403:r.error.code==='40001'?409:503);return r.data as T;}
-export async function driveMetadata(fetchDrive:FonciereDriveFetch,id:string){const r=await fetchDrive(`${API}/${encodeURIComponent(id)}?supportsAllDrives=true&fields=${fields}`,{cache:'no-store',signal:AbortSignal.timeout(15000)});if(r.status===404)return null;if(!r.ok)throw new PrimaryError();return r.json();}
+export async function driveMetadata(fetchDrive:FonciereDriveFetch,id:string){const r=await fetchDrive(`${API}/${encodeURIComponent(id)}?supportsAllDrives=true&fields=${fields}`,{cache:'no-store',signal:AbortSignal.timeout(15000)});if(r.status===404)return null;await assertGoogle(r);return r.json();}
 function sessionUrl(uri:string){const u=new URL(uri);if(u.protocol!=='https:'||u.hostname!=='www.googleapis.com'||!u.pathname.startsWith('/upload/drive/'))throw new PrimaryError();return uri;}
 function identity(f:DriveFile){return {managedBy:'oar-fonciere',projectId:f.project_id,assetId:f.asset_id,storageVersion:f.legacy?f.source_version!:f.sha256};}
 function assertIdentity(m:Record<string,unknown>|null,f:DriveFile){const p=m?.appProperties as Record<string,string>|undefined;if(!m||m.id!==f.file_id||m.driveId!==f.drive_id||m.trashed!==false||!Array.isArray(m.parents)||m.parents.length!==1||m.parents[0]!==f.folder_id||Object.entries(identity(f)).some(([k,v])=>p?.[k]!==v))throw new PrimaryError(409);}
@@ -32,7 +48,7 @@ export async function resolvePrimaryDestination(f:DriveFile,fetchDrive:FonciereD
  return {drive_id:d.config.shared_drive_id!,folder_id:folder.drive_folder_id};
 }
 async function validateType(blob:Blob){
- if(['image/jpeg','image/png','image/webp'].includes(blob.type)){const image=await sharp(Buffer.from(await blob.arrayBuffer()),{limitInputPixels:40_000_000}).metadata();if(image.format!==({'image/jpeg':'jpeg','image/png':'png','image/webp':'webp'} as Record<string,string>)[blob.type])throw new PrimaryError(400);}
+ if(['image/jpeg','image/png','image/webp'].includes(blob.type)){const image=await sharp(Buffer.from(await blob.arrayBuffer()),{limitInputPixels:false}).metadata();if(image.format!==({'image/jpeg':'jpeg','image/png':'png','image/webp':'webp'} as Record<string,string>)[blob.type])throw new PrimaryError(400);}
  else await validateUploadBlob(blob,blob.type==='application/pdf'?'pdf':'presentation');
 }
 export async function verifyPrimaryFile(f:DriveFile,fetchDrive:FonciereDriveFetch,original?:Blob){
@@ -40,10 +56,10 @@ export async function verifyPrimaryFile(f:DriveFile,fetchDrive:FonciereDriveFetc
  if(Number(m.size)!==f.expected_size||m.mimeType!==f.expected_mime||!m.headRevisionId)throw new PrimaryError(409);
  const revision=String(m.headRevisionId);
  const pinned=await fetchDrive(`${API}/${encodeURIComponent(f.file_id!)}/revisions/${encodeURIComponent(revision)}?fields=id,keepForever`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({keepForever:true}),signal:AbortSignal.timeout(15000)});
- if(!pinned.ok||(await pinned.json()).keepForever!==true)throw new PrimaryError();
+ await assertGoogle(pinned);if((await pinned.json()).keepForever!==true)throw new PrimaryError();
  const pinnedMeta=await driveMetadata(fetchDrive,f.file_id!);assertIdentity(pinnedMeta,f);
  const response=await fetchDrive(`${API}/${encodeURIComponent(f.file_id!)}/revisions/${encodeURIComponent(revision)}?alt=media`,{cache:'no-store',signal:AbortSignal.timeout(45000)});
- if(!response.ok)throw new PrimaryError();const bytes=Buffer.from(await response.arrayBuffer());
+ await assertGoogle(response);const bytes=Buffer.from(await response.arrayBuffer());
  if(bytes.length!==f.expected_size)throw new PrimaryError(409);
  const sha256=createHash('sha256').update(bytes).digest('hex'),md5=createHash('md5').update(bytes).digest('hex');
  if(md5!==m.md5Checksum||(!f.legacy&&sha256!==f.sha256))throw new PrimaryError(409);
@@ -53,7 +69,7 @@ export async function verifyPrimaryFile(f:DriveFile,fetchDrive:FonciereDriveFetc
  await resolvePrimaryDestination(f,fetchDrive);
  return {revision_id:revision,sha256,md5};
 }
-export async function validatePrimaryRead(a:DriveAdmission,fetchDrive=createGoogleDriveFetch()){
+export async function validatePrimaryRead(a:DriveAdmission,fetchDrive=primaryGoogleFetch()){
  if(!a.drive)throw new PrimaryError(409);
  const d=a.drive,m=await driveMetadata(fetchDrive,d.file_id);
  const f={project_id:a.project_id,asset_id:a.id,file_id:d.file_id,drive_id:d.drive_id,folder_id:d.folder_id,legacy:d.legacy,source_version:d.source_version,sha256:d.sha256,source_project:d.source_project,category:d.category} as DriveFile;
@@ -62,10 +78,10 @@ export async function validatePrimaryRead(a:DriveAdmission,fetchDrive=createGoog
  // Read exactly the pinned revision; later head replacements cannot rewrite history.
  return fetchDrive;
 }
-export async function readPrimaryOriginal(a:DriveAdmission,fetchDrive= createGoogleDriveFetch()){
+export async function readPrimaryOriginal(a:DriveAdmission,fetchDrive= primaryGoogleFetch()){
  await validatePrimaryRead(a,fetchDrive);const d=a.drive!;
  const r=await fetchDrive(`${API}/${encodeURIComponent(d.file_id)}/revisions/${encodeURIComponent(d.revision_id)}?alt=media`,{cache:'no-store',signal:AbortSignal.timeout(45000)});
- if(!r.ok)throw new PrimaryError();const bytes=Buffer.from(await r.arrayBuffer());
+ await assertGoogle(r);const bytes=Buffer.from(await r.arrayBuffer());
  if(bytes.length!==a.expected_size||createHash('sha256').update(bytes).digest('hex')!==d.sha256)throw new PrimaryError(409);
  await validatePrimaryRead(a,fetchDrive);return new Blob([bytes],{type:a.expected_mime});
 }
@@ -85,7 +101,7 @@ export function createPrimaryUploadHandler(deps:{fetchDrive?:FonciereDriveFetch}
   }else if(!['GET','PATCH'].includes(request.method))throw new PrimaryError(405);
   if(!operation||!/^[a-f0-9-]{36}$/.test(operation))throw new PrimaryError(400);
   lease=randomUUID();f=await primaryCall('claim',{operation_id:operation,actor,lease});
-  const fetchDrive=deps.fetchDrive||createGoogleDriveFetch();
+  const fetchDrive=deps.fetchDrive||primaryGoogleFetch();
   const state=async(data:Record<string,unknown>)=>{f=await primaryCall('state',{operation_id:operation,actor,lease,...data});};
   if(f.status==='verified')return Response.json({assetId:f.asset_id,received:f.expected_size,complete:true},{headers});
   const dest=await resolvePrimaryDestination(f,fetchDrive);
@@ -94,15 +110,15 @@ export function createPrimaryUploadHandler(deps:{fetchDrive?:FonciereDriveFetch}
   let meta=await driveMetadata(fetchDrive,f.file_id!);
   if(!meta){
    if(f.session_uri){const probe=await fetchDrive(sessionUrl(f.session_uri),{method:'PUT',headers:{'content-length':'0','content-range':`bytes */${f.expected_size}`},signal:AbortSignal.timeout(15000)});
-    if([404,410].includes(probe.status))await state({session_uri:null,received:0});else await state({received:received(probe,f.expected_size)});}
+    if([404,410].includes(probe.status))await state({session_uri:null,received:0});else{await assertGoogle(probe);await state({received:received(probe,f.expected_size)});}}
    if(!f.session_uri){const start=await fetchDrive('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true&fields=id',{method:'POST',headers:{'content-type':'application/json','x-upload-content-type':f.expected_mime,'x-upload-content-length':String(f.expected_size)},body:JSON.stringify({id:f.file_id,name:f.original_name,mimeType:f.expected_mime,parents:[f.folder_id],appProperties:identity(f)}),signal:AbortSignal.timeout(15000)});
-    if(start.status===409)meta=await driveMetadata(fetchDrive,f.file_id!);else{if(!start.ok||!start.headers.get('location'))throw new PrimaryError();await state({session_uri:sessionUrl(start.headers.get('location')!),received:0});}}
+    if(start.status===409)meta=await driveMetadata(fetchDrive,f.file_id!);else{await assertGoogle(start);if(!start.headers.get('location'))throw new PrimaryError();await state({session_uri:sessionUrl(start.headers.get('location')!),received:0});}}
    if(request.method==='PATCH'&&!meta){const bytes=await boundedBody(request),offset=Number(request.headers.get('x-chunk-offset'));
     if(!Number.isSafeInteger(offset)||offset<0||!bytes.length||offset+bytes.length>f.expected_size)throw new PrimaryError(400);
     if(offset<f.received&&offset+bytes.length<=f.received)return Response.json({assetId:f.asset_id,received:f.received,complete:false},{headers});
     if(offset!==f.received||(offset+bytes.length<f.expected_size&&bytes.length%262144!==0))throw new PrimaryError(409);
     const sent=await fetchDrive(sessionUrl(f.session_uri!),{method:'PUT',headers:{'content-type':f.expected_mime,'content-length':String(bytes.length),'content-range':`bytes ${offset}-${offset+bytes.length-1}/${f.expected_size}`},body:new Uint8Array(bytes),signal:AbortSignal.timeout(45000)});
-    await state({received:received(sent,f.expected_size)});
+    await assertGoogle(sent);await state({received:received(sent,f.expected_size)});
    }
    if(f.received===f.expected_size)meta=await driveMetadata(fetchDrive,f.file_id!);
   }

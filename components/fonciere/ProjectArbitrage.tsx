@@ -84,7 +84,7 @@ export default function ProjectArbitrage({ projectId, userId, loadedRevision, lo
     setBusy(true); setError("");
     try {
       const op = await begin();
-      await op.run(() => prepareBankPresentation(op.client, projectId, { signal: op.signal }));
+      await op.run(() => prepareBankPresentation(op.client, projectId, { signal: op.signal,accessToken:op.token }));
       await refresh();
     } catch (failure) { if (live.current && !isCancelled(failure)) { setError(t("Présentation à préparer — intervention nécessaire. La décision reste enregistrée ; une reprise est possible avec les droits requis.", "Presentation to prepare — action needed. The decision remains saved; preparation can be resumed with the required permissions.")); await refresh(); } }
     finally { if (live.current) setBusy(false); }
@@ -99,7 +99,7 @@ export default function ProjectArbitrage({ projectId, userId, loadedRevision, lo
       // Bank preparation has its own permissions and failure boundary. It never rolls back a vote.
       if (next.status === "approved" && next.bank.canPrepare && ["none", "pending", "blocked"].includes(next.bank.state) && !next.bank.needsUpdate) {
         try {
-          await op.run(() => prepareBankPresentation(op.client, projectId, { signal: op.signal }));
+          await op.run(() => prepareBankPresentation(op.client, projectId, { signal: op.signal,accessToken:op.token }));
           await refresh();
         } catch (failure) {
           if (!isCancelled(failure) && live.current) { setError(t("Présentation à préparer — intervention nécessaire. Votre avis et la décision commune sont conservés.", "Presentation to prepare — action needed. Your opinion and the joint decision remain saved.")); await refresh(); }

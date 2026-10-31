@@ -1,5 +1,5 @@
 import {drivePrimaryEnabled,uploadPrimaryAsset,downloadPrimaryAsset} from '../drivePrimary';
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { createClient,type SupabaseClient } from "@supabase/supabase-js";
 import { createProjectData, LIMITS, PHOTO_ROLES, validateProjectData, type ProjectData } from "./model";
 import { assertImageByteBudget, assertEncodedImageBudget, encodedJpegLength, type ImageByteEntry } from "./image-budget";
 
@@ -88,15 +88,17 @@ async function uploadSignedBlob(url: string, blob: Blob, options: OperationOptio
   }));
 }
 
-export function createGeneratorRepository(client: SupabaseClient,configuration:{baseUrl?:string}={}) {
+export function createGeneratorRepository(client: SupabaseClient,configuration:{baseUrl?:string;accessToken?:string}={}) {
   const store = client.storage.from(bucket);
   async function actor(signal?: AbortSignal) {
     abortIfNeeded(signal);
-    const { data, error } = await guarded(signal, () => client.auth.getUser()); failure(error);
+    const authClient=configuration.accessToken?createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,{auth:{persistSession:false,autoRefreshToken:false}}):client;
+    const { data, error } = await guarded(signal, () => authClient.auth.getUser(configuration.accessToken)); failure(error);
     if (!data.user) throw new Error("Connexion requise."); abortIfNeeded(signal); return data.user.id;
   }
   async function sameActor(id: string, signal?: AbortSignal) {
     abortIfNeeded(signal);
+    if(configuration.accessToken)return; // Captured-token operations use the caller's abort lease and live server ACL.
     const { data } = await guarded(signal, () => client.auth.getSession());
     if (data.session?.user.id !== id) throw new DOMException("Le compte a changé.", "AbortError");
     abortIfNeeded(signal);
@@ -122,7 +124,7 @@ export function createGeneratorRepository(client: SupabaseClient,configuration:{
   }
   async function downloadAsset(asset: AssetRecord, options: OperationOptions = {}): Promise<Blob> {
     const who = await guarded(options.signal, () => actor(options.signal));
-    if(asset.storage_provider==='drive'){const blob=await downloadPrimaryAsset(client,'izord',asset.id,options,configuration.baseUrl);await sameActor(who,options.signal);return blob;}
+    if(asset.storage_provider==='drive'){const blob=await downloadPrimaryAsset(client,'izord',asset.id,options,configuration.baseUrl,configuration.accessToken);await sameActor(who,options.signal);return blob;}
     const { data, error } = await guarded(options.signal, () => store.download(asset.object_path)); failure(error); await guarded(options.signal, () => sameActor(who, options.signal));
     if (!data || data.size <= 0 || data.size > LIMITS.fileBytes) throw new Error("Document reçu invalide ou trop volumineux.");
     return data;
@@ -164,7 +166,7 @@ export function createGeneratorRepository(client: SupabaseClient,configuration:{
     const who = await guarded(options.signal, () => actor(options.signal)); await guarded(options.signal, () => validateUploadBlob(blob, kind)); await guarded(options.signal, () => sameActor(who, options.signal));
     const safeName = name.replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 180) || "document";
     if(source&&await drivePrimaryEnabled(client)){
-      const id=await uploadPrimaryAsset(client,{domain:'izord',project:project.id,source,revision:project.revision,kind,file:blob,name:safeName,category:kind==='photo'?'photos':kind==='pdf'?'agency':'other',slot,baseUrl:configuration.baseUrl},options);
+      const id=await uploadPrimaryAsset(client,{domain:'izord',project:project.id,source,revision:project.revision,kind,file:blob,name:safeName,category:kind==='photo'?'photos':kind==='pdf'?'agency':'other',slot,baseUrl:configuration.baseUrl,accessToken:configuration.accessToken},options);
       const asset=(await listAssets(project.id,options)).find(a=>a.id===id);if(!asset)throw Error('Conservation Drive non confirmée.');await sameActor(who,options.signal);return asset;
     }
     const registered = await guarded(options.signal, () => client.rpc("izord_register_generator_asset", { p_project: project.id, p_revision: project.revision, p_kind: kind, p_size: blob.size, p_mime: blob.type, p_name: safeName }));

@@ -11,7 +11,7 @@ export async function testFonciereDriveIntegration(store: FonciereDriveStore, fe
   await validateProjetsRoot(fetchDrive, config);
   const runId = randomUUID(), folderId = await reserveDriveId(fetchDrive);
   const known = new Map<string, string>([[folderId, "folder"]]);
-  const readbacks: Array<{ name: string; mime: string; bytes: number; sha256: string; replayConfirmed: boolean }> = [];
+  const readbacks: Array<{ name: string; mime: string; bytes: number; sha256: string; replayConfirmed: boolean;revisionPinned:boolean }> = [];
   let cleanup = true, result: { verified: boolean; files: typeof readbacks; lostResponseRecovered: boolean; cleanup: boolean; testRunId: string; testFolderId: string } | undefined;
   try {
     const folder = await fetchDrive("https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: folderId, name: `TEST CRM - Foncière - ${runId}`, mimeType: "application/vnd.google-apps.folder", parents: [config.root_folder_id], appProperties: { managedBy: "oar-fonciere-test", testRunId: runId } }), signal: AbortSignal.timeout(15000) });
@@ -38,9 +38,16 @@ export async function testFonciereDriveIntegration(store: FonciereDriveStore, fe
       const reread = await fetchDrive(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`, { cache: "no-store", signal: AbortSignal.timeout(45000) });
       if (!reread.ok) throw new FonciereDriveError("drive_test_readback_failed");
       const returned = Buffer.from(await reread.arrayBuffer()), sha256 = createHash("sha256").update(item.bytes).digest("hex");
+      const current=await fetchDrive(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?supportsAllDrives=true&fields=headRevisionId`,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+      if(!current.ok)throw new FonciereDriveError('drive_test_revision_missing');const revision=(await current.json()).headRevisionId;
+      if(!revision)throw new FonciereDriveError('drive_test_revision_missing');
+      const pinned=await fetchDrive(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revision)}?fields=id,keepForever`,{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({keepForever:true}),signal:AbortSignal.timeout(15000)});
+      if(!pinned.ok||(await pinned.json()).keepForever!==true)throw new FonciereDriveError('drive_test_revision_not_pinned');
+      const historical=await fetchDrive(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}/revisions/${encodeURIComponent(revision)}?alt=media`,{cache:'no-store',signal:AbortSignal.timeout(45000)});
+      if(!historical.ok||createHash('sha256').update(Buffer.from(await historical.arrayBuffer())).digest('hex')!==sha256)throw new FonciereDriveError('drive_test_revision_mismatch');
       if (returned.length !== item.bytes.length || createHash("sha256").update(returned).digest("hex") !== sha256 || replayCreates !== 0) throw new FonciereDriveError("drive_test_content_mismatch", true);
       if (simulatedLoss) lostResponseRecovered = true;
-      readbacks.push({ name: item.name, mime: item.mime, bytes: item.bytes.length, sha256, replayConfirmed: replayCreates === 0 });
+      readbacks.push({ name: item.name, mime: item.mime, bytes: item.bytes.length, sha256, replayConfirmed: replayCreates === 0,revisionPinned:true });
     }
     result = { verified: true, files: readbacks, lostResponseRecovered, cleanup: false, testRunId: runId, testFolderId: folderId };
   } finally {

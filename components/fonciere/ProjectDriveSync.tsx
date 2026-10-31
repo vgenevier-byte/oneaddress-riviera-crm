@@ -8,7 +8,7 @@ import styles from "./ProjectsWorkspace.module.css";
 
 type CopyState = "pending" | "copying" | "synced" | "retry";
 type DriveStatus = {
-  configured: boolean; projectId: string; status: CopyState; error?: string;
+  primary?:boolean; configured: boolean; projectId: string; status: CopyState; error?: string;
   files: { assetId: string; name: string; category: string; status: CopyState; error?: string }[];
   canRetry: boolean; canOpen: boolean;
 };
@@ -17,7 +17,7 @@ const labels: Record<CopyState, [string, string]> = {
   synced: ["Synchronisé avec Google Drive", "Synced with Google Drive"], retry: ["Copie à reprendre", "Copy needs attention"],
 };
 
-/** Polling only displays durable server work; closing the tab never cancels copying. */
+/** Display confirmed file state; direct uploads resume from their preserved draft. */
 export default function ProjectDriveSync({ projectId, revision, lang, accessSignal }: {
   projectId: string; revision: number; lang: "fr" | "en"; accessSignal?: AbortSignal;
 }) {
@@ -80,9 +80,9 @@ export default function ProjectDriveSync({ projectId, revision, lang, accessSign
     finally { if (!accessSignal?.aborted) setBusy(false); }
   }
   const active = snapshot?.projectId === projectId ? snapshot : null;
-  return <section className={styles.driveSync} aria-label={tr("Copie Google Drive", "Google Drive copy")} data-project-drive>
+  return <section className={styles.driveSync} aria-label={tr("Fichiers Google Drive", "Google Drive files")} data-project-drive>
     <h4>Google Drive</h4>
-    <p role="status">{active ? labels[active.status]?.[lang === "en" ? 1 : 0] || labels.pending[lang === "en" ? 1 : 0] : tr("État de la copie en cours de vérification…", "Checking copy status…")}</p>
+    <p role="status">{active ? active.primary&&active.status==="synced"?tr("Fichiers enregistrés dans Google Drive", "Files saved in Google Drive"):labels[active.status]?.[lang === "en" ? 1 : 0] || labels.pending[lang === "en" ? 1 : 0] : tr("État de la copie en cours de vérification…", "Checking copy status…")}</p>
     {active && !active.configured && <p>{tr("Projet enregistré. La destination Google Drive doit être configurée par l’administrateur.", "Project saved. An administrator must configure the Google Drive destination.")}</p>}
     {active?.error && <p className={styles.driveError}>{active.error}</p>}
     {error && <p role="alert" className={styles.driveError}>{error === "retry-unavailable" ? tr("Reprise non confirmée. Vérifiez vos droits et réessayez.", "Retry was not confirmed. Check your access and try again.") : error === "folder-unavailable" ? tr("Dossier inaccessible avec vos droits actuels. La copie reste conservée.", "Folder unavailable with your current access. The copy is retained.") : tr("État Google Drive indisponible. Le projet enregistré est conservé.", "Google Drive status unavailable. Your saved project is retained.")}</p>}
@@ -91,6 +91,6 @@ export default function ProjectDriveSync({ projectId, revision, lang, accessSign
       {active?.canOpen && <button type="button" className={styles.secondary} disabled={busy} onClick={() => void openFolder()}><FolderOpen size={15}/>{tr("Ouvrir le dossier Google Drive", "Open Google Drive folder")}</button>}
     </div>
     {Boolean(active?.files.length) && <details><summary>{tr("État par fichier", "File copy status")} ({active!.files.length})</summary><ul>{active!.files.map(file => <li key={file.assetId}><strong>{file.name}</strong><span>{labels[file.status]?.[lang === "en" ? 1 : 0] || labels.pending[lang === "en" ? 1 : 0]}</span>{file.error && <span className={styles.driveError}>{file.error}</span>}</li>)}</ul></details>}
-    <p className={styles.muted}>{tr("La copie continue après fermeture de cet onglet. Les droits Google Drive restent indépendants des autorisations CRM.", "Copying continues after this tab closes. Google Drive permissions remain independent from CRM access.")}</p>
+    <p className={styles.muted}>{active?.primary?tr("Les fichiers en attente restent dans votre brouillon. Reprenez l’enregistrement pour terminer leur transfert.","Pending files remain in your draft. Resume saving to finish their transfer."):tr("La copie continue après fermeture de cet onglet. Les droits Google Drive restent indépendants des autorisations CRM.", "Copying continues after this tab closes. Google Drive permissions remain independent from CRM access.")}</p>
   </section>;
 }
