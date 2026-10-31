@@ -18,11 +18,11 @@ const slots: ArbitrationSlot[] = ["vincent", "ann_charlotte"];
 type Draft = { choice: ArbitrationChoice; remark: string };
 type Props = {
   projectId: string; userId: string; loadedRevision: number; loadedFingerprint?: string; projectDirty: boolean; lang: "fr" | "en";
-  accessRevision: number; accessSignal?: AbortSignal; onDirty: (dirty: boolean) => void;
+  accessRevision: number; accessSignal?: AbortSignal; onDirty: (dirty: boolean) => void; onBusy?: (busy: boolean) => void;
   onStatusChange: (state: ArbitrationState) => void; onReloadProject: () => Promise<string | undefined>;
 };
 
-export default function ProjectArbitrage({ projectId, userId, loadedRevision, loadedFingerprint, projectDirty, lang, accessRevision, accessSignal, onDirty, onStatusChange, onReloadProject }: Props) {
+export default function ProjectArbitrage({ projectId, userId, loadedRevision, loadedFingerprint, projectDirty, lang, accessRevision, accessSignal, onDirty, onBusy, onStatusChange, onReloadProject }: Props) {
   const t = useCallback((fr: string, en: string) => lang === "fr" ? fr : en, [lang]);
   const begin = useScopedOperations("fonciere");
   const [state, setState] = useState<ArbitrationState | null>(null);
@@ -38,6 +38,7 @@ export default function ProjectArbitrage({ projectId, userId, loadedRevision, lo
   const reviewedFingerprint = useRef<string | null>(loadedFingerprint || null);
   const dirty = Boolean(state?.canVote && (draft.choice !== (own?.choice || "pending") || draft.remark !== (own?.remark || "")));
   usePageRefreshGuard({ dirty, busy });
+  useEffect(() => { onBusy?.(busy); return () => onBusy?.(false); }, [busy, onBusy]);
   useEffect(() => { draftChanged.current = dirty; }, [dirty]);
   const label = (choice: ArbitrationChoice) => { const pair = ARBITRAGE_LABELS[choice]; return t(pair[0], pair[1]); };
   const needsRemark = draft.choice === "refused" || draft.choice === "deepen";
