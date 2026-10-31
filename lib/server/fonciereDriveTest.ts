@@ -18,7 +18,7 @@ export async function testFonciereDriveIntegration(store: FonciereDriveStore, fe
     if (!folder.ok) throw new FonciereDriveError("drive_test_folder_failed");
     const image = sharp({ create: { width: 48, height: 32, channels: 3, background: { r: 17, g: 88, b: 145 } } });
     const pdf = Buffer.from("%PDF-1.4\n% Fictional CRM Drive copy verification only.\n1 0 obj<</Type/Catalog>>endobj\n%%EOF\n");
-    const largePdf = Buffer.concat([pdf, Buffer.alloc(5 * 1024 * 1024 + 17, 32)]);
+    const largePdf = Buffer.concat([pdf, Buffer.alloc(25_000_000 - pdf.length, 32)]);
     const cases = [{ name: "piece-fictive.pdf", mime: "application/pdf", bytes: pdf }, { name: "piece-fictive.pdf", mime: "application/pdf", bytes: largePdf }, { name: "photo-fictive.jpg", mime: "image/jpeg", bytes: await image.clone().jpeg().toBuffer() }, { name: "photo-fictive.png", mime: "image/png", bytes: await image.clone().png().toBuffer() }, { name: "photo-fictive.webp", mime: "image/webp", bytes: await image.clone().webp().toBuffer() }];
     let lostResponseRecovered = false;
     for (const [index, item] of cases.entries()) {

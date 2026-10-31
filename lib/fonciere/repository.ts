@@ -1,3 +1,4 @@
+import {drivePrimaryEnabled,uploadPrimaryAsset,downloadPrimaryAsset} from '../drivePrimary';
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { normalizeAddressValue } from "../address";
 import { getContactCompany } from "../contactCompany";
@@ -15,7 +16,7 @@ const summaryFields=['name','propertyAddress','city','postalCode','agencyReferen
 const summarySelect=['id','owner_id','title','project_number','project_reference','revision','status','created_at','updated_at',...summaryFields.map(k=>`f_${k}:payload->data->${k}`),'g_values:payload->data->guided->values','g_inactive:payload->data->guided->inactive',...['propertyType','askingPrice','area','areaKind'].map(k=>`g_${k}:payload->data->guided->details->${k}`),'intent:payload->creationIntentHash','request:payload->creationRequestHash'].join(',');
 function summaryRow(row:Record<string,unknown>):FonciereProjectSummary {const {id,owner_id,title,project_number,project_reference,revision,status,created_at,updated_at}=row;const data:Record<string,unknown>={};for(const key of summaryFields)data[key]=typeof row['f_'+key]==='string'?row['f_'+key]:'';data.guided={version:1,values:row.g_values||{},inactive:row.g_inactive||[],details:Object.fromEntries(['propertyType','askingPrice','area','areaKind'].filter(k=>typeof row['g_'+k]==='string').map(k=>[k,row['g_'+k]]))};return {id,owner_id,title,project_number,project_reference,revision,status,created_at,updated_at,payload:{data,...(row.intent?{creationIntentHash:row.intent}:{}),...(row.request?{creationRequestHash:row.request}:{})}} as FonciereProjectSummary;}
 export type FonciereDocumentCategory = "agency" | "plans" | "photos" | "other";
-export type FonciereAssetRecord = { id: string; project_id: string; object_path: string; kind: "pdf" | "photo" | "attachment"; lifecycle: "pending" | "finalized" | "withdrawn"; created_by: string; created_at: string; expected_size: number; expected_mime: string; original_name: string; drive_category?: FonciereDocumentCategory };
+export type FonciereAssetRecord = { storage_provider?: "supabase" | "drive"; id: string; project_id: string; object_path: string; kind: "pdf" | "photo" | "attachment"; lifecycle: "pending" | "finalized" | "withdrawn"; created_by: string; created_at: string; expected_size: number; expected_mime: string; original_name: string; drive_category?: FonciereDocumentCategory };
 export type StoredFoncierePayload = { schema: typeof FONCIERE_SCHEMA; data: FonciereData; sourceDocuments: string[]; creationRequestHash?: string; creationIntentHash?: string };
 export type FonciereMediaState = { loadId?: string; status: "pending" | "complete" | "failed"; previews: Record<string,string>; errors: string[] };
 export type LoadedFonciereProject = { media?: FonciereMediaState; project: FonciereProjectRecord; data: FonciereData; assets: FonciereAssetRecord[]; sourceDocuments: string[]; arbitrationFingerprint?: string };
@@ -117,6 +118,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
   }
   async function downloadAsset(asset: FonciereAssetRecord, options: OperationOptions = {}): Promise<Blob> {
     if (asset.object_path !== `${asset.project_id}/${asset.id}` || !UUID.test(asset.id)) throw new Error("Identité documentaire invalide.");
+    if(asset.storage_provider==='drive')return downloadPrimaryAsset(client,'fonciere',asset.id,options,configuration.previewBaseUrl);
     const admission = await guarded(options.signal, () => client.rpc("fonciere_asset_access", { p_asset: asset.id, p_operation: "download" })); failure(admission.error);
     if (!admission.data || admission.data.object_path !== asset.object_path) throw new Error("Identité documentaire non confirmée.");
     const result = await guarded(options.signal, () => store.download(asset.object_path)); failure(result.error);
@@ -164,12 +166,16 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
     await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{while(queue.length){aborted(options.signal);const ref=queue.shift()!;try{const asset=loaded.assets.find(a=>a.id===ref&&a.project_id===id&&a.kind==='photo');if(!asset)throw Error('Missing photo');const value=await blobData(await previewPhoto(asset,options),options);aborted(options.signal);previews[ref]=value;options.onPhoto?.(ref,value);}catch(error){aborted(options.signal);errors.push(ref);}}}));
     return {loadId:loaded.media?.loadId,status:errors.length?'failed':'complete',previews,errors};
   }
-  async function uploadAsset(project: FonciereProjectRecord, file: Blob, kind: FonciereAssetRecord["kind"], name: string, options: OperationOptions, category: FonciereDocumentCategory = kind === "photo" ? "photos" : kind === "pdf" ? "agency" : "other"): Promise<FonciereAssetRecord> {
+  async function uploadAsset(project: FonciereProjectRecord, file: Blob, kind: FonciereAssetRecord["kind"], name: string, options: OperationOptions, category: FonciereDocumentCategory = kind === "photo" ? "photos" : kind === "pdf" ? "agency" : "other", slot = name): Promise<FonciereAssetRecord> {
     if (kind === "attachment" && file.type === "image/webp") {
       const header = new TextDecoder().decode(await guarded(options.signal, () => file.slice(0, 12).arrayBuffer()));
       if (file.size <= 0 || file.size > LIMITS.fileBytes || header.slice(0, 4) !== "RIFF" || header.slice(8, 12) !== "WEBP") throw new Error("Le contenu du fichier WebP est invalide.");
     } else await guarded(options.signal, () => validateUploadBlob(file, kind === "attachment" ? "photo" : kind));
     const safeName = name.replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 180) || "document";
+    if(await drivePrimaryEnabled(client)){
+      const id=await uploadPrimaryAsset(client,{domain:'fonciere',project:project.id,source:project.id,revision:project.revision,kind,file,name:safeName,category,slot,baseUrl:configuration.previewBaseUrl},options);
+      const asset=(await listAssets(project.id,options)).find(a=>a.id===id);if(!asset)throw Error('Conservation Drive non confirmée.');return asset;
+    }
     const registered = await guarded(options.signal, () => client.rpc("fonciere_register_asset", { p_project: project.id, p_revision: project.revision, p_kind: kind, p_size: file.size, p_mime: file.type, p_name: safeName, p_category: category })); failure(registered.error);
     const path = String(registered.data), id = path.split("/")[1];
     if (path !== `${project.id}/${id}` || !UUID.test(id)) throw new Error("Identité de transfert invalide.");
@@ -262,7 +268,7 @@ export function createFonciereRepository(client: SupabaseClient, configuration: 
       }
       const sourceDocuments = [...(before?.sourceDocuments || [])];
       if (sourceDocuments.length + (input.sourceFiles?.length || 0) > FONCIERE_DOCUMENT_LIMIT) throw new Error("Trente documents sources maximum par projet.");
-      for (const [index, file] of (input.sourceFiles || []).entries()) sourceDocuments.push((await uploadAsset(target, file, file.type === "application/pdf" ? "pdf" : "attachment", file.name, options, input.sourceFileCategories?.[index] ?? (file.type.startsWith("image/") ? "photos" : file.type === "application/pdf" ? "agency" : "other"))).id);
+      for (const [index, file] of (input.sourceFiles || []).entries()) sourceDocuments.push((await uploadAsset(target, file, file.type === "application/pdf" ? "pdf" : "attachment", file.name, options, input.sourceFileCategories?.[index] ?? (file.type.startsWith("image/") ? "photos" : file.type === "application/pdf" ? "agency" : "other"),`source:${sourceDocuments.length}:${index}`)).id);
       const value: StoredFoncierePayload = { schema: FONCIERE_SCHEMA, data: persisted, sourceDocuments, ...(old?.creationRequestHash || requestHash ? { creationRequestHash: old?.creationRequestHash || requestHash } : {}), ...(project.payload.creationIntentHash ? { creationIntentHash: project.payload.creationIntentHash } : {}) };
       if (new TextEncoder().encode(JSON.stringify(value)).length > 950000) throw new Error("Métadonnées du projet trop volumineuses. Votre saisie est conservée.");
       options.onProgress?.({ stage: "save", completed: 0, total: 1, label: "Enregistrement du projet" });

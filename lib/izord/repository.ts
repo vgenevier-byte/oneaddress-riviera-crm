@@ -1,3 +1,4 @@
+import {drivePrimaryEnabled,uploadPrimaryAsset,downloadPrimaryAsset} from '../drivePrimary';
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createProjectData, LIMITS, PHOTO_ROLES, validateProjectData, type ProjectData } from "./model";
 import { assertImageByteBudget, assertEncodedImageBudget, encodedJpegLength, type ImageByteEntry } from "./image-budget";
@@ -5,7 +6,7 @@ import { assertImageByteBudget, assertEncodedImageBudget, encodedJpegLength, typ
 export type ProjectStatus = "draft" | "review" | "approved";
 export type ProjectRecord = { id: string; owner_id: string; title: string; revision: number; status: ProjectStatus; created_at: string; updated_at: string; payload: unknown; author_id?: string };
 export type VersionRecord = { project_id: string; revision: number; title: string; status: ProjectStatus; author_id: string; created_at: string };
-export type AssetRecord = { id: string; project_id: string; project_revision: number; object_path: string; kind: "pdf" | "photo" | "presentation"; lifecycle: "pending" | "finalized" | "withdrawn"; reader_download: boolean; created_by: string; created_at: string; expected_size: number | null; expected_mime: string | null; original_name: string | null };
+export type AssetRecord = { storage_provider?: "supabase" | "drive"; id: string; project_id: string; project_revision: number; object_path: string; kind: "pdf" | "photo" | "presentation"; lifecycle: "pending" | "finalized" | "withdrawn"; reader_download: boolean; created_by: string; created_at: string; expected_size: number | null; expected_mime: string | null; original_name: string | null };
 type StoredPayload = { schema: "IZORD_GENERATOR_V1"; data: ProjectData; sourceDocuments: string[] };
 /** Omitted photo bytes are a view projection, never an editable baseline. */
 export type LoadedProject = { project: ProjectRecord; data: ProjectData; assets: AssetRecord[]; sourceDocuments: string[]; photoHydration: "complete" | "omitted"; historicalRevision: number | null };
@@ -87,7 +88,7 @@ async function uploadSignedBlob(url: string, blob: Blob, options: OperationOptio
   }));
 }
 
-export function createGeneratorRepository(client: SupabaseClient) {
+export function createGeneratorRepository(client: SupabaseClient,configuration:{baseUrl?:string}={}) {
   const store = client.storage.from(bucket);
   async function actor(signal?: AbortSignal) {
     abortIfNeeded(signal);
@@ -121,6 +122,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
   }
   async function downloadAsset(asset: AssetRecord, options: OperationOptions = {}): Promise<Blob> {
     const who = await guarded(options.signal, () => actor(options.signal));
+    if(asset.storage_provider==='drive'){const blob=await downloadPrimaryAsset(client,'izord',asset.id,options,configuration.baseUrl);await sameActor(who,options.signal);return blob;}
     const { data, error } = await guarded(options.signal, () => store.download(asset.object_path)); failure(error); await guarded(options.signal, () => sameActor(who, options.signal));
     if (!data || data.size <= 0 || data.size > LIMITS.fileBytes) throw new Error("Document reçu invalide ou trop volumineux.");
     return data;
@@ -158,9 +160,13 @@ export function createGeneratorRepository(client: SupabaseClient) {
     await guarded(options.signal, () => sameActor(who, options.signal));
     return { project, data: validateProjectData(data), assets, sourceDocuments: [...payload.sourceDocuments], photoHydration, historicalRevision };
   }
-  async function uploadAsset(project: ProjectRecord, blob: Blob, kind: AssetRecord["kind"], name: string, options: OperationOptions): Promise<AssetRecord> {
+  async function uploadAsset(project: ProjectRecord, blob: Blob, kind: AssetRecord["kind"], name: string, options: OperationOptions,source?:string,slot=name): Promise<AssetRecord> {
     const who = await guarded(options.signal, () => actor(options.signal)); await guarded(options.signal, () => validateUploadBlob(blob, kind)); await guarded(options.signal, () => sameActor(who, options.signal));
     const safeName = name.replace(/[\u0000-\u001f\u007f/\\]/g, "_").slice(0, 180) || "document";
+    if(source&&await drivePrimaryEnabled(client)){
+      const id=await uploadPrimaryAsset(client,{domain:'izord',project:project.id,source,revision:project.revision,kind,file:blob,name:safeName,category:kind==='photo'?'photos':kind==='pdf'?'agency':'other',slot,baseUrl:configuration.baseUrl},options);
+      const asset=(await listAssets(project.id,options)).find(a=>a.id===id);if(!asset)throw Error('Conservation Drive non confirmée.');await sameActor(who,options.signal);return asset;
+    }
     const registered = await guarded(options.signal, () => client.rpc("izord_register_generator_asset", { p_project: project.id, p_revision: project.revision, p_kind: kind, p_size: blob.size, p_mime: blob.type, p_name: safeName }));
     failure(registered.error); const path = String(registered.data), id = path.split("/")[1];
     if (path !== `${project.id}/${id}` || !uuid.test(id)) throw new Error("Identité de transfert invalide.");
@@ -228,6 +234,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
       const data = validateProjectData(input.data);
       await authorizeSource(data, before, options);
       const who = await guarded(options.signal, () => actor(options.signal)), empty = createProjectData(), persisted = structuredClone(data);
+      const source=(data.importMeta?.fonciereSource as {id?:string}|undefined)?.id;
       const old = stored(before?.project.payload), reusable = new Map<string, string>();
       if (old && before) {
         for (const role of PHOTO_ROLES) if (old.data.photos[role]) reusable.set(before.data.photos[role], old.data.photos[role]);
@@ -240,14 +247,14 @@ export function createGeneratorRepository(client: SupabaseClient) {
         if (previousReference && value === previousValue) return previousReference;
         if (value === fallback) return "";
         if (reusable.has(value)) return reusable.get(value)!;
-        if (!uploaded.has(value)) uploaded.set(value, (await guarded(options.signal, () => uploadAsset(input.project, photoDataToBlob(value), "photo", name, options))).id);
+        if (!uploaded.has(value)) uploaded.set(value, (await guarded(options.signal, () => uploadAsset(input.project, photoDataToBlob(value), "photo", name, options,source))).id);
         await guarded(options.signal, () => sameActor(who, options.signal)); return uploaded.get(value)!;
       }
       for (const role of PHOTO_ROLES) persisted.photos[role] = await guarded(options.signal, () => persistPhoto(data.photos[role], empty.photos[role], `${role}.jpg`, before?.data.photos[role], old?.data.photos[role]));
       for (let i = 0; i < data.importGallery.length; i++) persisted.importGallery[i].data = await guarded(options.signal, () => persistPhoto(data.importGallery[i].data, "", `galerie-${i + 1}.jpg`, before?.data.importGallery[i]?.data, old?.data.importGallery[i]?.data));
       const sourceDocuments = input.replaceSourceDocuments ? [] : [...(before?.sourceDocuments || [])];
       if (sourceDocuments.length + (input.sourceFiles?.length || 0) > LIMITS.sourceDocuments) throw new Error("Trente documents sources maximum par version.");
-      for (const file of input.sourceFiles || []) sourceDocuments.push((await guarded(options.signal, () => uploadAsset(input.project, file, file.type === "application/pdf" ? "pdf" : "photo", file.name, options))).id);
+      for (const [fileIndex,file] of (input.sourceFiles || []).entries()) sourceDocuments.push((await guarded(options.signal, () => uploadAsset(input.project, file, file.type === "application/pdf" ? "pdf" : "photo", file.name, options,source,`source:${sourceDocuments.length}:${fileIndex}`))).id);
       const payload: StoredPayload = { schema: "IZORD_GENERATOR_V1", data: persisted, sourceDocuments };
       if (new TextEncoder().encode(JSON.stringify(payload)).length > 950000) throw new Error("Métadonnées du dossier trop volumineuses ; aucun enregistrement confirmé.");
       await guarded(options.signal, () => sameActor(who, options.signal)); options.onProgress?.({ stage: "save", completed: 0, total: 1, label: "Enregistrement de la révision" });
@@ -261,7 +268,7 @@ export function createGeneratorRepository(client: SupabaseClient) {
       const result: LoadedProject = { project: { ...project, revision: exact, payload, title: data.state.project.trim() || input.project.title, status: input.status || input.project.status, author_id: who }, data, assets: await guarded(options.signal, () => listAssets(input.project.id, options)), sourceDocuments, photoHydration: "complete", historicalRevision: null };
       await guarded(options.signal, () => sameActor(who, options.signal)); options.onProgress?.({ stage: "save", completed: 1, total: 1, label: "Révision confirmée" }); abortIfNeeded(options.signal); return result;
     },
-    uploadPresentation(project: ProjectRecord, blob: Blob, options: OperationOptions = {}) { return uploadAsset(project, blob, "presentation", `presentation-r${project.revision}.pptx`, options); },
+    uploadPresentation(project: ProjectRecord, blob: Blob, options: OperationOptions = {}) { return uploadAsset(project, blob, "presentation", `presentation-r${project.revision}.pptx`, options,(stored(project.payload)?.data.importMeta?.fonciereSource as {id?:string}|undefined)?.id); },
     async abandonAsset(id: string, options: OperationOptions = {}) { const result = await guarded(options.signal, () => client.rpc("izord_withdraw_asset", { p_asset: id })); failure(result.error); },
     async setReaderDownload(id: string, allowed: boolean, options: OperationOptions = {}) { const result = await guarded(options.signal, () => client.rpc("izord_allow_reader_download", { p_asset: id, p_allowed: allowed })); failure(result.error); }
   };
